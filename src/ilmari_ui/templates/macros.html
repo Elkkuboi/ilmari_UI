@@ -1,0 +1,92 @@
+{% macro icon(name, class_name='') -%}
+<svg class="icon {{ class_name }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{% if name == 'home' %}<path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/>
+{% elif name == 'chat' %}<path d="M4 4h16v12H9l-5 4Z"/><path d="M8 8h8M8 12h5"/>
+{% elif name == 'runs' %}<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>
+{% elif name == 'shield' %}<path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6Z"/><path d="m8 12 3 3 5-6"/>
+{% elif name == 'apps' %}<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+{% elif name in ['idea','spark'] %}<path d="M9 18h6M9 21h6M8 14a7 7 0 1 1 8 0l-1 3H9Z"/>
+{% elif name == 'system' %}<rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>
+{% elif name == 'settings' %}<path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>
+{% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
+{% elif name == 'external' %}<path d="M14 4h6v6m0-6L10 14M10 4H4v16h16v-6"/>
+{% elif name == 'chevron' %}<path d="m9 6 6 6-6 6"/>
+{% elif name == 'check' %}<path d="m5 12 4 4L19 6"/>
+{% elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{% elif name == 'info' %}<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.1"/>
+{% elif name == 'lock' %}<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>
+{% elif name == 'leaf' %}<path d="M20 3C9 2 3 7 5 14s11 10 15-11Z"/><path d="M4 21 16 9"/>
+{% elif name in ['food','cup'] %}<path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18M20 3c-4 0-5 5-5 9h5m0-9v18"/>
+{% elif name in ['feed','orbit'] %}<path d="M4 4a16 16 0 0 1 16 16M4 10a10 10 0 0 1 10 10"/><circle cx="5" cy="19" r="1"/>
+{% elif name == 'chart' %}<path d="M3 3v18h18M7 15l5-7 5 4 4-6"/>
+{% elif name == 'menu' %}<path d="M4 6h16M4 12h16M4 18h16"/>
+{% elif name == 'palette' %}<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/>
+{% elif name == 'pause' %}<path d="M9 5v14M15 5v14"/>
+{% elif name == 'file' %}<path d="M5 3h9l5 5v13H5Z"/><path d="M14 3v6h5M9 13h6M9 17h6"/>
+{% else %}<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>{% endif %}
+</svg>
+{%- endmacro %}
+
+{% macro badge(text, tone='neutral') -%}<span class="badge badge--{{ tone }}"><span class="badge-dot" aria-hidden="true"></span>{{ text }}</span>{%- endmacro %}
+
+{% macro empty(title, description, icon_name='apps', href=none, link_text='Tutustu') -%}
+<div class="empty-state">
+  <span class="empty-icon">{{ icon(icon_name) }}</span>
+  <h3>{{ title }}</h3><p>{{ description }}</p>
+  {% if href %}<a class="text-link" href="{{ href }}">{{ link_text }} {{ icon('arrow') }}</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro card_meta(card) -%}
+<div class="card-meta">
+  <span>{{ icon('feed') }} {% if card.source and card.source.url %}<a class="source-link" href="{{ card.source.url }}" rel="noreferrer">{{ card.source.name }} {{ icon('external') }}</a>{% else %}{{ card.source.name if card.source else 'Lähde puuttuu' }}{% endif %}</span>
+  {% if card.kind == 'time_series' %}<span>Havaintojakso: {{ format_date(card.data.period_start) }} – {{ format_date(card.data.period_end) }}</span>{% elif card.kind == 'recommendation_list' %}<span>Listan päivä: {{ format_date(card.data.for_date) }}</span>{% endif %}
+  <span>Havainto: {{ format_time(card.observed_until) }}</span>
+  <span>Julkaistu: {{ format_time(card.published_at) }}</span>
+  {% if card.fresh_until %}<span>Ajantasainen viimeistään: {{ format_time(card.fresh_until) }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro chart_view(chart, label='Kalorimäärä', unit=none) -%}
+{% if chart and chart.total %}
+<figure class="chart-figure">
+  <div class="chart-caption"><span>{{ label }}{% if unit %} <span class="muted">· {{ unit }}</span>{% endif %}</span><span class="muted">{{ chart.coverage }}/{{ chart.total }} päivää kirjattu</span></div>
+  <div class="chart-scale">Asteikko {{ chart.min }}–{{ chart.max }}{{ ' ' ~ unit if unit else '' }}</div>
+  <svg class="line-chart" viewBox="0 0 640 186" role="img" aria-label="{{ label }}: {{ chart.range_label }}. {{ chart.coverage }} päivää kirjattu {{ chart.total }} päivästä. Katkos tarkoittaa puuttuvaa tietoa.">
+    <g class="chart-grid"><path d="M36 35H610M36 80H610M36 125H610M36 170H610"/></g>
+    {% for segment in chart.segments %}<polyline class="chart-line" points="{{ segment }}"/>{% endfor %}
+    {% for point in chart.points %}{% if not point.missing %}<circle class="chart-point" cx="{{ point.x }}" cy="{{ point.y }}" r="4"><title>{{ point.label }}: {{ point.value }}{{ ' ' ~ unit if unit else '' }}</title></circle>{% else %}<g class="chart-missing"><path d="M{{ point.x }} 161v18"/><circle cx="{{ point.x }}" cy="170" r="4"/><title>{{ point.label }}: puuttuva tieto</title></g>{% endif %}{% endfor %}
+  </svg>
+  <div class="chart-axis" aria-hidden="true">{% for point in chart.points %}{% if chart.total <= 7 or loop.first or loop.last %}<span>{{ point.label[:6] }}</span>{% endif %}{% endfor %}</div>
+  <figcaption><span class="chart-key"><span class="chart-key-line" aria-hidden="true"></span> Kirjattu päivä</span><span class="chart-key"><span class="chart-key-gap" aria-hidden="true"></span> Puuttuva tieto, ei nolla</span></figcaption>
+  <details class="data-details"><summary>Näytä kaavion tiedot taulukkona</summary><div class="table-scroll" tabindex="0" aria-label="{{ label }}: tiedot taulukkona"><table><thead><tr><th>Päivä</th><th>{{ label }}{% if unit %} ({{ unit }}){% endif %}</th></tr></thead><tbody>{% for point in chart.points %}<tr><td>{{ point.label }}</td><td>{{ 'Puuttuva tieto' if point.missing else point.value }}</td></tr>{% endfor %}</tbody></table></div></details>
+</figure>
+{% else %}{{ empty('Ei julkaistua aikasarjaa', 'Kaavio näkyy, kun sovellus julkaisee rajatun, validoidun yhteenvedon.', 'chart') }}{% endif %}
+{%- endmacro %}
+
+{% macro app_card(app, card=none, chart=none) -%}
+<article class="panel app-card">
+  <div class="app-card-heading"><span class="app-icon app-icon--{{ app.id }}">{{ icon(app.icon|default('apps')) }}</span><div><h3><a href="{{ url('/hub/sovellukset/' ~ app.id) }}">{{ app.name }}</a></h3><span class="small muted">{{ {'private':'Yksityinen','public':'Julkinen','restricted':'Rajoitettu'}.get(app.data_class,app.data_class) }}</span></div>{{ icon('chevron', 'app-chevron') }}</div>
+  {% if card %}
+    {{ badge(card.status_label, 'danger' if card.status == 'virhe' else 'warning' if card.status in ['demo','esimerkkidata','vanhentunut'] else 'success' if card.status == 'ajantasainen' else 'neutral') }}
+    {% if card.kind == 'time_series' %}{{ chart_view(chart,'Kalorimäärä' if app.id == 'ravintopolku' and card.units == 'kcal' else card.title,card.units) }}
+    {% elif card.kind == 'recommendation_list' %}<div class="mini-list">{% for item in card.data['items'][:2] %}<div><strong>{{ item.title }}</strong><p>{{ item.reason }}</p></div>{% endfor %}</div>
+    {% elif card.kind == 'update_feed' %}{% for update in card.data.updates[:1] %}<div class="mini-list"><div><span class="eyebrow">{{ format_time(update.published_at) }}</span><strong>{{ update.title }}</strong><p>{{ update.summary }}</p></div></div>{% endfor %}
+    {% elif card.kind == 'idea_list' %}<p class="app-description">Kolme hypoteesia, kolme seuraavaa koetta. Ideat odottavat näyttöä.</p>
+    {% elif card.kind == 'metric' %}<p class="metric-value">{{ card.data.value if card.data.value is not none else 'Tietoa ei saatavilla' }}{% if card.units %} <span>{{ card.units }}</span>{% endif %}</p><p class="muted">{{ card.data.note }}</p>{% endif %}
+    {{ card_meta(card) }}
+  {% else %}<p class="app-description">{{ app.description }}</p><div class="app-connection">{{ badge(app.status_label|default('Ei yhdistetty'), 'danger' if app.status == 'virhe' else 'neutral') }}</div><p class="small muted">Lähde ja päivitysaika näkyvät yhdistämisen jälkeen.</p>{% endif %}
+  <a class="text-link app-card-link" href="{{ url('/hub/sovellukset/' ~ app.id) }}">Avaa näkymä {{ icon('arrow') }}</a>
+</article>
+{%- endmacro %}
+
+{% macro run_row(run) -%}
+<a class="run-row" href="{{ url('/hub/ajot/' ~ run.run_id) }}">
+  <span class="run-icon">{{ icon('file') }}</span><span class="run-main"><strong>{{ run.title }}</strong><span>{{ run.run_id }} · {{ format_time(run.started_at) }}</span></span>
+  {{ badge(run.status_label, 'warning' if run.status in ['partial','demo'] else 'neutral') }}{{ icon('chevron') }}
+</a>
+{%- endmacro %}
+
+{% macro idea_cards(card) -%}
+<div class="idea-grid">{% for idea in card.data.ideas %}<article class="idea-card"><div class="idea-number">0{{ loop.index }} <span>HYPOTEESI</span></div><h3>{{ idea.title }}</h3><p>{{ idea.problem }}</p><dl class="idea-facts"><div><dt>Ratkaisu</dt><dd>{{ idea.solution }}</dd></div><div><dt>Tärkein oletus</dt><dd>{{ idea.assumption }}</dd></div><div class="next-experiment"><dt>{{ icon('arrow') }} Seuraava koe</dt><dd>{{ idea.next_experiment }}</dd></div></dl>{% if idea.stage %}<span class="badge">{{ {'idea':'Idea','hypothesis':'Hypoteesi','experiment':'Kokeilu','tested':'Kokeiltu','validated':'Todennettu'}.get(idea.stage,idea.stage) }}</span>{% endif %}</article>{% endfor %}</div>
+{%- endmacro %}

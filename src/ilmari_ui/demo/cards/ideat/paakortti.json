@@ -1,0 +1,56 @@
+{
+  "schema_version": "ilmari.card.v1",
+  "app_id": "ideat",
+  "card_id": "paakortti",
+  "kind": "idea_list",
+  "title": "Kolme kokeiltavaa ajatusta",
+  "data_class": "private",
+  "published_at": "2026-10-13T11:30:00Z",
+  "observed_until": "2026-10-13T11:00:00Z",
+  "fresh_until": "2026-10-14T11:00:00Z",
+  "source": {
+    "name": "Synteettinen kehitysjulkaisu",
+    "url": null
+  },
+  "units": null,
+  "data": {
+    "ideas": [
+      {
+        "idea_id": "kooste",
+        "title": "Hiljainen tilannekooste",
+        "problem": "Hajallaan olevat projektitiedot katkaisevat keskittymisen.",
+        "solution": "Yksi rajattu, päivätty yhteenveto valituista julkaisuista.",
+        "assumption": "Käyttäjä palaa koosteeseen vähintään kahdesti viikossa.",
+        "next_experiment": "Näytä paperiprototyyppi kolmelle vapaaehtoiselle ja kirjaa palaute.",
+        "stage": "hypothesis",
+        "risks": [
+          "Tietolähteiden ajantasaisuus"
+        ]
+      },
+      {
+        "idea_id": "kokeet",
+        "title": "Pienten kokeiden päiväkirja",
+        "problem": "Ideat jäävät muistiinpanoiksi ilman selkeää seuraavaa askelta.",
+        "solution": "Vertailtava kortti oletukselle, kokeelle ja havainnolle.",
+        "assumption": "Yksi selkeä koe auttaa viemään ideaa eteenpäin.",
+        "next_experiment": "Pidä yhden viikon manuaalinen koepäiväkirja.",
+        "stage": "idea",
+        "risks": [
+          "Ylläpidon vaatima aika"
+        ]
+      },
+      {
+        "idea_id": "luku",
+        "title": "Rauhallinen raporttilukija",
+        "problem": "Pitkistä teknisistä raporteista on vaikea löytää olennainen.",
+        "solution": "Lukemiseen suunniteltu näkymä ja turvallisesti esitetyt lähteet.",
+        "assumption": "Selkeä lukujärjestys nopeuttaa raportin tarkastamista.",
+        "next_experiment": "Vertaa kahta lukutapaa samoilla synteettisillä raporteilla.",
+        "stage": "idea",
+        "risks": [
+          "Yhteenvedon tulkintavirheet"
+        ]
+      }
+    ]
+  }
+}

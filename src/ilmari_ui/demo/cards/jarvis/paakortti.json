@@ -1,0 +1,36 @@
+{
+  "schema_version": "ilmari.card.v1",
+  "app_id": "jarvis",
+  "card_id": "paakortti",
+  "kind": "update_feed",
+  "title": "Jaetut päivitykset",
+  "data_class": "private",
+  "published_at": "2026-10-13T11:30:00Z",
+  "observed_until": "2026-10-13T11:00:00Z",
+  "fresh_until": "2026-10-14T11:00:00Z",
+  "source": {
+    "name": "Synteettinen kehitysjulkaisu",
+    "url": null
+  },
+  "units": null,
+  "data": {
+    "updates": [
+      {
+        "update_id": "demo-1",
+        "published_at": "2026-10-13T09:20:00Z",
+        "title": "Esimerkki: uusi tilannekortti",
+        "summary": "Synteettinen julkaisu näyttää, miltä erikseen jaettu päivitys voisi näyttää.",
+        "detail": "Tämä ei ole Joonaksen oikea viesti. Jarvis-yhteyttä ei ole muodostettu.",
+        "source_url": null
+      },
+      {
+        "update_id": "demo-2",
+        "published_at": "2026-10-12T13:10:00Z",
+        "title": "Esimerkki: ensimmäinen prototyyppi",
+        "summary": "Jaetun päivityksen sisältö pysyy tekstinä ja lähde näkyy sen rinnalla.",
+        "detail": null,
+        "source_url": null
+      }
+    ]
+  }
+}

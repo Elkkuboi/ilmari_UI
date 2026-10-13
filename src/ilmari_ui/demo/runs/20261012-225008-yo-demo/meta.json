@@ -1,0 +1,14 @@
+{
+  "demo_title": "Raporttinäkymän tarkastus",
+  "demo_started_at": "2026-10-12T00:19:14+03:00",
+  "demo_ended_at": "2026-10-12T01:04:20+03:00",
+  "demo_model": "Paikallinen · esimerkki",
+  "demo_proposal_count": 2,
+  "demo_verdicts": {
+    "T": 0,
+    "O": 1,
+    "V": 1,
+    "E": 0
+  },
+  "notice": "DEMO – ESIMERKKIDATA. Ei aiops-tuotantomuodon määrittely."
+}

@@ -1,0 +1,14 @@
+{
+  "demo_title": "Julkaisusopimuksen koeluenta",
+  "demo_started_at": "2026-10-13T00:19:14+03:00",
+  "demo_ended_at": "2026-10-13T01:04:20+03:00",
+  "demo_model": "Paikallinen · esimerkki",
+  "demo_proposal_count": 3,
+  "demo_verdicts": {
+    "T": 1,
+    "O": 1,
+    "V": 0,
+    "E": 1
+  },
+  "notice": "DEMO – ESIMERKKIDATA. Ei aiops-tuotantomuodon määrittely."
+}

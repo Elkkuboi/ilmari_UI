@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, badge, app_card with context %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">SOVELLUKSET</span><h1>Omat tiedot. Omat rajat.</h1><p>Valitut yhteenvedot yhdessä näkymässä. Alkuperäinen data ja sen oikeudet pysyvät lähdesovelluksessa.</p></div><div class="page-heading-actions"><a class="button" href="{{ url('/hub/asetukset') }}">{{ icon('settings') }} Etusivun kortit</a></div></div>
+<div class="stack"><div class="app-grid">{% for app in apps %}{% set card = cards|selectattr('app_id','equalto',app.id)|first|default(none) %}{{ app_card(app,card,chart_for(card,7)) }}{% endfor %}</div><div class="notice">{{ icon('lock') }}<div><strong>Yhteenveto, ei yleislukuoikeutta</strong><p>Hub lukee vain sallittujen julkaisijoiden validoituja kortteja. Sovellusten tietokantoihin, toisen henkilön koneeseen tai ulkoisiin palveluihin ei tehdä automaattisia hakuja.</p></div></div></div>
+{% endblock %}

@@ -1,0 +1,110 @@
+/* One semantic palette per skin. Components never select their own colours. */
+:root,
+[data-skin="arctic-command"] {
+  color-scheme: dark;
+  --il-bg: #0b1018;
+  --il-surface: #101823;
+  --il-surface-raised: #182332;
+  --il-text: #edf3fc;
+  --il-text-muted: #a8b7cc;
+  --il-text-subtle: #91a1b9;
+  --il-border: #2a3545;
+  --il-border-strong: #66798d;
+  --il-accent: #8ee9cd;
+  --il-accent-text: #10271f;
+  --il-accent-soft: #19372f;
+  --il-secondary: #a2bcff;
+  --il-focus: #b4f4e1;
+  --il-success: #90dfaf;
+  --il-success-soft: #1a3027;
+  --il-warning: #f0cb88;
+  --il-warning-soft: #332b1e;
+  --il-danger: #ffaaa8;
+  --il-danger-soft: #39252d;
+  --il-chart-1: #8ee9cd;
+  --il-chart-2: #a2bcff;
+  --il-chart-grid: #2a3545;
+  --il-shadow: #00000026;
+  --il-overlay: #0b1018eb;
+}
+[data-skin="slate-electric"] {
+  color-scheme: dark;
+  --il-bg: #101318;
+  --il-surface: #181d24;
+  --il-surface-raised: #252c36;
+  --il-text: #f4f6f9;
+  --il-text-muted: #b3bdcc;
+  --il-text-subtle: #a0adbf;
+  --il-border: #353e4b;
+  --il-border-strong: #768697;
+  --il-accent: #b6c9ff;
+  --il-accent-text: #18233e;
+  --il-accent-soft: #29334e;
+  --il-secondary: #eca979;
+  --il-focus: #d1ddff;
+  --il-success: #a2dbb6;
+  --il-success-soft: #26382e;
+  --il-warning: #f1c790;
+  --il-warning-soft: #3a2f24;
+  --il-danger: #f8a9b0;
+  --il-danger-soft: #3b272f;
+  --il-chart-1: #b6c9ff;
+  --il-chart-2: #eca979;
+  --il-chart-grid: #353e4b;
+  --il-shadow: #00000026;
+  --il-overlay: #101318eb;
+}
+[data-skin="nordic-paper"] {
+  color-scheme: light;
+  --il-bg: #f5f2e9;
+  --il-surface: #fffefa;
+  --il-surface-raised: #ebe8de;
+  --il-text: #222d29;
+  --il-text-muted: #4f6057;
+  --il-text-subtle: #5a695f;
+  --il-border: #d1d4c9;
+  --il-border-strong: #6c7971;
+  --il-accent: #28695b;
+  --il-accent-text: #fffefa;
+  --il-accent-soft: #e2eee6;
+  --il-secondary: #855418;
+  --il-focus: #205e50;
+  --il-success: #28653c;
+  --il-success-soft: #e5eee0;
+  --il-warning: #775019;
+  --il-warning-soft: #f4e9d5;
+  --il-danger: #a33b42;
+  --il-danger-soft: #f5e4e3;
+  --il-chart-1: #28695b;
+  --il-chart-2: #855418;
+  --il-chart-grid: #d1d4c9;
+  --il-shadow: #2637290c;
+  --il-overlay: #f5f2e9eb;
+}
+[data-skin="aurora-lab"] {
+  color-scheme: dark;
+  --il-bg: #111324;
+  --il-surface: #191c30;
+  --il-surface-raised: #272b45;
+  --il-text: #f2efff;
+  --il-text-muted: #beb8d8;
+  --il-text-subtle: #aba6ca;
+  --il-border: #373b58;
+  --il-border-strong: #7e7c9e;
+  --il-accent: #b3a1ff;
+  --il-accent-text: #231b43;
+  --il-accent-soft: #332b50;
+  --il-secondary: #57d2cb;
+  --il-focus: #cfc3ff;
+  --il-success: #86daba;
+  --il-success-soft: #23372f;
+  --il-warning: #efcc94;
+  --il-warning-soft: #3a3029;
+  --il-danger: #ffacbe;
+  --il-danger-soft: #3c283f;
+  --il-chart-1: #b3a1ff;
+  --il-chart-2: #57d2cb;
+  --il-chart-grid: #373b58;
+  --il-shadow: #00000026;
+  --il-overlay: #111324eb;
+}

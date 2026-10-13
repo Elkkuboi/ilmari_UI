@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon with context %}
+{% block content %}
+<section class="panel error-screen"><div class="error-code" aria-hidden="true">{{ status_code }}</div><span class="eyebrow">NÄKYMÄ EI OLE SAATAVILLA</span><h1>{{ error_title }}</h1><p>{{ message }}</p><a class="button" href="{{ url('/hub') }}">{{ icon('arrow') }} Palaa etusivulle</a></section>
+{% endblock %}

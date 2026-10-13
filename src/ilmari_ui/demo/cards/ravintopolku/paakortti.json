@@ -1,0 +1,50 @@
+{
+  "schema_version": "ilmari.card.v1",
+  "app_id": "ravintopolku",
+  "card_id": "paakortti",
+  "kind": "time_series",
+  "title": "Viikon kirjaukset",
+  "data_class": "private",
+  "published_at": "2026-10-13T11:30:00Z",
+  "observed_until": "2026-10-13T11:00:00Z",
+  "fresh_until": "2026-10-14T11:00:00Z",
+  "source": {
+    "name": "Synteettinen kehitysjulkaisu",
+    "url": null
+  },
+  "units": "kcal",
+  "data": {
+    "period_start": "2026-10-07",
+    "period_end": "2026-10-13",
+    "points": [
+      {
+        "date": "2026-10-07",
+        "value": 2140
+      },
+      {
+        "date": "2026-10-08",
+        "value": 2280
+      },
+      {
+        "date": "2026-10-09",
+        "value": null
+      },
+      {
+        "date": "2026-10-10",
+        "value": 2050
+      },
+      {
+        "date": "2026-10-11",
+        "value": 2360
+      },
+      {
+        "date": "2026-10-12",
+        "value": 2180
+      },
+      {
+        "date": "2026-10-13",
+        "value": 2240
+      }
+    ]
+  }
+}
