@@ -13,7 +13,7 @@ Tämä alkuosa koskee käyttäjän nimenomaisesti tilaamaa Ilmari Hub -käyttöl
 - Keskustelu, mallin vaihto, todelliset hyväksyntälistat, GPU-/budjettimittarit ja ulkoiset sovellusyhteydet pysyvät rehellisesti ei-aktiivisina, kun todennettua rajapintaa ei ole. Mahdolliset esimerkkijulkaisut ovat kehityksen esimerkkidataa.
 - Tuotantoliitännän ADR on **ehdotus**. C2 (käyttäjä/oikeudet) ja C3 (yhteys nykyiseen gatewayhin) ovat avoimet. Tailscale-identiteettiotsake yksin ei todenna käyttäjää; luottamus vaatii nykyisen gatewayn vartijan ja rajatun Unix-sokettiketjun.
 - Isäntäkoneen muutoksia, deployta, sudo-komentoja, Serve-/UFW-muutoksia tai systemd-asennusta ei ole tehty. `docs/muutosloki.md`:tä ei luoda kuvitteellisen isäntäasennuksen kirjaamiseksi.
-- GitHub-toimitus: käyttäjä ilmoitti paikallisen valmistelun jälkeen, että `ilmari_UI` näkyy hänellä edelleen tyhjänä. Toteutus commitoidaan ja toimitetaan `ilmari-hub`-haaralle. GitHub-repossa ei toimitusta valmisteltaessa ollut yhtään haaraa; PR:n vertailulle ei siis ollut olemassa olevaa perushaaraa. Etätoimituksen onnistuminen vahvistetaan Git-pushin jälkeen, ei paikallisen commitin perusteella. Tuotannon mainiin, aiops-repoon tai työasemaan ei tehdä muutoksia.
+- GitHub-toimitus 13.10.2026: käyttäjän jatkopyynnön perusteella 64 tiedostoa commitoitiin ja pushattiin `ilmari-hub`-haaralle. Toteutuksen commit on `b65ae29e403278aecec96f4cdc25894be9099b4b`. GitHubin `git ls-remote --symref origin HEAD` vahvisti saman SHA:n ja `ilmari-hub`-oletushaaran. Etärepo ei enää ole tyhjä. Ennen ensimmäistä pushia GitHubissa ei ollut yhtään haaraa, joten PR:n vertailulle ei ollut perushaaraa. Aiops-repoon tai työasemaan ei tehty muutoksia.
 
 ## Testien ajantasainen näyttö
 
