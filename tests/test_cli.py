@@ -264,3 +264,62 @@ def test_real_server_sigterm_cleans_socket_and_allows_restart(private_directory)
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait(timeout=5)
+
+
+# --------------------------------------------------------------------------------------------------
+# Tuotantotila (--config, aiops ADR-0013)
+# --------------------------------------------------------------------------------------------------
+
+def _hub_toml(folder: Path, julkaisut: Path) -> Path:
+    config = folder / "hub.toml"
+    config.write_text(
+        '[hub]\nrp_id = "tyoasema.taild1a5b7.ts.net"\n'
+        f'julkaisut = "{julkaisut}"\n\n'
+        '[hub.kayttajat]\n"Elkkuboi@github" = "elias"\n', encoding="utf-8")
+    return config
+
+
+def test_production_config_enables_identity_and_prefix(monkeypatch, private_directory):
+    address = private_directory / "hub.sock"
+    julkaisut = private_directory / "ajot"
+    julkaisut.mkdir()
+    captured = {}
+
+    class ProbeServer:
+        def __init__(self, config):
+            captured["config"] = config
+
+        def run(self, *, sockets):
+            assert sockets[0].family == socket.AF_UNIX and sockets[0].getsockname() == str(address)
+
+    monkeypatch.setattr(cli.uvicorn, "Server", ProbeServer)
+    run_main(monkeypatch, "--socket", str(address), "--config", str(_hub_toml(private_directory, julkaisut)))
+    app = captured["config"].app
+    serve = {"x-forwarded-host": "tyoasema.taild1a5b7.ts.net", "tailscale-user-login": "Elkkuboi@github"}
+    with TestClient(app, base_url="http://localhost", client=None) as client:
+        assert client.get("/ajot", headers=serve).status_code == 200            # Serven polku ilman /hub-etuliitettä
+        assert client.get("/ajot", headers={**serve, "tailscale-user-login": "muu@github"}).status_code == 403
+        assert client.get("/hub", headers={"host": "ilmari.local"}).status_code == 421   # kehitystila ei ole päällä
+    assert not address.exists()
+
+
+@pytest.mark.parametrize("extra", [("--demo",), ("--runs-dir", "/srv/aiops/ilmari/ajot")])
+def test_production_config_refuses_demo_and_runs_dir(monkeypatch, private_directory, extra):
+    socket_dir = private_directory / "runtime"
+    config = _hub_toml(private_directory, private_directory / "ajot")
+    with pytest.raises(SystemExit) as failure:
+        run_main(monkeypatch, "--socket", str(socket_dir / "hub.sock"), "--config", str(config), *extra)
+    assert failure.value.code == 2
+    assert not socket_dir.exists()
+
+
+@pytest.mark.parametrize("content", [None, "[hub]\nrp_id = 1\n", "ei toml"])
+def test_invalid_or_missing_config_is_refused_before_creating_a_socket(monkeypatch, private_directory, content):
+    socket_dir = private_directory / "runtime"
+    config = private_directory / "hub.toml"
+    if content is not None:
+        config.write_text(content, encoding="utf-8")
+    with pytest.raises(SystemExit) as failure:
+        run_main(monkeypatch, "--socket", str(socket_dir / "hub.sock"), "--config", str(config))
+    assert failure.value.code == 2
+    assert not socket_dir.exists()

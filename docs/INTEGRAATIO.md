@@ -1,5 +1,10 @@
 # Ilmari Hubin integraatioraja ja vain lukevat ennakkotarkistukset
 
+**Päivitys 14.10.2026:** tuotantoliitäntä on päätetty aiops-repon ADR-0013:ssa, ja tämä repo toteuttaa sen
+(ks. [ADR-UI-0001:n päätösosa](adr/0001-hub-integration-proposal.md)). Alla oleva teksti on kirjoitettu ennen päätöstä:
+sen "gatewayn vartijan alle" -muotoilut ja C2/C3:n avoimuus eivät ole enää voimassa. Julkaisumuoto on kuvattu
+aiops-repon tiedostossa `apps/ilmari-selain/MUODOT.md` (kohta 8: julkaisu).
+
 Tämä erillinen repo toimittaa Hubin käyttöliittymän ja eristetyt lukukomponentit. Se ei asenna palvelua työasemalle tai muuta aiops-alustan turvallisuusrajoja. [ADR-ehdotus](adr/0001-hub-integration-proposal.md) on tarkistettavissa, mutta tuotannon C2/C3-päätökset ovat avoimet. Tässä dokumentissa ei ole deploy-, sudo-, Serve-muutos-, käyttäjänluonti- tai kannanmuutoskomentoja.
 
 ## Todennettu lähdepohja

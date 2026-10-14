@@ -1,6 +1,29 @@
 # ADR-UI-0001: Ilmari Hubin tuotantoliitäntä nykyisen gatewayn alle
 
-- Tila: **ehdotettu; ei hyväksytty eikä asennettu**.
+- Tila: **korvattu aiops-repon ADR-0013:lla** (hyväksytty 14.10.2026). Alla oleva alkuperäinen ehdotus on historiaa.
+
+## Päätös 14.10.2026 (aiops ADR-0013)
+
+- Hub on oma ohjelmansa omassa repossaan, omalla käyttäjällään `ilmari-hub` ja omassa soketissaan
+  `/run/ilmari-hub/hub.sock`. Tailscale Serve ohjaa polun `/hub` suoraan Hubin sokettiin. Gateway ei muutu eikä
+  välitä Hubin liikennettä, joten alla ehdotetut vaihtoehdot (vartioitu ASGI-liitos gatewayn prosessissa ja gatewayn
+  välitys) hylättiin.
+- Hub toistaa tuotantotilassa gatewayn vartijan säännöt (`src/ilmari_ui/app.py`, `production_rejection`): vain GET ja
+  HEAD, osoite X-Forwarded-Hostista (RP ID), ei Funnel-pyyntöjä, vain sallitut Tailscale-tunnukset, otsakkeiden toistot
+  hylätään ja yhteys vain Unix-soketista. Asiakkaan X-Forwarded-Prefixiä ei käytetä.
+- Serve poistaa etuliitteen `/hub` ennen välitystä (todettu työasemalla 14.10.2026 koepolulla `/hub-koe`), joten Hub
+  palauttaa sen ennen reititystä (`RestorePrefix`). Reitit ja linkit käyttävät selaimen näkemää `/hub`-osoitetta.
+- Hub ja gateway jakavat alkuperän, joten Hubin skriptitön CSP on osa gatewayn suojaa. Testi vahtii jokaista vastausta.
+- Julkaisut tulevat hakemistosta `/srv/aiops/ilmari/ajot` ryhmän `ilmari-julkaisu` kautta. Palvelu näkee `/srv`:stä vain
+  sen (`TemporaryFileSystem=/srv:ro`, `BindReadOnlyPaths`).
+- Asennus: `scripts/asenna.sh` hakemistoon `/opt/ilmari-hub`, palvelu `config/systemd/ilmari-hub.service`, konfiguraatio
+  `/etc/ilmari-hub/hub.toml` (malli `config/hub.toml.esimerkki`). Isäntämuutokset kirjataan aiops-repon muutoslokiin.
+
+---
+
+Alkuperäinen ehdotus 13.10.2026:
+
+- Tila: ehdotettu; ei hyväksytty eikä asennettu.
 - Päiväys: 13.10.2026, Europe/Helsinki.
 - Soveltamisala: erillinen `Elkkuboi/ilmari_UI`-repo ja sen tuleva liitäntä aiops-alustaan.
 - Tämä ei korvaa aiops-repon ADR-0001:tä eikä hyväksy muutoksia ADR-0004:ään, ADR-0010:een tai ADR-0011:een.
