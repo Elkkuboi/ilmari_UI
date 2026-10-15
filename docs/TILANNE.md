@@ -1,5 +1,24 @@
 # ilmari_UI: tämän repositorion tilanne 13.10.2026
 
+## Päivitys 14.10.2026: tuotantoliitäntä (aiops ADR-0013)
+
+- Päätös: aiops-repon ADR-0013 hyväksyttiin 14.10.2026 (PR #13). Hub saa oman käyttäjän ja Serve-polun `/hub`, eikä
+  gateway muutu. ADR-UI-0001 on merkitty korvatuksi, ja `docs/ilmari-ready.md` on nyt kopio aiops-repon ajantasaisesta
+  versiosta.
+- Julkaisu: aiops-repon `scripts/julkaise.py` (PR #27) kopioi yöajon sallitut tiedostot hakemistoon
+  `/srv/aiops/ilmari/ajot` (ryhmä ilmari-julkaisu). 16 ajoa julkaistiin työasemalla 14.10.2026, ja Hubin lukija
+  (`runs.py`) luki julkaisun virheittä Clauden konttisimulaatiossa.
+- Serve-koe työasemalla 14.10.2026 (`/hub-koe`, poistettu kokeen jälkeen): Serve poistaa polun etuliitteen, korvaa
+  X-Forwarded-Hostin ja Tailscale-User-Loginin, poistaa asiakkaan Tailscale-Funnel-Requestin ja päästää
+  X-Forwarded-Prefixin läpi. `/hub-koex` meni gatewaylle.
+- Tässä muutoksessa: tuotantotila (`--config`, `src/ilmari_ui/config.py`), gatewayn sääntöjen mukainen vartija ja
+  etuliitteen palautus (`app.py`), palvelutiedosto, konfiguraatiomalli, asennusskripti ja testit
+  (`tests/test_production.py`, `test_config.py`, `test_unit_file.py`, `test_asenna.py`, `test_cli.py`).
+- Testit Clauden ympäristössä: 506 passed, 65 skipped (selaintestit ilman Playwrightia). Palvelutiedosto jäsentyy
+  systemd 255:llä (`systemd-analyze verify`).
+- Seuraavaksi: isäntämuutokset aiops-repon muutoslokiin (käyttäjä ilmari-hub, `/etc/ilmari-hub/hub.toml`, asennus,
+  palvelu, Serve-polku `/hub`) ja puhelinkoe. Sen jälkeen MUODOT-sovitin (ajon kenttien ja Solin tuomioiden esitys).
+
 Tämä alkuosa koskee käyttäjän nimenomaisesti tilaamaa Ilmari Hub -käyttöliittymän toteutusta erilliseen `Elkkuboi/ilmari_UI`-repositorioon. Alempana oleva aiops-tilannekuva on käyttäjän toimittama alkuperäinen tausta-aineisto kokonaisena. Sen isäntä-, Git-, PR-, testi- ja GPU-havainnot eivät ole tämän pilviympäristön mittauksia. Historiaa ei ole muutettu.
 
 ## Tässä ympäristössä havaittu ja valmisteltu

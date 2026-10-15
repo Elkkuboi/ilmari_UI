@@ -1,0 +1,12 @@
+# /etc/ilmari-hub/hub.toml (root:ilmari-hub 0640), aiops ADR-0013. Malli; oikea tiedosto ei ole repossa.
+# Luetaan käynnistyksessä: muutoksen jälkeen sudo systemctl restart ilmari-hub
+
+[hub]
+# Työaseman nimi tailnetissä ilman pistettä lopussa; sama kuin /etc/aiops/aiops.toml:n [webauthn] rp_id.
+rp_id = "tyoasema.tailnet.ts.net"
+# Julkaisuhakemisto (aiops ADR-0013 kohta 4). Palvelu näkee vain tämän hakemiston (BindReadOnlyPaths).
+julkaisut = "/srv/aiops/ilmari/ajot"
+
+[hub.kayttajat]
+# Sama lista kuin /etc/aiops/aiops.toml:n [gateway.kayttajat]: Tailscale-tunnus (LoginName) = nimi.
+"tunnus@github" = "elias"

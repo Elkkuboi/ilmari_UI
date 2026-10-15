@@ -74,3 +74,16 @@ Sovelluskortit noudattavat tämän repon **ehdotettua** `ilmari.card.v1`-sopimus
 Tämä kehityspalvelin **ei ole tuotannon Tailscale-tunnistusta toteuttava gateway**. Se hylkää TCP-asiakkaat ja sallii vain paikallisen Unix-soketin lukupyynnöt. Aiops-integraation käyttäjä, tiedosto-oikeudet ja reititys nykyisen suojatun gatewayn kautta vaativat katselmoinnin ja arkkitehtuuripäätöksen. Älä julkaise sokettia Tailscale Servellä tämän ohjeen perusteella.
 
 Katso [UI-määrittely](docs/valmistelu/ilmari-hub-ui.md), [ajojulkaisut](docs/run-publication.md), [korttisopimus](docs/card-publication.md), [integraatio ja ennakkotarkistukset](docs/INTEGRAATIO.md), [ADR-ehdotus](docs/adr/0001-hub-integration-proposal.md) ja [tilannekuva](docs/TILANNE.md). Tämä toteutus toimitetaan käyttäjän jatkopyynnön perusteella `ilmari-hub`-haaralle. Isäntäkoneeseen ei ole tehty muutoksia; tuotantointegraatio ja asennus odottavat erillistä päätöstä.
+
+## Tuotanto työasemalla (aiops ADR-0013)
+
+Tuotantotila käynnistetään konfiguraatiolla: `ilmari-ui --config /etc/ilmari-hub/hub.toml --socket /run/ilmari-hub/hub.sock`.
+Silloin Hub hyväksyy vain Tailscale Serven kautta tulevat pyynnöt sallituilta tunnuksilta, lukee julkaisut konfiguraation
+hakemistosta ja palauttaa Serven poistaman `/hub`-etuliitteen. Esimerkkitila ja `--runs-dir` eivät ole käytössä.
+
+- Palvelutiedosto: `config/systemd/ilmari-hub.service` (käyttäjä ilmari-hub, ei verkkoa, `/srv`:stä näkyy vain julkaisu).
+- Konfiguraation malli: `config/hub.toml.esimerkki`.
+- Asennus repon juuresta: `sudo scripts/asenna.sh "$(command -v uv)"` (vain commitoitu koodi, kohde `/opt/ilmari-hub`).
+
+Käyttäjän, ryhmän, konfiguraation ja Serve-polun luonti ovat isäntämuutoksia. Ne tehdään ja kirjataan aiops-repon
+muutoslokiin, eivät tämän repon skripteissä.

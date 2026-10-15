@@ -1,7 +1,10 @@
-"""Lukevan Hubin paikallinen ASGI-sovellus.
+"""Lukevan Hubin ASGI-sovellus.
 
-Tämä palvelin toimii vain Unix-soketissa. Se ei todista Tailscale-identiteettiä,
-eikä sitä saa julkaista tuotantoon ennen gateway-integraation katselmointia.
+Palvelin toimii vain Unix-soketissa. Kehitystilassa (ei identiteettiasetusta) se hyväksyy vain Host-nimen
+ilmari.local eikä todista Tailscale-identiteettiä. Tuotantotilassa (aiops ADR-0013) Tailscale Serve ohjaa polun /hub
+Hubin sokettiin, ja Hub toistaa gatewayn vartijan säännöt: vain GET ja HEAD, osoite X-Forwarded-Hostista, ei
+Funnel-pyyntöjä ja vain sallitut Tailscale-tunnukset. Serve poistaa etuliitteen /hub ennen välitystä, joten
+tuotantotilassa se palautetaan ennen reititystä.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .cards import load_cards
+from .config import HubConfig
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
 
@@ -33,6 +37,7 @@ APP_CATALOG = (
     {"id": "jarvis", "name": "Joonaksen Jarvis", "description": "Vain omistajan erikseen hyväksymät ja jakamat päivitykset.", "data_class": "private", "icon": "feed"},
 )
 APP_IDS = tuple(app["id"] for app in APP_CATALOG)
+SERVE_PREFIX = "/hub"
 ALIASES = {"/": "/hub", "/chat": "/hub/keskustelu", "/runs": "/hub/ajot", "/approvals": "/hub/hyvaksynnat", "/apps": "/hub/sovellukset", "/ideas": "/hub/ideat", "/system": "/hub/jarjestelma", "/settings": "/hub/asetukset"}
 
 
@@ -46,11 +51,78 @@ class Settings:
     app_classes: dict[str, str] = field(default_factory=lambda: {app["id"]: app["data_class"] for app in APP_CATALOG})
     allowed_private_apps: frozenset[str] = frozenset()
     allowed_source_hosts: frozenset[str] = frozenset()
+    identity: HubConfig | None = None  # tuotantotila: Tailscale-tunnistus ja Serven etuliite (ADR-0013)
 
     def __post_init__(self) -> None:
         for root in (self.runs_dir, self.cards_dir):
             if root is not None and (not root.is_absolute() or root == Path("/") or ".." in root.parts):
                 raise ValueError("Julkaisujuuren pitää olla yksilöity absoluuttinen hakemistopolku ilman '..'-osia.")
+        if self.identity is not None:
+            if self.demo_enabled:
+                raise ValueError("Esimerkkitila ei ole sallittu tuotantotilassa.")
+            if self.runs_dir != self.identity.runs_dir:
+                raise ValueError("Tuotantotilan julkaisujuuri tulee konfiguraatiosta.")
+
+
+class RestorePrefix:
+    """Palauttaa etuliitteen, jonka Tailscale Serve poistaa ennen välitystä Unix-sokettiin.
+
+    Todettu 14.10.2026 koepolulla: selaimen osoite /hub-koe/ajot/x saapui muodossa /ajot/x ja /hub-koe muodossa /.
+    Reitit, linkit ja staattiset tiedostot käyttävät selaimen näkemää /hub-osoitetta, joten etuliite lisätään
+    jokaisen pyynnön polkuun ennen reititystä. Asiakkaan X-Forwarded-Prefix-otsaketta ei käytetä: Serve päästää
+    sen läpi sellaisenaan.
+    """
+
+    def __init__(self, app, prefix: str = SERVE_PREFIX) -> None:
+        self.app = app
+        self.prefix = prefix
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            path = scope.get("path") or "/"
+            raw = scope.get("raw_path") or path.encode("utf-8")
+            scope = dict(scope)
+            scope["path"] = self.prefix if path == "/" else self.prefix + path
+            scope["raw_path"] = self.prefix.encode("ascii") + (b"" if raw == b"/" else raw)
+        await self.app(scope, receive, send)
+
+
+def _header_values(headers: list, name: bytes) -> list[bytes]:
+    return [value for key, value in headers if key.lower() == name]
+
+
+def production_rejection(request: Request, identity: HubConfig) -> tuple[int, str] | None:
+    """Gatewayn vartijan säännöt (aiops ADR-0010 ja sen tarkennukset) tiukennettuina lukupalvelulle.
+
+    Palauttaa (tilakoodi, selitys) tai None, jos pyyntö kelpaa. Otsakkeiden toistot hylätään yksikäsitteisyyden vuoksi.
+    Sokettiin pääsevät vain tailscaled ja root, joten Serven kirjoittamat X-Forwarded-Host ja Tailscale-User-Login
+    ovat luotettavia. Serve korvaa asiakkaan omat arvot ja poistaa asiakkaan Tailscale-Funnel-Request-otsakkeen
+    (todettu 14.10.2026).
+    """
+    headers = request.scope.get("headers", [])
+    if request.scope.get("client") is not None:
+        return 403, "Hub palvelee vain Unix-soketin kautta."
+    if request.method not in ("GET", "HEAD"):
+        return 405, "Hub vain lukee: vain GET ja HEAD ovat sallittuja."
+    forwarded = _header_values(headers, b"x-forwarded-host")
+    hosts = _header_values(headers, b"host")
+    if len(forwarded) > 1 or len(hosts) > 1:
+        return 421, "Osoite ei ole yksikäsitteinen."
+    host = (forwarded or hosts or [b""])[0].decode("latin-1").lower()
+    if host not in (identity.rp_id, f"{identity.rp_id}:443"):
+        return 421, f"Väärä osoite: Hub vastaa vain nimellä {identity.rp_id}."
+    if _header_values(headers, b"tailscale-funnel-request"):
+        return 403, "Funnel-pyyntöjä ei palvella (ADR-0004)."
+    logins = _header_values(headers, b"tailscale-user-login")
+    if len(logins) != 1 or logins[0].decode("latin-1") not in identity.users:
+        return 403, "Ei pääsyä: Tailscale-tunnus puuttuu tai sitä ei ole sallittu."
+    sites = _header_values(headers, b"sec-fetch-site")
+    if len(sites) > 1 or (sites and sites[0] not in (b"none", b"same-origin")):
+        return 403, "Ei pääsyä toisen sivuston kautta."
+    origins = _header_values(headers, b"origin")
+    if len(origins) > 1 or (origins and origins[0] != identity.origin.encode("ascii")):
+        return 403, "Ei pääsyä toisesta alkuperästä."
+    return None
 
 
 def format_time(value: Any) -> str:
@@ -113,6 +185,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def boundary(request: Request, call_next):
+        if settings.identity is not None:
+            rejection = production_rejection(request, settings.identity)
+            if rejection is None:
+                request.state.user = settings.identity.users[request.headers["tailscale-user-login"]]
+                return secure(await call_next(request))
+            code, reason = rejection
+            return secure(HTMLResponse(f"<!doctype html><html lang='fi'><title>Pääsy estetty</title><h1>Pääsy estetty</h1><p>{reason}</p></html>", status_code=code))
         headers = request.scope.get("headers", [])
         hosts = [value for name, value in headers if name.lower() == b"host"]
         origins = [value for name, value in headers if name.lower() == b"origin"]
@@ -131,6 +210,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = HTMLResponse("<!doctype html><html lang='fi'><title>Pääsy estetty</title><h1>Pääsy estetty</h1><p>Hub toimii vain paikallisessa Unix-soketissa ja hyväksyy lukupyynnöt omalta alkuperältä.</p></html>", status_code=403)
         else:
             response = await call_next(request)
+        return secure(response)
+
+    def secure(response):
+        """Sama turvaotsakkeiden joukko jokaiseen vastaukseen, myös hylkäyksiin ja staattisiin tiedostoihin.
+
+        Tuotannossa Hub jakaa alkuperän gatewayn kanssa, joten skriptitön CSP on osa gatewayn suojaa (ADR-0013 kohta 5).
+        """
         response.headers.update({
             "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             "Cache-Control": "no-store",
@@ -140,6 +226,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-Frame-Options": "DENY",
         })
         return response
+
+    if settings.identity is not None:
+        app.add_middleware(RestorePrefix)  # viimeisenä lisätty on uloin: polku palautetaan ennen vartijaa ja reititystä
 
     def context(request: Request, page: str, title: str) -> dict[str, Any]:
         skin = normalize_skin(request.query_params.get("skin"))
@@ -190,7 +279,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "runs": runs, "runs_state": listing.state, "runs_errors": listing.errors,
             "runs_truncated": listing.truncated, "reader": reader, "days": days,
             "approval_items": [], "system_metrics": [], "budget": None,
-            "source_state": "esimerkkidata" if demo else "kehitysympäristö", "gateway_connected": False,
+            "source_state": "esimerkkidata" if demo else ("julkaisut" if settings.identity else "kehitysympäristö"),
+            "mode_label": "Esimerkkitila" if demo else ("Työasema" if settings.identity else "Kehitysympäristö"),
+            "gateway_connected": False,
         }
 
     def render(request: Request, page: str, title: str, **extra: Any):

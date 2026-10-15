@@ -1,0 +1,74 @@
+# ilmari-hub.service (aiops ADR-0013 kohta 2)
+# Asennus: scripts/asenna.sh kopioi tämän tiedostoon /etc/systemd/system/.
+# Hub kuuntelee Unix-soketissa /run/ilmari-hub/hub.sock. Hakemisto on 0700, joten sokettiin pääsevät vain
+# ilmari-hub ja root eli tailscaled. Tailscale Serve ohjaa polun /hub tähän sokettiin.
+#
+# Kovennus on gatewayn kovennus (aiops-repon config/systemd/aiops-gateway.service) seuraavin eroin:
+#   SupplementaryGroups=ilmari-julkaisu
+#       Ainoa ryhmä, jonka kautta Hub lukee julkaisut. Ei ryhmiä aiops eikä docker.
+#   TemporaryFileSystem=/srv:ro ja BindReadOnlyPaths=/srv/aiops/ilmari/ajot
+#       Palvelun nimiavaruudessa /srv sisältää vain julkaisuhakemiston. Kanta, data, mallit ja työt eivät näy.
+#   InaccessiblePaths=/etc/aiops
+#       aiops-konfiguraatio ja hyväksyjien avaimet eivät näy edes nimiltään.
+#   Ei ReadWritePaths-kohtia: Hub ei kirjoita mihinkään.
+#   UMask=0077: palvelu ei luo mitään muiden luettavaksi.
+# Testi tests/test_unit_file.py vahtii tätä tiedostoa.
+
+[Unit]
+Description=Ilmari Hub: julkaistujen ajojen lukunäkymä Tailscale Serven polussa /hub
+
+[Service]
+Type=simple
+User=ilmari-hub
+Group=ilmari-hub
+SupplementaryGroups=ilmari-julkaisu
+UMask=0077
+WorkingDirectory=/
+ExecStart=/opt/ilmari-hub/.venv/bin/ilmari-ui --config /etc/ilmari-hub/hub.toml --socket /run/ilmari-hub/hub.sock
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# Soketin hakemisto: systemd luo sen käynnistyksessä ja poistaa pysäytyksessä
+RuntimeDirectory=ilmari-hub
+RuntimeDirectoryMode=0700
+
+# Kirjoitus- ja näkyvyysrajat
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+TemporaryFileSystem=/srv:ro
+BindReadOnlyPaths=/srv/aiops/ilmari/ajot
+InaccessiblePaths=/etc/aiops
+
+# Ei verkkoa: polkuun sidottu Unix-soketti toimii ilman verkkoa
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+# Laitteet, kello, ydin ja järjestelmä
+PrivateDevices=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectProc=invisible
+
+# Ei erityisoikeuksia millään keinolla
+CapabilityBoundingSet=
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+
+# Järjestelmäkutsujen sanakirja; kielletty kutsu palauttaa virheen
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
