@@ -87,3 +87,9 @@ hakemistosta ja palauttaa Serven poistaman `/hub`-etuliitteen. Esimerkkitila ja 
 
 Käyttäjän, ryhmän, konfiguraation ja Serve-polun luonti ovat isäntämuutoksia. Ne tehdään ja kirjataan aiops-repon
 muutoslokiin, eivät tämän repon skripteissä.
+
+### Sovelluksena puhelimessa ja koneella
+
+Avaa `https://TYÖASEMA/hub` Chromessa ja valitse valikosta **Asenna sovellus** (puhelimessa myös **Lisää aloitusnäyttöön**).
+Sovellus avautuu omaan ikkunaansa ja pitää gatewayn sivut (hyväksynnät, `/ilmari`) samassa ikkunassa. Hub ei toimi ilman
+yhteyttä työasemaan, koska siinä ei ole service workeria.

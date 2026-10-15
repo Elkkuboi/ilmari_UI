@@ -1,0 +1,17 @@
+{
+  "id": "/hub",
+  "name": "Ilmari Hub",
+  "short_name": "Ilmari",
+  "description": "Ilmarin ajot, raportit ja ehdotukset työasemalta. Vain luku.",
+  "lang": "fi",
+  "start_url": "/hub",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101823",
+  "theme_color": "#101823",
+  "icons": [
+    {"src": "/hub/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/hub/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/hub/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

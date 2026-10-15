@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .cards import load_cards
+from . import muodot
 from .config import HubConfig
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -38,6 +39,7 @@ APP_CATALOG = (
 )
 APP_IDS = tuple(app["id"] for app in APP_CATALOG)
 SERVE_PREFIX = "/hub"
+RUN_COUNT_LIMIT = 200
 ALIASES = {"/": "/hub", "/chat": "/hub/keskustelu", "/runs": "/hub/ajot", "/approvals": "/hub/hyvaksynnat", "/apps": "/hub/sovellukset", "/ideas": "/hub/ideat", "/system": "/hub/jarjestelma", "/settings": "/hub/asetukset"}
 
 
@@ -218,7 +220,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Tuotannossa Hub jakaa alkuperän gatewayn kanssa, joten skriptitön CSP on osa gatewayn suojaa (ADR-0013 kohta 5).
         """
         response.headers.update({
-            "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff",
@@ -303,7 +305,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/ajot", response_class=HTMLResponse)
     async def runs(request: Request):
-        return render(request, "runs", "Ajot ja raportit")
+        data = context(request, "runs", "Ajot ja raportit")
+        if not data["demo"]:
+            for run in data["runs"][:RUN_COUNT_LIMIT]:  # ehdotusmäärät ja tuomiot vaativat ajon tiedostot
+                try:
+                    detail = data["reader"].read_run(run["run_id"])
+                except ReadFailure:
+                    continue
+                run.update(proposal_count=len(detail.proposals), verdicts=muodot.verdict_counts(detail.sol_result))
+        return templates.TemplateResponse(request=request, name="runs.html", context=data)
 
     @app.get("/hub/ajot/{run_id}", response_class=HTMLResponse)
     async def run_detail(request: Request, run_id: str):
@@ -312,7 +322,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             detail = data["reader"].read_run(run_id)
         except ReadFailure:
             return templates.TemplateResponse(request=request, name="error.html", context={**data, "message": "Ajoa ei löydy tai julkaisua ei voi lukea turvallisesti.", "error_title": "Ajo ei ole saatavilla", "status_code": 404}, status_code=404)
-        data.update(run=run_view(detail.run_id, detail.meta, detail.errors, data["demo"]), meta=detail.meta or {}, report=detail.report, suggestions=detail.proposals, sol=json.dumps(detail.sol_result, ensure_ascii=False, indent=2) if detail.sol_result is not None else None, patch=detail.patch, run_errors=detail.errors)
+        run = run_view(detail.run_id, detail.meta, detail.errors, data["demo"])
+        if not data["demo"]:
+            run.update(proposal_count=len(detail.proposals), verdicts=muodot.verdict_counts(detail.sol_result))
+        data.update(run=run, meta=detail.meta or {}, report=detail.report, suggestions=detail.proposals,
+                    proposals=muodot.proposals(detail.proposals, detail.sol_result), sol_summary=muodot.sol_summary(detail.sol_result),
+                    verdict_labels=muodot.VERDICT_LABELS,
+                    sol=json.dumps(detail.sol_result, ensure_ascii=False, indent=2) if detail.sol_result is not None else None,
+                    patch=detail.patch, run_errors=detail.errors if data["demo"] else muodot.relevant_errors(detail.errors))
         return templates.TemplateResponse(request=request, name="run_detail.html", context=data)
 
     @app.get("/hub/hyvaksynnat", response_class=HTMLResponse)
@@ -357,8 +374,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 def run_view(run_id: str, meta: dict | None, errors: tuple, demo: bool) -> dict:
-    """Elävän lähteen metakenttiä ei tulkita ennen MUODOT-adapterin tarkistusta."""
-    result = {"run_id": run_id, "title": run_id, "status": "partial" if errors else "published", "status_label": "Osittainen julkaisu" if errors else "Julkaistu", "started_at": None, "ended_at": None, "model": None, "proposal_count": None, "verdicts": None}
+    """Ajon yhteenveto. Oikeat julkaisut tulkitaan MUODOT.md:n mukaan (muodot.py); esimerkkidata omilla demo-kentillään."""
+    result = {"run_id": run_id, "title": run_id, "status": "partial" if errors else "published", "status_label": "Osittainen julkaisu" if errors else "Julkaistu", "started_at": None, "ended_at": None, "model": None, "proposal_count": None, "verdicts": None, "facts": None}
     if demo and meta:
         result.update(title=meta.get("demo_title", run_id), status="demo", status_label="Esimerkkijulkaisu", started_at=meta.get("demo_started_at"), ended_at=meta.get("demo_ended_at"), model=meta.get("demo_model"), proposal_count=meta.get("demo_proposal_count"), verdicts=meta.get("demo_verdicts"))
+    elif not demo:
+        facts = muodot.run_facts(run_id, meta)
+        partial = bool(muodot.relevant_errors(errors))
+        result.update(title=facts["title"], started_at=facts["started_at"], ended_at=facts["ended_at"], model=facts["model"], facts=facts,
+                      status="partial" if partial else "published", status_label="Osittainen julkaisu" if partial else "Julkaistu")
     return result

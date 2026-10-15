@@ -1,5 +1,16 @@
 # ilmari_UI: tämän repositorion tilanne 13.10.2026
 
+## Päivitys 15.10.2026: asennettava sovellus ja MUODOT-sovitin
+
+- Hub on asennettavissa sovellukseksi (PWA): `static/manifest.webmanifest` (start_url `/hub`, scope `/`, standalone),
+  kuvakkeet 192/512 ja maskable 512, CSP:hen `manifest-src 'self'`. Hubissa ei ole service workeria eikä JavaScriptiä:
+  sovellus tarvitsee yhteyden työasemaan. Scope `/` pitää myös gatewayn sivut (hyväksynnät, `/ilmari`) samassa ikkunassa.
+- MUODOT-sovitin `src/ilmari_ui/muodot.py`: ajon otsikko (suunnitelma tai painopiste), ajat (meta.json:n alku on
+  Helsingin aikaa ilman aikavyöhykettä; loppu = alku + lopetus.kesto_s), malli, taso, lopetus, repo, ehdotukset ja Solin
+  tuomiot rivinumeron mukaan (aiops MUODOT.md kohta 8). Oikealla 6.10. ajolla todettu: `virhe` on virheettömässä ajossa
+  merkkijono "None" (ilmari_yo.py kirjoittaa `str(virhe)`), ja puuttuva sol-tulos, ehdotukset tai patch ei ole virhe.
+- Testit Clauden ympäristössä: 528 passed, 65 skipped.
+
 ## Päivitys 14.10.2026: tuotantoliitäntä (aiops ADR-0013)
 
 - Päätös: aiops-repon ADR-0013 hyväksyttiin 14.10.2026 (PR #13). Hub saa oman käyttäjän ja Serve-polun `/hub`, eikä
