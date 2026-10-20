@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, badge, empty with context %}
+{% macro inline(parts) -%}{% for kind, text in parts %}{% if kind == 'lihava' %}<strong>{{ text }}</strong>{% elif kind == 'koodi' %}<code>{{ text }}</code>{% else %}{{ text }}{% endif %}{% endfor %}{%- endmacro %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">SÄÄNNÖT · PERUSKIRJA</span><h1>Ilmarin säännöt.</h1><p>Asennetun version docs/saannot.md vain luku -tilassa. Muutokset tehdään ADR-0017:n mukaan: sovellettavat suoraan, ehdottomat allekirjoitetulla commitilla, lakia ei muuteta.</p></div><div class="page-heading-actions">{{ badge('Vain luku') }}</div></div>
+<div class="stack">
+{% if kirja is none %}
+<section class="panel">{{ empty('Peruskirjan lähdettä ei ole määritetty', 'Kehitystilassa peruskirja luetaan valitsimella --peruskirja-dir. Tuotannossa polku tulee konfiguraatiosta.', 'shield') }}</section>
+{% elif kirja.tila != 'ready' %}
+<section class="panel">{{ empty('Peruskirjaa ei ole julkaistu' if kirja.tila == 'not_published' else 'Peruskirjaa ei voi näyttää turvallisesti', kirja.viesti, 'shield') }}</section>
+{% else %}
+<section class="panel panel-padding" aria-labelledby="rules-source"><h2 id="rules-source" class="sr-only">Julkaisun tiedot</h2><dl class="detail-facts detail-facts--two"><div><dt>Commit</dt><dd><code>{{ kirja.meta.commit[:7] }}</code></dd></div><div><dt>Julkaistu</dt><dd>{{ format_time(kirja.meta.julkaistu) }}</dd></div><div><dt>SHA-256</dt><dd><code>{{ kirja.meta.sha256[:12] }}…</code></dd></div><div><dt>Koko</dt><dd>{{ kirja.meta.koko }} tavua</dd></div></dl>{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen peruskirja, ei asennettu versio.</p>{% endif %}</section>
+<article class="panel panel-padding rules-doc" aria-label="Peruskirjan teksti">
+{% for b in kirja.lohkot %}
+{% if b.tyyppi == 'otsikko' %}{% if b.taso == 1 %}<h2>{{ inline(b.osat) }}</h2>{% elif b.taso == 2 %}<h3>{{ inline(b.osat) }}</h3>{% else %}<h4>{{ inline(b.osat) }}</h4>{% endif %}
+{% elif b.tyyppi == 'kappale' %}<p>{{ inline(b.osat) }}</p>
+{% elif b.tyyppi == 'lainaus' %}<blockquote>{{ inline(b.osat) }}</blockquote>
+{% elif b.tyyppi == 'viiva' %}<hr>
+{% elif b.tyyppi == 'koodi' %}<pre class="code-scroll" tabindex="0">{{ b.teksti }}</pre>
+{% elif b.tyyppi == 'lista' %}{% if b.jarjestetty %}<ol start="{{ b.alku }}">{% else %}<ul>{% endif %}{% for k in b.kohdat %}<li{% if k.sisennys %} class="is-nested"{% endif %}>{{ inline(k.osat) }}</li>{% endfor %}{% if b.jarjestetty %}</ol>{% else %}</ul>{% endif %}
+{% elif b.tyyppi == 'taulukko' %}<div class="table-scroll" tabindex="0"><table><thead><tr>{% for h in b.otsikot %}<th scope="col">{{ inline(h) }}</th>{% endfor %}</tr></thead><tbody>{% for rivi in b.rivit %}<tr>{% for solu in rivi %}<td>{{ inline(solu) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% endif %}
+{% endfor %}
+</article>
+{% endif %}
+</div>
+{% endblock %}

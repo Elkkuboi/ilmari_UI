@@ -1,4 +1,24 @@
-# ilmari_UI: tämän repositorion tilanne 13.10.2026
+# ilmari_UI: tämän repositorion tilanne 20.10.2026
+
+## Päivitys 20.10.2026: sääntöpaneeli (aiops ADR-0017, ADR-0013 tarkennus 2026-10-20)
+
+- Uusi sivu `/hub/saannot` ("Säännöt" navigaatiossa) näyttää aiopsin peruskirjan `docs/saannot.md` vain luku -tilassa.
+  aiopsin `deploy.sh` julkaisee sen asennetusta commitista hakemistoon `/srv/aiops/ilmari/peruskirja` (`saannot.md` ja
+  `meta.json`, muoto `aiops-peruskirja-v1`, root:ilmari-julkaisu).
+- `src/ilmari_ui/peruskirja.py`: lukija käyttää ajolukijan polkukävelyä (dir_fd, O_NOFOLLOW) ja hyväksyy tuotannossa
+  vain rootin omistaman hakemiston ja tiedostot, tavalliset tiedostot yhdellä linkillä, kokorajat (64 KiB / 4 KiB) ja
+  meta.json:n tarkan muodon. saannot.md:n SHA-256:n ja koon on täsmättävä metaan, joten kesken jäänyt julkaisu näkyy
+  virheenä eikä sekaversiona. Rajattu Markdown (otsikot, listat yhdellä sisennystasolla, taulukot, koodi, lainaus,
+  vaakaviiva, lihavointi ja tekstinsisäinen koodi) tuottaa tietorakenteen; sivupohja koodaa kaiken, eikä `safe`-polkua ole.
+- Konfiguraatio: valinnainen `[hub] peruskirja` (oletus `/srv/aiops/ilmari/peruskirja`), joten työaseman `hub.toml`
+  ei muutu. Kehitystila: `--peruskirja-dir`; tuotannossa (`--config`) valitsin hylätään.
+- Palvelutiedosto: `BindReadOnlyPaths=-/srv/aiops/ilmari/peruskirja` (miinus: puuttuva hakemisto ei estä käynnistystä).
+- Esimerkkitila: synteettinen `demo/peruskirja`, merkitty sivulla.
+- Testit Clauden ympäristössä: rootina 585 passed, 65 skipped; tavallisena käyttäjänä 582 passed, 68 skipped (kolme
+  omistajatestiä vaatii rootin). Uudet: `tests/test_peruskirja.py` sekä lisäykset `test_config.py`, `test_cli.py` ja
+  `test_unit_file.py`. Mutaatiokoe 16/16 kiinni (yksi niistä jumittaa testin aikarajaan asti, mikä on myös kiinni).
+- Ei vielä asennettu eikä todettu työasemalla; isäntämuutokset kirjataan aiops-repon muutoslokiin.
+
 
 ## Päivitys 15.10.2026: asennettava sovellus ja MUODOT-sovitin
 

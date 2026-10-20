@@ -3,6 +3,7 @@
     [hub]
     rp_id = "tyoasema.tailnet.ts.net"          # työaseman nimi tailnetissä; sama kuin gatewayn RP ID
     julkaisut = "/srv/aiops/ilmari/ajot"       # julkaisuhakemisto, josta Hub lukee ajot
+    peruskirja = "/srv/aiops/ilmari/peruskirja" # valinnainen; oletus tämä (ADR-0013 tarkennus 2026-10-20)
 
     [hub.kayttajat]
     "tunnus@github" = "elias"                  # Tailscale-tunnus (LoginName) = nimi
@@ -21,6 +22,7 @@ import tomllib
 from types import MappingProxyType
 
 DEFAULT_CONFIG = Path("/etc/ilmari-hub/hub.toml")
+DEFAULT_RULES_DIR = Path("/srv/aiops/ilmari/peruskirja")
 
 # Samat muodot kuin aiops-repon src/aiops/config.py:ssä.
 _HOSTNAME = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
@@ -38,6 +40,7 @@ class HubConfig:
     rp_id: str
     users: MappingProxyType  # Tailscale-tunnus → nimi
     runs_dir: Path
+    rules_dir: Path = DEFAULT_RULES_DIR  # peruskirja (aiops docs/saannot.md), jonka aiopsin deploy.sh julkaisee
 
     @property
     def origin(self) -> str:
@@ -56,7 +59,7 @@ def parse_config(data: dict) -> HubConfig:
     hub = data.get("hub")
     if not isinstance(hub, dict):
         raise ConfigError("[hub] puuttuu")
-    _unknown(hub, {"rp_id", "julkaisut", "kayttajat"}, "[hub]", problems)
+    _unknown(hub, {"rp_id", "julkaisut", "peruskirja", "kayttajat"}, "[hub]", problems)
 
     rp_id = hub.get("rp_id")
     if not isinstance(rp_id, str) or not _HOSTNAME.fullmatch(rp_id):
@@ -65,6 +68,12 @@ def parse_config(data: dict) -> HubConfig:
     julkaisut = hub.get("julkaisut")
     if not isinstance(julkaisut, str) or not _PATH.fullmatch(julkaisut) or {".", ".."} & set(julkaisut.split("/")):
         problems.append("[hub] julkaisut: anna absoluuttinen polku, jossa on vain nimiä (ei '.'- tai '..'-osia)")
+
+    peruskirja = hub.get("peruskirja", str(DEFAULT_RULES_DIR))
+    if not isinstance(peruskirja, str) or not _PATH.fullmatch(peruskirja) or {".", ".."} & set(peruskirja.split("/")):
+        problems.append("[hub] peruskirja: anna absoluuttinen polku, jossa on vain nimiä (ei '.'- tai '..'-osia)")
+    elif peruskirja == julkaisut:
+        problems.append("[hub] peruskirja: polku ei saa olla sama kuin julkaisut")
 
     users: dict[str, str] = {}
     kayttajat = hub.get("kayttajat")
@@ -81,7 +90,7 @@ def parse_config(data: dict) -> HubConfig:
 
     if problems:
         raise ConfigError("; ".join(problems))
-    return HubConfig(rp_id=rp_id, users=MappingProxyType(users), runs_dir=Path(julkaisut))
+    return HubConfig(rp_id=rp_id, users=MappingProxyType(users), runs_dir=Path(julkaisut), rules_dir=Path(peruskirja))
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> HubConfig:
