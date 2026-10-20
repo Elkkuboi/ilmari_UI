@@ -8,6 +8,9 @@
 #       Ainoa ryhmä, jonka kautta Hub lukee julkaisut. Ei ryhmiä aiops eikä docker.
 #   TemporaryFileSystem=/srv:ro ja BindReadOnlyPaths=/srv/aiops/ilmari/ajot
 #       Palvelun nimiavaruudessa /srv sisältää vain julkaisuhakemiston. Kanta, data, mallit ja työt eivät näy.
+#   BindReadOnlyPaths=-/srv/aiops/ilmari/peruskirja (aiops ADR-0013 tarkennus 2026-10-20)
+#       Peruskirja, jonka aiopsin deploy.sh julkaisee (root:ilmari-julkaisu). Miinus: puuttuva hakemisto ei estä
+#       käynnistystä, vaan sääntöpaneeli kertoo, ettei peruskirjaa ole julkaistu.
 #   InaccessiblePaths=/etc/aiops
 #       aiops-konfiguraatio ja hyväksyjien avaimet eivät näy edes nimiltään.
 #   Ei ReadWritePaths-kohtia: Hub ei kirjoita mihinkään.
@@ -40,6 +43,7 @@ ProtectHome=yes
 PrivateTmp=yes
 TemporaryFileSystem=/srv:ro
 BindReadOnlyPaths=/srv/aiops/ilmari/ajot
+BindReadOnlyPaths=-/srv/aiops/ilmari/peruskirja
 InaccessiblePaths=/etc/aiops
 
 # Ei verkkoa: polkuun sidottu Unix-soketti toimii ilman verkkoa

@@ -303,7 +303,8 @@ def test_production_config_enables_identity_and_prefix(monkeypatch, private_dire
     assert not address.exists()
 
 
-@pytest.mark.parametrize("extra", [("--demo",), ("--runs-dir", "/srv/aiops/ilmari/ajot")])
+@pytest.mark.parametrize("extra", [("--demo",), ("--runs-dir", "/srv/aiops/ilmari/ajot"),
+                                   ("--peruskirja-dir", "/srv/aiops/ilmari/peruskirja")])
 def test_production_config_refuses_demo_and_runs_dir(monkeypatch, private_directory, extra):
     socket_dir = private_directory / "runtime"
     config = _hub_toml(private_directory, private_directory / "ajot")

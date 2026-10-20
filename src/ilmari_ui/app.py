@@ -25,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from .cards import load_cards
 from . import muodot
 from .config import HubConfig
+from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
 
@@ -40,7 +41,7 @@ APP_CATALOG = (
 APP_IDS = tuple(app["id"] for app in APP_CATALOG)
 SERVE_PREFIX = "/hub"
 RUN_COUNT_LIMIT = 200
-ALIASES = {"/": "/hub", "/chat": "/hub/keskustelu", "/runs": "/hub/ajot", "/approvals": "/hub/hyvaksynnat", "/apps": "/hub/sovellukset", "/ideas": "/hub/ideat", "/system": "/hub/jarjestelma", "/settings": "/hub/asetukset"}
+ALIASES = {"/": "/hub", "/chat": "/hub/keskustelu", "/runs": "/hub/ajot", "/approvals": "/hub/hyvaksynnat", "/apps": "/hub/sovellukset", "/ideas": "/hub/ideat", "/system": "/hub/jarjestelma", "/rules": "/hub/saannot", "/settings": "/hub/asetukset"}
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class Settings:
 
     runs_dir: Path | None = None
     cards_dir: Path | None = None
+    rules_dir: Path | None = None  # kehitystila; tuotannossa peruskirjan polku tulee konfiguraatiosta
     demo_enabled: bool = False
     app_classes: dict[str, str] = field(default_factory=lambda: {app["id"]: app["data_class"] for app in APP_CATALOG})
     allowed_private_apps: frozenset[str] = frozenset()
@@ -56,7 +58,7 @@ class Settings:
     identity: HubConfig | None = None  # tuotantotila: Tailscale-tunnistus ja Serven etuliite (ADR-0013)
 
     def __post_init__(self) -> None:
-        for root in (self.runs_dir, self.cards_dir):
+        for root in (self.runs_dir, self.cards_dir, self.rules_dir):
             if root is not None and (not root.is_absolute() or root == Path("/") or ".." in root.parts):
                 raise ValueError("Julkaisujuuren pitää olla yksilöity absoluuttinen hakemistopolku ilman '..'-osia.")
         if self.identity is not None:
@@ -64,6 +66,8 @@ class Settings:
                 raise ValueError("Esimerkkitila ei ole sallittu tuotantotilassa.")
             if self.runs_dir != self.identity.runs_dir:
                 raise ValueError("Tuotantotilan julkaisujuuri tulee konfiguraatiosta.")
+            if self.rules_dir is not None and self.rules_dir != self.identity.rules_dir:
+                raise ValueError("Tuotantotilan peruskirjan polku tulee konfiguraatiosta.")
 
 
 class RestorePrefix:
@@ -357,6 +361,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/hub/jarjestelma", response_class=HTMLResponse)
     async def system(request: Request):
         return render(request, "system", "Järjestelmä")
+
+    @app.get("/hub/saannot", response_class=HTMLResponse)
+    async def rules(request: Request):
+        """Peruskirja vain luku -tilassa (aiops ADR-0017). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
+        data = context(request, "rules", "Säännöt")
+        if data["demo"]:
+            kirja = lue_peruskirja(PACKAGE_DIR / "demo" / "peruskirja", omistaja=None)
+        elif settings.identity is not None:
+            kirja = lue_peruskirja(settings.identity.rules_dir, omistaja=0)
+        elif settings.rules_dir is not None:
+            kirja = lue_peruskirja(settings.rules_dir, omistaja=None)
+        else:
+            kirja = None
+        data.update(kirja=kirja)
+        return templates.TemplateResponse(request=request, name="rules.html", context=data)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

@@ -6,6 +6,9 @@
 rp_id = "tyoasema.tailnet.ts.net"
 # Julkaisuhakemisto (aiops ADR-0013 kohta 4). Palvelu näkee vain tämän hakemiston (BindReadOnlyPaths).
 julkaisut = "/srv/aiops/ilmari/ajot"
+# Peruskirja (aiops ADR-0013 tarkennus 2026-10-20, ADR-0017). Valinnainen; oletus on alla oleva polku. Palvelutiedoston
+# BindReadOnlyPaths-liitos koskee tätä polkua, joten muu polku vaatii myös palvelutiedoston muutoksen.
+# peruskirja = "/srv/aiops/ilmari/peruskirja"
 
 [hub.kayttajat]
 # Sama lista kuin /etc/aiops/aiops.toml:n [gateway.kayttajat]: Tailscale-tunnus (LoginName) = nimi.

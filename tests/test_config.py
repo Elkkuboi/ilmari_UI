@@ -78,3 +78,17 @@ def test_puuttuva_tiedosto(tmp_path):
 def test_hub_taulu_puuttuu():
     with pytest.raises(ConfigError, match=r"\[hub\] puuttuu"):
         parse_config({})
+
+
+def test_peruskirja_oletus_ja_oma_polku(tmp_path):
+    """aiops ADR-0013 tarkennus 2026-10-20: valinnainen avain, oletus on palvelutiedoston liitoksen polku."""
+    assert load_config(_kirjoita(tmp_path, KELPO)).rules_dir == Path("/srv/aiops/ilmari/peruskirja")
+    oma = KELPO.replace('julkaisut =', 'peruskirja = "/srv/muu/peruskirja"\njulkaisut =')
+    assert load_config(_kirjoita(tmp_path, oma)).rules_dir == Path("/srv/muu/peruskirja")
+
+
+@pytest.mark.parametrize("arvo", ['"srv/aiops/ilmari/peruskirja"', '"/srv/aiops/../db"', '"/"', '"/srv/x/"', "1",
+                                  '"/srv/aiops/ilmari/ajot"'])
+def test_kelvoton_peruskirjan_polku_hylataan(tmp_path, arvo):
+    with pytest.raises(ConfigError, match=r"\[hub\] peruskirja"):
+        load_config(_kirjoita(tmp_path, KELPO.replace('julkaisut =', f'peruskirja = {arvo}\njulkaisut =')))
