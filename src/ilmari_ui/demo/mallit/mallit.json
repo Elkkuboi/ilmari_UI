@@ -1,0 +1,68 @@
+{
+ "muoto": "aiops-mallit-v1",
+ "commit": "0000000000000000000000000000000000000000",
+ "mallit": [
+  {
+   "nimi": "gpt-6.1-sol",
+   "kuvaus": "OpenAI gpt-6.1 (Sol): tarkastaja ja kallis päättely välittäjän kautta",
+   "tyyppi": "chat",
+   "sijainti": "pilvi",
+   "konteksti_max": 272000,
+   "vram_gb": null,
+   "kuva": "",
+   "tiedosto": "",
+   "koko": 0,
+   "manifesti": "",
+   "tarjoaja": "openai",
+   "hinnasto": "gpt-6.1-sol/standard/2026-10-08",
+   "roolit": [
+    "tarkastaja",
+    "kallis_paattely"
+   ]
+  },
+  {
+   "nimi": "hauhau-q6",
+   "kuvaus": "HauhauCS Qwen3.8-27B Uncensored Aggressive Q6_K_P + MTP: Ilmarin aivot <b>esimerkki</b>",
+   "tyyppi": "chat",
+   "sijainti": "paikallinen",
+   "konteksti_max": 65536,
+   "vram_gb": 29,
+   "kuva": "aiops/llama-server:2",
+   "tiedosto": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf",
+   "koko": 25924151424,
+   "manifesti": "config/mallit/hauhau-qwen3.8-27b-q6-k-p.tsv",
+   "tarjoaja": "",
+   "hinnasto": "",
+   "roolit": [
+    "ceo",
+    "tyontekija",
+    "kirjoittaja"
+   ]
+  },
+  {
+   "nimi": "q6",
+   "kuvaus": "Qwen3.8-27B Q6_K: yöajon malli",
+   "tyyppi": "chat",
+   "sijainti": "paikallinen",
+   "konteksti_max": 131072,
+   "vram_gb": 26,
+   "kuva": "aiops/llama-server:1",
+   "tiedosto": "qwen3.8-27b-q6-k.gguf",
+   "koko": 22082529792,
+   "manifesti": "config/mallit/qwen3.8-27b-gguf-b11430.tsv",
+   "tarjoaja": "",
+   "hinnasto": "",
+   "roolit": [
+    "yoajo"
+   ]
+  }
+ ],
+ "roolit": {
+  "ceo": "hauhau-q6",
+  "tyontekija": "hauhau-q6",
+  "kirjoittaja": "hauhau-q6",
+  "tarkastaja": "gpt-6.1-sol",
+  "kallis_paattely": "gpt-6.1-sol",
+  "yoajo": "q6"
+ }
+}
