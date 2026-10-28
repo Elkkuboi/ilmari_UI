@@ -25,6 +25,9 @@ from fastapi.templating import Jinja2Templates
 from .cards import load_cards
 from . import muodot
 from .config import HubConfig
+from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
+                         hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
+from . import kehitys
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -123,8 +126,15 @@ def production_rejection(request: Request, identity: HubConfig) -> tuple[int, st
     if len(logins) != 1 or logins[0].decode("latin-1") not in identity.users:
         return 403, "Ei pääsyä: Tailscale-tunnus puuttuu tai sitä ei ole sallittu."
     sites = _header_values(headers, b"sec-fetch-site")
-    if len(sites) > 1 or (sites and sites[0] not in (b"none", b"same-origin")):
+    if len(sites) > 1:
         return 403, "Ei pääsyä toisen sivuston kautta."
+    if sites and sites[0] not in (b"none", b"same-origin"):
+        # Kotinäytön sovellus ja linkit muualta (aiops istunto 2, 28.10.2026): ylätason navigointi dokumenttiin
+        # kelpaa, koska Hub vain lukee (GET/HEAD) eikä sitä voi kehystää (frame-ancestors 'none'). Sama kuin
+        # gatewayssa, joka tarkistaa alkuperän vain lomakkeissa. Upotukset ja haut toiselta sivustolta hylätään.
+        if not (_header_values(headers, b"sec-fetch-mode") == [b"navigate"]
+                and _header_values(headers, b"sec-fetch-dest") == [b"document"]):
+            return 403, "Ei pääsyä toisen sivuston kautta."
     origins = _header_values(headers, b"origin")
     if len(origins) > 1 or (origins and origins[0] != identity.origin.encode("ascii")):
         return 403, "Ei pääsyä toisesta alkuperästä."
@@ -376,6 +386,89 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             kirja = None
         data.update(kirja=kirja)
         return templates.TemplateResponse(request=request, name="rules.html", context=data)
+
+    def dokumenttikokoelma(request: Request):
+        """Asennetun commitin dokumentit (aiops istunto 2). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            return lue_dokumentit(DOKUMENTIT_ESIMERKKI, omistaja=None)
+        if settings.identity is not None:
+            return lue_dokumentit(DOKUMENTIT_OLETUS, omistaja=0)
+        return None
+
+    @app.get("/hub/dokumentit", response_class=HTMLResponse)
+    async def documents(request: Request):
+        kokoelma = dokumenttikokoelma(request)
+        valmis = kokoelma is not None and kokoelma.tila == "ready"
+        kysely = (request.query_params.get("q") or "").strip()[:100]
+        return render(request, "documents", "Dokumentit", kokoelma=kokoelma, kysely=kysely,
+                      ryhmat=ryhmittain(kokoelma) if valmis else [],
+                      osumat=hae_dokumentit(kokoelma, kysely) if valmis and kysely else [])
+
+    @app.get("/hub/dokumentit/{tunniste}", response_class=HTMLResponse)
+    async def document_detail(request: Request, tunniste: str):
+        kokoelma = dokumenttikokoelma(request)
+        dokumentti = etsi_dokumentti(kokoelma, tunniste) if kokoelma is not None and kokoelma.tila == "ready" else None
+        if dokumentti is None:
+            return render_error(request, 404, "Dokumenttia ei löydy",
+                                "Dokumenttia ei ole asennetussa versiossa. Palaa dokumenttilistaan.")
+        lohkot, virhe = piirrettava(dokumentti)
+        if lohkot is None:
+            return render_error(request, 422, "Dokumenttia ei voi näyttää", virhe or "Dokumentti on liian suuri.")
+        return render(request, "document", dokumentti["otsikko"], kokoelma=kokoelma, dokumentti=dokumentti,
+                      lohkot=lohkot)
+
+    # --- Kehitä (aiops istunto 2, ADR-0024): Hub näyttää, gateway toimii ------------------------------------------
+
+    def kehityslahteet(request: Request) -> tuple[Path | None, Path | None, frozenset[int] | None, int | None]:
+        """(kehityshakemisto, käyttöönottohakemisto, sallitut omistajat, historian omistaja) tai None-arvot."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            return kehitys.ESIMERKKI, kehitys.ESIMERKKI_KAYTTOONOTOT, None, None
+        if settings.identity is not None:
+            return kehitys.OLETUS, kehitys.OLETUS_KAYTTOONOTOT, kehitys.sallitut_omistajat(), 0
+        return None, None, None, None
+
+    def gateway_polku(polku: str, demo: bool) -> str:
+        """Gatewayn sivu samassa alkuperässä (Tailscale Serve: gateway juuressa, Hub polussa /hub)."""
+        if demo:
+            return "#esimerkkitila"
+        return (settings.identity.origin if settings.identity is not None else "") + polku
+
+    def yoajon_ehdotukset(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Uusimman julkaistun yöajon ehdotukset toiveiksi (istunto 2, kohta 3)."""
+        if not data["runs"]:
+            return []
+        try:
+            detail = data["reader"].read_run(data["runs"][0]["run_id"])
+        except ReadFailure:
+            return []
+        rivit = []
+        for p in muodot.proposals(detail.proposals, detail.sol_result)[:10]:
+            toive = (p["title"] or "") + ("\n\n" + p["proposal"] if p["proposal"] else "")
+            rivit.append({**p, "run_id": detail.run_id,
+                          "toive_url": gateway_polku("/kehita?" + urlencode({"toive": toive[:1500]}), data["demo"])})
+        return rivit
+
+    @app.get("/hub/kehita", response_class=HTMLResponse)
+    async def develop(request: Request):
+        data = context(request, "develop", "Kehitä")
+        juuri, historia_juuri, omistajat, omistaja = kehityslahteet(request)
+        tyot = kehitys.lue_kehitystyot(juuri, omistajat=omistajat) if juuri is not None else None
+        historia = kehitys.lue_kayttoonotot(historia_juuri, omistaja=omistaja) if historia_juuri is not None else None
+        data.update(tyot=tyot, lahde=juuri is not None, historia=historia, ehdotukset=yoajon_ehdotukset(data),
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]),
+                    claude_code_url="https://claude.ai/code")
+        return templates.TemplateResponse(request=request, name="develop.html", context=data)
+
+    @app.get("/hub/kehita/{tyo}", response_class=HTMLResponse)
+    async def develop_detail(request: Request, tyo: str):
+        data = context(request, "develop_detail", "Kehitystyö")
+        juuri, _, omistajat, _ = kehityslahteet(request)
+        t = kehitys.lue_kehitystyo(juuri, int(tyo), omistajat=omistajat) if juuri is not None and kehitys._TYO.fullmatch(tyo) else None
+        if t is None:
+            return render_error(request, 404, "Kehitystyötä ei löydy", "Työtä ei ole julkaistu. Palaa Kehitä-näkymään.")
+        data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe,
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]))
+        return templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

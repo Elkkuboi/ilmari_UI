@@ -1,7 +1,7 @@
 """Hubin palvelutiedosto käsin kirjoitettuna totuutena (aiops ADR-0013 kohta 2).
 
 Malli on aiops-repon config/systemd/aiops-gateway.service. Erot on kirjoitettu tähän näkyviin: julkaisuryhmä,
-/srv:n piilotus julkaisua ja peruskirjaa lukuun ottamatta, /etc/aiops:n piilotus, ei kirjoitettavia polkuja ja UMask 0077.
+/srv:n piilotus julkaisua, peruskirjaa ja dokumentteja lukuun ottamatta, /etc/aiops:n piilotus, ei kirjoitettavia polkuja ja UMask 0077.
 """
 
 from pathlib import Path
@@ -40,7 +40,9 @@ def test_unit_matches_hand_written_specification():
         "ProtectHome": ["yes"],
         "PrivateTmp": ["yes"],
         "TemporaryFileSystem": ["/srv:ro"],
-        "BindReadOnlyPaths": ["/srv/aiops/ilmari/ajot", "-/srv/aiops/ilmari/peruskirja"],
+        "BindReadOnlyPaths": ["/srv/aiops/ilmari/ajot", "-/srv/aiops/ilmari/peruskirja",
+                              "-/srv/aiops/ilmari/dokumentit", "-/srv/aiops/ilmari/kehitys",
+                              "-/srv/aiops/ilmari/kayttoonotot"],
         "InaccessiblePaths": ["/etc/aiops"],
         "PrivateNetwork": ["yes"],
         "RestrictAddressFamilies": ["AF_UNIX"],

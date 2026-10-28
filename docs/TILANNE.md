@@ -1136,3 +1136,34 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
 - **Minecraft:** jouluna portti avataan tilapäisesti, `sudo ufw allow 25565/tcp`, ja suljetaan palvelimen jälkeen.
 - **V1.5:** paikallinen LLM (ADR-0009), ntfy-ilmoitukset (myös: mitä hyväksyttiin, gatewaysta riippumatta), r-spatial-image, PostGIS, toistuvat työt, SIGHUP-uudelleenluku, mahdollisesti Open WebUI vain omaan koneeseen.
 - **V2:** rootless Docker tai gVisor, Headscale ja pörssisähkön mukaan ajoitetut eräajot.
+
+## 2026-10-28: kotinäytön sovellus (aiops istunto 2)
+
+- Vartija sallii `Sec-Fetch-Site`-arvot `cross-site` ja `same-site` vain ylätason navigoinnissa
+  (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`). Syy: kotinäytölle asennettu Hub sai virheen
+  "Ei pääsyä toisen sivuston kautta". Upotukset (iframe), kuvat ja haut toiselta sivustolta hylätään edelleen;
+  testit molempiin suuntiin `tests/test_production.py`:ssä. Gateway tarkistaa alkuperän vain lomakkeissa.
+
+## 2026-10-28: Dokumentit-näkymä (aiops istunto 2)
+
+- `/hub/dokumentit` ja `/hub/dokumentit/<tunniste>`: asennetun aiops-commitin dokumentit vain luku -tilassa.
+  aiopsin `scripts/julkaise_dokumentit.py` (deploy.sh) julkaisee ne hakemistoon `/srv/aiops/ilmari/dokumentit`
+  (root:ilmari-julkaisu, dokumentit.json + meta.json SHA-256:lla). Lukija `dokumentit.py` käyttää peruskirjan
+  tiedostonlukijaa ja tarkistaa kentät uudelleen; teksti piirretään peruskirjan rajatulla Markdownilla ilman
+  raakaa HTML:ää. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/dokumentit`. Esimerkkiaineisto `demo/dokumentit`.
+
+## 2026-10-28: Kehitä-näkymä (aiops istunto 2, ADR-0024)
+
+- `/hub/kehita` ja `/hub/kehita/<työ>`: kehitystyöt (toive → dsh-työ aiops-repoa vasten → testit kontissa → päätös),
+  niiden tulokset (diff, testit, dsh:n yhteenveto ja lokit, enintään rajojen verran) ja käyttöönottojen historia.
+  Lähteet: `/srv/aiops/ilmari/kehitys/<työ>/` (gateway aiops-gw kirjoittaa meta.json, paatos.json ja kopiot; root
+  kirjoittaa yhdistys.json ja kayttoonotto.json; tuotannossa vain nämä omistajat kelpaavat) ja
+  `/srv/aiops/ilmari/kayttoonotot/` (kääre julkaisee rootina historia.json + meta.json SHA-256:lla). Lukija
+  `src/ilmari_ui/kehitys.py`: tunnetut kentät tyypitettyinä, ohjausmerkit pois, rikkinäinen sivutiedosto näkyy
+  virheenä kaatamatta sivua.
+- Hub ei toimi: Hyväksy, Hylkää, Pyydä muutosta ja Ota käyttöön ovat gatewayn sivuja (`/kehita`, `/kehitys/<työ>`,
+  passkey), joihin Hub linkittää samassa alkuperässä (Serve: gateway juuressa, Hub polussa /hub). Yöajon uusimman
+  julkaistun ajon ehdotukset ovat linkkeinä gatewayn toivelomakkeeseen (`/kehita?toive=`), ja Claude Code -linkki.
+- Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/kehitys` ja `-/srv/aiops/ilmari/kayttoonotot` (käsin kirjoitettu
+  odotus päivitetty). Esimerkkiaineisto `demo/kehitys` ja `demo/kayttoonotot`. Testit `tests/test_kehitys.py` ja
+  `tests/test_kehitys_sivut.py`.

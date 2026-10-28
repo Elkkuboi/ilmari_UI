@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import badge, markdown_lohkot with context %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">DOKUMENTIT · {{ dokumentti.polku }}</span><h1>{{ dokumentti.otsikko }}</h1>{% if dokumentti.paiva or dokumentti.tila %}<p>{{ dokumentti.paiva }}{% if dokumentti.paiva and dokumentti.tila %} · {% endif %}{{ dokumentti.tila }}</p>{% endif %}</div><div class="page-heading-actions"><a href="{{ url('/hub/dokumentit') }}">Kaikki dokumentit</a> {{ badge('Vain luku') }}</div></div>
+<div class="stack">
+<section class="panel panel-padding" aria-labelledby="doc-source"><h2 id="doc-source" class="sr-only">Julkaisun tiedot</h2><dl class="detail-facts detail-facts--two"><div><dt>Commit</dt><dd><code>{{ kokoelma.meta.commit[:7] }}</code></dd></div><div><dt>Julkaistu</dt><dd>{{ format_time(kokoelma.meta.julkaistu) }}</dd></div></dl>{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen dokumentti, ei asennettu versio.</p>{% endif %}</section>
+<article class="panel panel-padding rules-doc" aria-label="Dokumentin teksti">{{ markdown_lohkot(lohkot) }}</article>
+</div>
+{% endblock %}
