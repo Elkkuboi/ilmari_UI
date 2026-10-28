@@ -1,12 +1,30 @@
 {% extends 'base.html' %}
-{% from 'macros.html' import icon, badge with context %}
+{% from 'macros.html' import icon, badge, empty with context %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">KESKUSTELU JA TEHTÄVÄT</span><h1>Ajatuksesta suunnitelmaksi.</h1><p>Ilmari auttaa jäsentämään tehtävät. Suorituksen ja oikeudet vahvistaa aina koodi.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">KESKUSTELU · ILMARI</span><h1>Keskustelu.</h1><p>Viestit kulkevat gatewayn kautta samassa osoitteessa; Hub näyttää ne ja päivittyy itsestään. Ilmari voi käyttää kykyjään (Ravintopolku, Hahmo, dsh) keskustelusta.</p></div><div class="page-heading-actions">{% if keskustelu and keskustelu.tila == 'ready' %}{{ badge('Malli: ' ~ keskustelu.malli.tila_teksti, 'success' if keskustelu.malli.tila == 'running' else 'warning') }}{% endif %}</div></div>
 <div class="chat-layout">
-  <section class="panel chat-panel" aria-labelledby="chat-title"><div class="panel-heading"><div class="chat-heading"><span class="chat-avatar">{{ icon('chat') }}</span><div><h2 id="chat-title">Uusi keskustelu</h2><p>Agenttirajapintaa ei ole yhdistetty</p></div></div>{{ badge('Tuleva toiminto','warning') }}</div>
-    <div class="chat-messages"><div class="chat-welcome"><span class="chat-avatar">{{ icon('idea') }}</span><h2>Mitä haluaisit saada aikaan?</h2><p>Keskustelu tulee käyttöön, kun agenttirajapinta on hyväksytty ja asennettu.</p></div><div class="chat-preview-message">{{ icon('info') }}<div><h3>Keskustelun rakenne on valmiina</h3><p>Tässä näkyvät jatkossa Ilmarin ehdotus, sen lähteet ja työn vaiheet. Ehdotus ja koodin vahvistama tila erotetaan selkeästi.</p></div></div></div>
-    <div class="chat-composer" aria-disabled="true"><label for="upcoming-message">Viestin kirjoitusalue · ei vielä käytettävissä</label><textarea id="upcoming-message" disabled placeholder="Keskustelu odottaa agenttiyhteyttä." aria-describedby="composer-status"></textarea><div class="composer-bottom"><span id="composer-status">{{ icon('lock') }} Lähetystä ei ole aktivoitu</span><button class="button" disabled type="button">Lähetä {{ icon('arrow') }}</button></div></div>
+  <section class="panel chat-panel" aria-labelledby="chat-title"><div class="panel-heading"><div class="chat-heading"><span class="chat-avatar">{{ icon('chat') }}</span><div><h2 id="chat-title">Ilmari</h2><p>{% if keskustelu and keskustelu.tila == 'ready' %}Päivitetty {{ format_time(keskustelu.paivitetty) }}{% if keskustelu.malli.dsh_tyo %} · dsh-työ {{ keskustelu.malli.dsh_tyo }} käynnissä{% endif %}{% if keskustelu.malli.yoajo %} · yöajo käyttää mallia{% endif %}{% else %}Ei yhteyttä{% endif %}</p></div></div></div>
+    <div class="chat-messages">
+{% if keskustelu is none %}
+      {{ empty('Keskustelun lähdettä ei ole määritetty', 'Tuotannossa gateway julkaisee keskustelun hakemistoon /srv/aiops/ilmari/keskustelu.', 'chat') }}
+{% elif keskustelu.tila != 'ready' %}
+      {{ empty('Keskustelua ei voi näyttää', keskustelu.viesti, 'chat') }}
+{% elif not keskustelu.viestit %}
+      {{ empty('Ei viestejä vielä', 'Kirjoita Ilmarille alla.', 'chat') }}
+{% else %}
+      <ol class="chat-list">{% for v in keskustelu.viestit %}<li class="chat-msg chat-msg--{{ v.lahettaja }}"><div class="chat-msg-head"><strong>{{ v.nimi }}</strong> <small>{{ format_time(v.aika) }}</small></div><p class="safe-text">{{ v.teksti }}</p></li>{% endfor %}</ol>
+{% endif %}
+{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen keskustelu, lähetys ei ole käytössä.</p>{% endif %}
+    </div>
+{% if gateway_url %}
+    <form class="chat-composer" method="post" action="{{ gateway_url }}/ilmari/viesti"><label for="viesti">Viesti Ilmarille</label><textarea id="viesti" name="teksti" rows="3" maxlength="8000" required placeholder="Kirjoita Ilmarille…"></textarea><input type="hidden" name="paluu" value="hub"><div class="composer-bottom"><span>{% if keskustelu and keskustelu.tila == 'ready' and keskustelu.malli.tila != 'running' %}Malli ei ole käynnissä: Ilmari käynnistää sen tai paina Käynnistä malli.{% else %}Lähetys menee gatewaylle ja sivu palaa tänne.{% endif %}</span><button class="button" type="submit">Lähetä {{ icon('arrow') }}</button></div></form>
+{% if keskustelu and keskustelu.tila == 'ready' and keskustelu.malli.tila != 'running' %}
+    <form class="chat-composer" method="post" action="{{ gateway_url }}/kehita/malli"><input type="hidden" name="toiminto" value="kaynnista"><input type="hidden" name="paluu" value="hub"><div class="composer-bottom"><span>Ilmarin malli (GPU) ei ole käynnissä.</span><button class="button" type="submit">Käynnistä malli</button></div></form>
+{% endif %}
+{% else %}
+    <div class="chat-composer" aria-disabled="true"><label for="upcoming-message">Viestin kirjoitusalue</label><textarea id="upcoming-message" disabled placeholder="Lähetys on käytössä vain tuotannossa (gateway samassa osoitteessa)."></textarea></div>
+{% endif %}
   </section>
-  <aside class="stack chat-context" aria-label="Keskustelun toimintaperiaate"><section class="panel context-panel"><h2>{{ icon('runs') }} Näin tehtävä etenee</h2><ol class="workflow-list"><li><span>1</span><div><strong>Ilmari ehdottaa</strong><p>Tavoite, lähteet ja ehdotettu suunnitelma.</p></div></li><li><span>2</span><div><strong>Koodi tarkistaa</strong><p>Oikeudet, dataluokka ja sallittu suoritus.</p></div></li><li><span>3</span><div><strong>Sinä hyväksyt tarvittaessa</strong><p>Passkey allekirjoittaa työn määrityksen.</p></div></li><li><span>4</span><div><strong>Tulos julkaistaan</strong><p>Raportti ja tarkastajan luokitukset.</p></div></li></ol></section><section class="panel context-panel"><h2>{{ icon('system') }} Todennettu tila</h2><div class="context-status"><strong>Johtajamalli</strong>{{ badge('Ei saatavilla') }}</div><p>Mallin, istuntojen ja budjetin muuttamista ei ole sallittu Hubista.</p><a class="text-link" href="{{ url('/hub/ajot') }}">Selaa jo julkaistuja tuloksia {{ icon('arrow') }}</a></section></aside>
+  <aside class="stack chat-context" aria-label="Keskustelun toimintaperiaate"><section class="panel context-panel"><h2>{{ icon('runs') }} Näin viesti etenee</h2><ol class="workflow-list"><li><span>1</span><div><strong>Lomake gatewaylle</strong><p>Sama osoite, sama portti kuin ennen: tunnus Tailscalesta.</p></div></li><li><span>2</span><div><strong>Ilmari vastaa</strong><p>Malli vastaa tai käyttää kykyä (Ravintopolku, Hahmo, dsh-työ).</p></div></li><li><span>3</span><div><strong>Hub päivittyy</strong><p>Gateway julkaisee viestit; tämä sivu latautuu uudelleen 15 s välein.</p></div></li></ol></section><section class="panel context-panel"><h2>{{ icon('idea') }} Kokeile</h2><ul class="proposal-files"><li>Mitä olen syönyt tänään?</li><li>Ehdota lounas ja laita se luonnoslaatikkoon.</li><li>Hae netistä UniCafen tämän päivän lista.</li></ul></section></aside>
 </div>
 {% endblock %}

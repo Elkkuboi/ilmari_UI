@@ -1,0 +1,7 @@
+{"muoto": "aiops-keskustelu-v1", "paivitetty": "2026-10-28T20:00:00+00:00", "viimeisin": 52,
+ "malli": {"tila": "running", "tila_teksti": "käynnissä", "tyo": 45, "dsh_tyo": null, "yoajo": false},
+ "viestit": [
+  {"id": 50, "aika": "2026-10-28T19:47:55+00:00", "lahettaja": "elias", "teksti": "Mitä olen syönyt tänään?"},
+  {"id": 51, "aika": "2026-10-28T19:47:58+00:00", "lahettaja": "ilmari", "teksti": "Tänään: aamiainen 08.00 (puuro, 300 kcal) ja lounas 12.10 (lohikeitto ja leipä, 440 kcal). Yhteensä 740 kcal, proteiinia 38 g; tavoitteesta jäljellä 1660 kcal.\n<b>ei html</b>"},
+  {"id": 52, "aika": "2026-10-28T19:49:04+00:00", "lahettaja": "elias", "teksti": "Ehdota lounas ja laita se luonnoslaatikkoon"}
+ ]}

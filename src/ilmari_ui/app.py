@@ -28,6 +28,7 @@ from .config import HubConfig
 from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
                          hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
 from . import kehitys
+from . import keskustelu as keskustelu_lukija
 from .mallit import ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, lue_mallit
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
@@ -316,7 +317,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/keskustelu", response_class=HTMLResponse)
     async def chat(request: Request):
-        return render(request, "chat", "Keskustelu")
+        """Keskustelu Hubissa (28.10.): gatewayn julkaisu luetaan, lomake menee gatewaylle samassa alkuperässä."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            keskustelu, gateway_url = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.ESIMERKKI), None
+        elif settings.identity is not None:
+            keskustelu = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+            gateway_url = settings.identity.origin
+        else:
+            keskustelu, gateway_url = None, None
+        response = render(request, "chat", "Keskustelu", keskustelu=keskustelu, gateway_url=gateway_url)
+        if gateway_url:
+            response.headers["Refresh"] = "15"
+        return response
 
     @app.get("/hub/ajot", response_class=HTMLResponse)
     async def runs(request: Request):
