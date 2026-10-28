@@ -1143,3 +1143,11 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
   (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`). Syy: kotinäytölle asennettu Hub sai virheen
   "Ei pääsyä toisen sivuston kautta". Upotukset (iframe), kuvat ja haut toiselta sivustolta hylätään edelleen;
   testit molempiin suuntiin `tests/test_production.py`:ssä. Gateway tarkistaa alkuperän vain lomakkeissa.
+
+## 2026-10-28: Dokumentit-näkymä (aiops istunto 2)
+
+- `/hub/dokumentit` ja `/hub/dokumentit/<tunniste>`: asennetun aiops-commitin dokumentit vain luku -tilassa.
+  aiopsin `scripts/julkaise_dokumentit.py` (deploy.sh) julkaisee ne hakemistoon `/srv/aiops/ilmari/dokumentit`
+  (root:ilmari-julkaisu, dokumentit.json + meta.json SHA-256:lla). Lukija `dokumentit.py` käyttää peruskirjan
+  tiedostonlukijaa ja tarkistaa kentät uudelleen; teksti piirretään peruskirjan rajatulla Markdownilla ilman
+  raakaa HTML:ää. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/dokumentit`. Esimerkkiaineisto `demo/dokumentit`.

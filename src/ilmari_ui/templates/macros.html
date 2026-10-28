@@ -9,6 +9,7 @@
 {% elif name == 'system' %}<rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>
 {% elif name == 'settings' %}<path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>
 {% elif name == 'law' %}<path d="M12 3v18M7 21h10M5 7h14M5 7l-2 7a3 3 0 0 0 4 0Zm14 0-2 7a3 3 0 0 0 4 0Z"/>
+{% elif name == 'docs' %}<path d="M6 3h9l4 4v14H6Z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>
 {% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
 {% elif name == 'external' %}<path d="M14 4h6v6m0-6L10 14M10 4H4v16h16v-6"/>
 {% elif name == 'chevron' %}<path d="m9 6 6 6-6 6"/>
@@ -90,4 +91,17 @@
 
 {% macro idea_cards(card) -%}
 <div class="idea-grid">{% for idea in card.data.ideas %}<article class="idea-card"><div class="idea-number">0{{ loop.index }} <span>HYPOTEESI</span></div><h3>{{ idea.title }}</h3><p>{{ idea.problem }}</p><dl class="idea-facts"><div><dt>Ratkaisu</dt><dd>{{ idea.solution }}</dd></div><div><dt>Tärkein oletus</dt><dd>{{ idea.assumption }}</dd></div><div class="next-experiment"><dt>{{ icon('arrow') }} Seuraava koe</dt><dd>{{ idea.next_experiment }}</dd></div></dl>{% if idea.stage %}<span class="badge">{{ {'idea':'Idea','hypothesis':'Hypoteesi','experiment':'Kokeilu','tested':'Kokeiltu','validated':'Todennettu'}.get(idea.stage,idea.stage) }}</span>{% endif %}</article>{% endfor %}</div>
+{%- endmacro %}
+{% macro md_inline(parts) -%}{% for kind, text in parts %}{% if kind == 'lihava' %}<strong>{{ text }}</strong>{% elif kind == 'koodi' %}<code>{{ text }}</code>{% else %}{{ text }}{% endif %}{% endfor %}{%- endmacro %}
+{% macro markdown_lohkot(lohkot) -%}
+{% for b in lohkot %}
+{% if b.tyyppi == 'otsikko' %}{% if b.taso == 1 %}<h2>{{ md_inline(b.osat) }}</h2>{% elif b.taso == 2 %}<h3>{{ md_inline(b.osat) }}</h3>{% else %}<h4>{{ md_inline(b.osat) }}</h4>{% endif %}
+{% elif b.tyyppi == 'kappale' %}<p>{{ md_inline(b.osat) }}</p>
+{% elif b.tyyppi == 'lainaus' %}<blockquote>{{ md_inline(b.osat) }}</blockquote>
+{% elif b.tyyppi == 'viiva' %}<hr>
+{% elif b.tyyppi == 'koodi' %}<pre class="code-scroll" tabindex="0">{{ b.teksti }}</pre>
+{% elif b.tyyppi == 'lista' %}{% if b.jarjestetty %}<ol start="{{ b.alku }}">{% else %}<ul>{% endif %}{% for k in b.kohdat %}<li{% if k.sisennys %} class="is-nested"{% endif %}>{{ md_inline(k.osat) }}</li>{% endfor %}{% if b.jarjestetty %}</ol>{% else %}</ul>{% endif %}
+{% elif b.tyyppi == 'taulukko' %}<div class="table-scroll" tabindex="0"><table><thead><tr>{% for h in b.otsikot %}<th scope="col">{{ md_inline(h) }}</th>{% endfor %}</tr></thead><tbody>{% for rivi in b.rivit %}<tr>{% for solu in rivi %}<td>{{ md_inline(solu) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% endif %}
+{% endfor %}
 {%- endmacro %}

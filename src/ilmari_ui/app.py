@@ -25,6 +25,8 @@ from fastapi.templating import Jinja2Templates
 from .cards import load_cards
 from . import muodot
 from .config import HubConfig
+from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
+                         hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -383,6 +385,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             kirja = None
         data.update(kirja=kirja)
         return templates.TemplateResponse(request=request, name="rules.html", context=data)
+
+    def dokumenttikokoelma(request: Request):
+        """Asennetun commitin dokumentit (aiops istunto 2). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            return lue_dokumentit(DOKUMENTIT_ESIMERKKI, omistaja=None)
+        if settings.identity is not None:
+            return lue_dokumentit(DOKUMENTIT_OLETUS, omistaja=0)
+        return None
+
+    @app.get("/hub/dokumentit", response_class=HTMLResponse)
+    async def documents(request: Request):
+        kokoelma = dokumenttikokoelma(request)
+        valmis = kokoelma is not None and kokoelma.tila == "ready"
+        kysely = (request.query_params.get("q") or "").strip()[:100]
+        return render(request, "documents", "Dokumentit", kokoelma=kokoelma, kysely=kysely,
+                      ryhmat=ryhmittain(kokoelma) if valmis else [],
+                      osumat=hae_dokumentit(kokoelma, kysely) if valmis and kysely else [])
+
+    @app.get("/hub/dokumentit/{tunniste}", response_class=HTMLResponse)
+    async def document_detail(request: Request, tunniste: str):
+        kokoelma = dokumenttikokoelma(request)
+        dokumentti = etsi_dokumentti(kokoelma, tunniste) if kokoelma is not None and kokoelma.tila == "ready" else None
+        if dokumentti is None:
+            return render_error(request, 404, "Dokumenttia ei löydy",
+                                "Dokumenttia ei ole asennetussa versiossa. Palaa dokumenttilistaan.")
+        lohkot, virhe = piirrettava(dokumentti)
+        if lohkot is None:
+            return render_error(request, 422, "Dokumenttia ei voi näyttää", virhe or "Dokumentti on liian suuri.")
+        return render(request, "document", dokumentti["otsikko"], kokoelma=kokoelma, dokumentti=dokumentti,
+                      lohkot=lohkot)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

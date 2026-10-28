@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .peruskirja import _COMMIT, ReadFailure, RunReader, _lue
+from .peruskirja import _COMMIT, ReadFailure, RunReader, _lue, jasenna
 
 OLETUS = Path("/srv/aiops/ilmari/dokumentit")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "dokumentit"
@@ -170,6 +170,14 @@ def lue_dokumentit(root: str | Path, *, omistaja: int | None = 0, timeout_second
         if error.code == "not_found":
             return Dokumentit("not_published", "Dokumentteja ei ole julkaistu. aiopsin asennus (deploy.sh) julkaisee ne.")
         return Dokumentit("error", VIESTIT.get(error.code, error.message))
+
+
+def piirrettava(dokumentti: dict[str, str]) -> tuple[tuple[dict[str, Any], ...] | None, str | None]:
+    """Rajatun Markdownin lohkot (peruskirjan jasenna) tai virheilmoitus."""
+    try:
+        return jasenna(dokumentti["teksti"]), None
+    except ReadFailure as error:
+        return None, error.message
 
 
 def ryhmittain(kokoelma: Dokumentit) -> list[tuple[str, str, list[dict[str, str]]]]:

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, badge, empty with context %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">DOKUMENTIT · ASENNETTU VERSIO</span><h1>Dokumentit.</h1><p>Asennetun commitin dokumentit vain luku -tilassa: arkkitehtuuri, tilannekuva, muutosloki, päätökset (ADR) ja suunnitelmat. Haarojen muutokset näkyvät Kehitä-näkymässä.</p></div><div class="page-heading-actions">{{ badge('Vain luku') }}</div></div>
+<div class="stack">
+{% if kokoelma is none %}
+<section class="panel">{{ empty('Dokumenttien lähdettä ei ole määritetty', 'Tuotannossa aiopsin asennus julkaisee dokumentit hakemistoon /srv/aiops/ilmari/dokumentit.', 'docs') }}</section>
+{% elif kokoelma.tila != 'ready' %}
+<section class="panel">{{ empty('Dokumentteja ei ole julkaistu' if kokoelma.tila == 'not_published' else 'Dokumentteja ei voi näyttää turvallisesti', kokoelma.viesti, 'docs') }}</section>
+{% else %}
+<section class="panel panel-padding" aria-labelledby="docs-source"><h2 id="docs-source" class="sr-only">Julkaisun tiedot</h2><dl class="detail-facts detail-facts--two"><div><dt>Commit</dt><dd><code>{{ kokoelma.meta.commit[:7] }}</code></dd></div><div><dt>Julkaistu</dt><dd>{{ format_time(kokoelma.meta.julkaistu) }}</dd></div><div><dt>Dokumentteja</dt><dd>{{ kokoelma.meta.maara }}</dd></div></dl>{% if demo %}<p class="rules-note">Esimerkkitila: synteettiset dokumentit, ei asennettu versio.</p>{% endif %}
+<form method="get" action="/hub/dokumentit" role="search"><label for="docs-q">Hae dokumenteista</label> <input id="docs-q" name="q" type="search" maxlength="100" value="{{ kysely }}">{% if demo %}<input type="hidden" name="demo" value="1">{% endif %} <button type="submit">Hae</button></form></section>
+{% if kysely %}
+<section class="panel panel-padding" aria-labelledby="docs-hits"><h2 id="docs-hits">Haku: {{ kysely }}</h2>{% if osumat %}<ul>{% for o in osumat %}<li><a href="{{ url('/hub/dokumentit/' ~ o.tunniste) }}">{{ o.otsikko }}</a> · {{ o.osumia }} {{ 'osuma' if o.osumia == 1 else 'osumaa' }}<br><small>{{ o.ote }}</small></li>{% endfor %}</ul>{% else %}<p>Ei osumia.</p>{% endif %}</section>
+{% endif %}
+{% for avain, otsikko, rivit in ryhmat %}
+<section class="panel panel-padding" aria-labelledby="docs-{{ avain }}"><h2 id="docs-{{ avain }}">{{ otsikko }}</h2><ul>{% for d in rivit %}<li><a href="{{ url('/hub/dokumentit/' ~ d.tunniste) }}">{{ d.otsikko }}</a>{% if d.paiva or d.tila %}<br><small>{{ d.paiva }}{% if d.paiva and d.tila %} · {% endif %}{{ d.tila }}</small>{% endif %}</li>{% endfor %}</ul></section>
+{% endfor %}
+{% endif %}
+</div>
+{% endblock %}
