@@ -44,6 +44,7 @@ PAATOKSET = {"hylatty": "Hylätty", "hyvaksytty": "Hyväksytty"}
 YHDISTYKSET = {"yhdistetty": "Yhdistetty mainiin", "ristiriita": "Ristiriita mainin kanssa", "hylatty": "Yhdistys hylätty",
                "virhe": "Yhdistys epäonnistui"}
 KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin mainissa",
+                "vanhempi_kuin_asennettu": "Vanhempi kuin asennettu, ei alennettu",
                 "testit_epaonnistuivat": "Testit epäonnistuivat", "tyot_kaynnissa": "Töitä käynnissä, yritä myöhemmin",
                 "palautettu": "Palautettu edelliseen", "palautus_epaonnistui": "Palautus epäonnistui", "virhe": "Virhe",
                 "hylatty": "Pyyntö hylätty"}
