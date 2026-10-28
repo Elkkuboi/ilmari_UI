@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, badge, empty with context %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">MALLIT · ROOLIT JA REKISTERI</span><h1>Mallit.</h1><p>Ilmari pyytää roolia, ei mallinimeä. Asennetun version rekisteri vain luku -tilassa; roolin vaihto tehdään gatewayssa (tulossa, aiops istunto 3).</p></div><div class="page-heading-actions">{{ badge('Vain luku') }}</div></div>
+<div class="stack">
+{% if mallit is none %}
+<section class="panel">{{ empty('Mallirekisterin lähdettä ei ole määritetty', 'Tuotannossa aiopsin asennus julkaisee rekisterin hakemistoon /srv/aiops/ilmari/mallit.', 'system') }}</section>
+{% elif mallit.tila != 'ready' %}
+<section class="panel">{{ empty('Mallirekisteriä ei ole julkaistu' if mallit.tila == 'not_published' else 'Mallirekisteriä ei voi näyttää turvallisesti', mallit.viesti, 'system') }}</section>
+{% else %}
+<section class="panel panel-padding" aria-labelledby="models-source"><h2 id="models-source" class="sr-only">Julkaisun tiedot</h2><dl class="detail-facts detail-facts--two"><div><dt>Commit</dt><dd><code>{{ mallit.meta.commit[:7] }}</code></dd></div><div><dt>Julkaistu</dt><dd>{{ format_time(mallit.meta.julkaistu) }}</dd></div><div><dt>Malleja</dt><dd>{{ mallit.meta.maara }}</dd></div></dl>{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen rekisteri, ei asennettu versio.</p>{% endif %}</section>
+<section class="panel panel-padding" aria-labelledby="models-roles"><h2 id="models-roles">Roolit</h2><div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">Rooli</th><th scope="col">Malli</th></tr></thead><tbody>{% for r in mallit.roolirivit() %}<tr><td>{{ r.otsikko }} <small><code>{{ r.rooli }}</code></small></td><td>{% if r.malli %}<code>{{ r.malli }}</code>{% else %}<span class="badge">ei mallia</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel panel-padding" aria-labelledby="models-list"><h2 id="models-list">Rekisteri</h2><ul class="dev-list">{% for m in mallit.mallit %}<li><strong><code>{{ m.nimi }}</code></strong> {{ m.kuvaus }}<br><small>{{ m.sijainti_teksti }} · {{ m.tyyppi_teksti }} · konteksti {{ m.konteksti_max }}{% if m.vram_gb %} · VRAM {{ m.vram_gb }} Gt{% endif %}{% if m.koko_gb %} · {{ m.koko_gb }} Gt{% endif %}{% if m.kuva %} · {{ m.kuva }}{% endif %}{% if m.tarjoaja %} · {{ m.tarjoaja }} ({{ m.hinnasto }}){% endif %}</small>{% if m.roolit %}<br><small>Roolit: {{ m.roolit|join(', ') }}</small>{% endif %}</li>{% endfor %}</ul></section>
+{% endif %}
+</div>
+{% endblock %}

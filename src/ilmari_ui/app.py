@@ -28,6 +28,7 @@ from .config import HubConfig
 from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
                          hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
 from . import kehitys
+from .mallit import ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, lue_mallit
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -469,6 +470,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe,
                     gateway=lambda polku: gateway_polku(polku, data["demo"]))
         return templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
+
+    @app.get("/hub/mallit", response_class=HTMLResponse)
+    async def models(request: Request):
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            rekisteri = lue_mallit(MALLIT_ESIMERKKI, omistaja=None)
+        elif settings.identity is not None:
+            rekisteri = lue_mallit(MALLIT_OLETUS, omistaja=0)
+        else:
+            rekisteri = None
+        return render(request, "models", "Mallit", mallit=rekisteri)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

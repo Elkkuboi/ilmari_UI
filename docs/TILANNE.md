@@ -1167,3 +1167,12 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
 - Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/kehitys` ja `-/srv/aiops/ilmari/kayttoonotot` (käsin kirjoitettu
   odotus päivitetty). Esimerkkiaineisto `demo/kehitys` ja `demo/kayttoonotot`. Testit `tests/test_kehitys.py` ja
   `tests/test_kehitys_sivut.py`.
+
+## 2026-10-28: Mallit-näkymä (aiops istunto 3)
+
+- `/hub/mallit`: asennetun aiops-commitin mallirekisteri (roolit → mallit, rekisterin rivit) vain luku -tilassa.
+  Lähde `/srv/aiops/ilmari/mallit` (aiopsin `scripts/julkaise_mallit.py`, deploy.sh; root:ilmari-julkaisu,
+  mallit.json + meta.json SHA-256:lla). Lukija `src/ilmari_ui/mallit.py` tarkistaa kentät, roolien viittaukset ja
+  merkit; täyttämätön rooli (kuva, ääni) näkyy "ei mallia", ei nollana. Roolin vaihto tulee gatewayn kautta
+  myöhemmin istunnossa 3. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/mallit`. Esimerkkiaineisto `demo/mallit`,
+  testit `tests/test_mallit.py`.
