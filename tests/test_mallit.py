@@ -40,8 +40,11 @@ def test_kelvollinen_julkaisu_luetaan(tmp_path):
     k = lue_mallit(julkaise(tmp_path / "m"), omistaja=UID)
     assert k.tila == "ready" and k.roolit == {"ceo": "hauhau-q6"} and k.mallit[0]["koko_gb"] == 25.9
     rivit = k.roolirivit()
-    assert rivit[0] == {"rooli": "ceo", "otsikko": "Ilmarin aivot (CEO)", "malli": "hauhau-q6"}
+    assert rivit[0]["rooli"] == "ceo" and rivit[0]["malli"] == "hauhau-q6" and rivit[0]["vaihtoehdot"] == ["hauhau-q6"]
     assert all(r["malli"] == "" for r in rivit[1:])  # täyttämätön rooli on tyhjä, ei nolla
+    rivit = k.roolirivit({"ceo": "", "yoajo": "hauhau-q6"})
+    assert rivit[0]["malli"] == "" and rivit[0]["valittu"] and rivit[0]["oletus"] == "hauhau-q6"
+    assert [r for r in rivit if r["rooli"] == "yoajo"][0]["malli"] == "hauhau-q6"
 
 
 def test_puuttuva_ja_vaara_omistaja(tmp_path):
@@ -81,3 +84,29 @@ def test_ilman_lahdetta_ja_valikko():
     r = c.get("/hub/mallit")
     assert r.status_code == 200 and "lähdettä ei ole määritetty" in r.text
     assert 'href="/hub/mallit' in c.get("/hub?demo=1").text
+
+
+def test_ylikirjoitus_luetaan_ja_lomake_tuotannossa(tmp_path):
+    from ilmari_ui.config import parse_config
+    from ilmari_ui.mallit import lue_ylikirjoitus
+    hak = tmp_path / "roolit"
+    hak.mkdir()
+    (hak / "roolit.toml").write_text('[roolit]\nkuva_tulkki = ""\nyoajo = "hauhau-q6"\njohtaja = "x"\n', encoding="utf-8")
+    assert lue_ylikirjoitus(hak, omistajat=frozenset({UID})) == {"kuva_tulkki": "", "yoajo": "hauhau-q6"}
+    assert lue_ylikirjoitus(hak, omistajat=frozenset({UID + 1})) is None
+    assert lue_ylikirjoitus(tmp_path / "ei") is None
+    (hak / "roolit.toml").write_text("ei tomlia = = =", encoding="utf-8")
+    assert lue_ylikirjoitus(hak) is None
+    root = tmp_path / "ajot"
+    root.mkdir()
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
+                    client=None) as client:
+        r = client.get("/mallit", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github",
+                                           "x-forwarded-proto": "https", "x-forwarded-for": "100.67.5.28"})
+    assert r.status_code == 200 and "Mallit" in r.text  # testikoneella rekisteriä ei välttämättä voi lukea
+
+
+def test_esimerkkitilassa_valinta_nakyy_ilman_lomaketta():
+    r = asiakas().get("/hub/mallit?demo=1")
+    assert r.status_code == 200 and "(valittu; oletus" in r.text and 'action="' not in r.text

@@ -32,8 +32,12 @@ DATA_KENTAT = frozenset({"muoto", "commit", "mallit", "roolit"})
 MALLI_KENTAT = frozenset({"nimi", "kuvaus", "tyyppi", "sijainti", "konteksti_max", "vram_gb", "kuva", "tiedosto",
                           "koko", "manifesti", "tarjoaja", "hinnasto", "roolit"})
 ROOLIT = (("ceo", "Ilmarin aivot (CEO)"), ("tyontekija", "Työntekijä (dsh)"), ("kirjoittaja", "Kirjoittaja"),
-          ("tarkastaja", "Tarkastaja"), ("kallis_paattely", "Kallis päättely"), ("kuva", "Kuva"), ("aani", "Ääni"),
-          ("yoajo", "Yöajo"))
+          ("tarkastaja", "Tarkastaja"), ("kallis_paattely", "Kallis päättely"), ("kuva_tulkki", "Kuvantulkinta (Hubin valinta)"),
+          ("kuva_tulkki_pilvi", "Kuvantulkinta pilvessä"), ("kuva_tulkki_paikallinen", "Kuvantulkinta paikallisesti"),
+          ("kuva", "Kuva"), ("aani", "Ääni"), ("yoajo", "Yöajo"))
+OLETUS_ROOLIT = Path("/srv/aiops/ilmari/roolit")
+YLIKIRJOITUS = "roolit.toml"
+RAJA_YLIKIRJOITUS = 16 * 1024
 SIJAINNIT = {"paikallinen": "paikallinen", "pilvi": "pilvi"}
 TYYPIT = {"chat": "keskustelu", "kuva": "kuva", "video": "video", "tts": "puhe"}
 MAARA_MAX = 50
@@ -56,9 +60,16 @@ class Mallit:
     mallit: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     roolit: dict[str, str] = field(default_factory=dict)
 
-    def roolirivit(self) -> list[dict[str, str]]:
-        """Kaikki roolit järjestyksessä; täyttämätön rooli näkyy tyhjänä, ei nollana."""
-        return [{"rooli": r, "otsikko": o, "malli": self.roolit.get(r, "")} for r, o in ROOLIT]
+    def roolirivit(self, ylikirjoitus: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """Kaikki roolit järjestyksessä; täyttämätön rooli näkyy tyhjänä, ei nollana. Ylikirjoitus (Eliaksen valinta
+        gatewayn kautta) korvaa rekisterin arvon; vaihtoehdot ovat rekisterin mallit, jotka tarjoavat roolin."""
+        yk = ylikirjoitus or {}
+        rivit = []
+        for r, o in ROOLIT:
+            nyt = yk[r] if r in yk else self.roolit.get(r, "")
+            rivit.append({"rooli": r, "otsikko": o, "malli": nyt, "oletus": self.roolit.get(r, ""),
+                          "valittu": r in yk, "vaihtoehdot": [m["nimi"] for m in self.mallit if r in m["roolit"]]})
+        return rivit
 
 
 def _virhe(viesti: str) -> None:
@@ -145,3 +156,28 @@ def lue_mallit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: f
         if error.code == "not_found":
             return Mallit("not_published", "Mallirekisteriä ei ole julkaistu. aiopsin asennus (deploy.sh) julkaisee sen.")
         return Mallit("error", VIESTIT.get(error.code, error.message))
+
+
+def lue_ylikirjoitus(root: str | Path, *, omistajat: frozenset[int] | None = None,
+                     timeout_seconds: float = 1.0) -> dict[str, str] | None:
+    """Eliaksen roolivalinnat (gateway kirjoittaa roolit.toml:n). None, jos tiedostoa ei ole tai se ei kelpaa."""
+    import tomllib
+    try:
+        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+    except ValueError:
+        return None
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        with kavelija._root_fd(deadline) as hd:
+            tiedot = os.stat(YLIKIRJOITUS, dir_fd=hd, follow_symlinks=False)
+            if omistajat is not None and tiedot.st_uid not in omistajat:
+                return None
+            data = _lue(hd, YLIKIRJOITUS, tiedot.st_uid if omistajat is not None else None, deadline, RAJA_YLIKIRJOITUS)
+        parsed = tomllib.loads(data.decode("utf-8"))
+    except (ReadFailure, OSError, ValueError, UnicodeDecodeError):
+        return None
+    roolit = parsed.get("roolit") if isinstance(parsed, dict) else None
+    if not isinstance(roolit, dict):
+        return None
+    tunnetut = {r for r, _ in ROOLIT}
+    return {r: m for r, m in roolit.items() if r in tunnetut and type(m) is str and _NIMI.fullmatch(m or "a") is not None and len(m) <= 40}
