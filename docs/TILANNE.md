@@ -1184,3 +1184,10 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
   gatewayn reittiin `/ilmari/viesti` samassa alkuperässä (`paluu=hub` → takaisin Hubiin); "Käynnistä malli" samoin
   `/kehita/malli`. Hub ei kirjoita mitään. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/keskustelu`.
   Lukija `src/ilmari_ui/keskustelu.py`, esimerkkiaineisto `demo/keskustelu`, testit `tests/test_keskustelu.py`.
+
+## 2026-10-28: Roolin vaihto Hubista (aiops ADR-0025 kohta 5)
+
+- `/hub/mallit` näyttää myös Eliaksen roolivalinnan (`/srv/aiops/ilmari/roolit/roolit.toml`, gateway kirjoittaa) ja
+  tuotannossa lomakkeen, joka tallentaa valinnan gatewayn reittiin `/mallit/rooli` (`paluu=hub`). Uudet roolit
+  kuva_tulkki, kuva_tulkki_pilvi ja kuva_tulkki_paikallinen (Ravintopolun kuvasyöte). Palveluun
+  `BindReadOnlyPaths=-/srv/aiops/ilmari/roolit`.

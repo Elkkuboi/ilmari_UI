@@ -29,7 +29,8 @@ from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT
                          hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
 from . import kehitys
 from . import keskustelu as keskustelu_lukija
-from .mallit import ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, lue_mallit
+from .mallit import (ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, OLETUS_ROOLIT as MALLIT_YLIKIRJOITUS,
+                     lue_mallit, lue_ylikirjoitus)
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -485,13 +486,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/mallit", response_class=HTMLResponse)
     async def models(request: Request):
+        ylikirjoitus, gateway_url = None, None
         if settings.demo_enabled and request.query_params.get("demo") == "1":
             rekisteri = lue_mallit(MALLIT_ESIMERKKI, omistaja=None)
+            ylikirjoitus = {"kuva_tulkki": ""}
         elif settings.identity is not None:
             rekisteri = lue_mallit(MALLIT_OLETUS, omistaja=0)
+            ylikirjoitus = lue_ylikirjoitus(MALLIT_YLIKIRJOITUS, omistajat=kehitys.sallitut_omistajat())
+            gateway_url = settings.identity.origin
         else:
             rekisteri = None
-        return render(request, "models", "Mallit", mallit=rekisteri)
+        return render(request, "models", "Mallit", mallit=rekisteri, ylikirjoitus=ylikirjoitus, gateway_url=gateway_url)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):
