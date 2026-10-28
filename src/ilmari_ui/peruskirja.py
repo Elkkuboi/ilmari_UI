@@ -54,8 +54,8 @@ class Peruskirja:
 # Luku
 # --------------------------------------------------------------------------------------------------
 
-def _lue(hd: int, nimi: str, omistaja: int | None, deadline: float) -> bytes:
-    raja = RAJAT[nimi]
+def _lue(hd: int, nimi: str, omistaja: int | None, deadline: float, raja: int | None = None) -> bytes:
+    raja = RAJAT[nimi] if raja is None else raja  # raja: dokumenttien lukija (aiops istunto 2)
     fd: int | None = None
     try:
         ennen = os.stat(nimi, dir_fd=hd, follow_symlinks=False)

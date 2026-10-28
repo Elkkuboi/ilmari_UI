@@ -1,0 +1,33 @@
+{
+ "muoto": "aiops-dokumentit-v1",
+ "commit": "0000000000000000000000000000000000000000",
+ "dokumentit": [
+  {
+   "tunniste": "arkkitehtuuri",
+   "polku": "docs/ARKKITEHTUURI.md",
+   "ryhma": "perus",
+   "otsikko": "Esimerkkiarkkitehtuuri",
+   "tila": "",
+   "paiva": "",
+   "teksti": "# Esimerkkiarkkitehtuuri\n\nTämä on synteettinen esimerkkidokumentti. Oikeat dokumentit julkaisee aiopsin asennus.\n\n## Periaate\n\n- Ydin, joka ei muutu.\n- Kyvyt **datana** sen päällä.\n"
+  },
+  {
+   "tunniste": "tilanne",
+   "polku": "docs/TILANNE.md",
+   "ryhma": "perus",
+   "otsikko": "Esimerkkitilanne",
+   "tila": "",
+   "paiva": "",
+   "teksti": "# Esimerkkitilanne\n\n| Osa | Tila |\n| --- | --- |\n| Hub | esimerkki |\n| Gateway | esimerkki |\n"
+  },
+  {
+   "tunniste": "adr-0099-esimerkki",
+   "polku": "docs/adr/0099-esimerkki.md",
+   "ryhma": "adr",
+   "otsikko": "ADR-0099: Esimerkkipäätös",
+   "tila": "esimerkki",
+   "paiva": "2026-10-28",
+   "teksti": "# ADR-0099: Esimerkkipäätös\n\n- Tila: esimerkki\n- Päivämäärä: 2026-10-28\n\nTeksti, jossa on <script>alert(1)</script>, näytetään tekstinä eikä sitä suoriteta.\n\n```\nkoodilohko\n```\n"
+  }
+ ]
+}
