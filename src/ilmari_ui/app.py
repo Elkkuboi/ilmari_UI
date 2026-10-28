@@ -123,8 +123,15 @@ def production_rejection(request: Request, identity: HubConfig) -> tuple[int, st
     if len(logins) != 1 or logins[0].decode("latin-1") not in identity.users:
         return 403, "Ei pääsyä: Tailscale-tunnus puuttuu tai sitä ei ole sallittu."
     sites = _header_values(headers, b"sec-fetch-site")
-    if len(sites) > 1 or (sites and sites[0] not in (b"none", b"same-origin")):
+    if len(sites) > 1:
         return 403, "Ei pääsyä toisen sivuston kautta."
+    if sites and sites[0] not in (b"none", b"same-origin"):
+        # Kotinäytön sovellus ja linkit muualta (aiops istunto 2, 28.10.2026): ylätason navigointi dokumenttiin
+        # kelpaa, koska Hub vain lukee (GET/HEAD) eikä sitä voi kehystää (frame-ancestors 'none'). Sama kuin
+        # gatewayssa, joka tarkistaa alkuperän vain lomakkeissa. Upotukset ja haut toiselta sivustolta hylätään.
+        if not (_header_values(headers, b"sec-fetch-mode") == [b"navigate"]
+                and _header_values(headers, b"sec-fetch-dest") == [b"document"]):
+            return 403, "Ei pääsyä toisen sivuston kautta."
     origins = _header_values(headers, b"origin")
     if len(origins) > 1 or (origins and origins[0] != identity.origin.encode("ascii")):
         return 403, "Ei pääsyä toisesta alkuperästä."

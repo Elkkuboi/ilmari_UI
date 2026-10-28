@@ -1136,3 +1136,10 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
 - **Minecraft:** jouluna portti avataan tilapäisesti, `sudo ufw allow 25565/tcp`, ja suljetaan palvelimen jälkeen.
 - **V1.5:** paikallinen LLM (ADR-0009), ntfy-ilmoitukset (myös: mitä hyväksyttiin, gatewaysta riippumatta), r-spatial-image, PostGIS, toistuvat työt, SIGHUP-uudelleenluku, mahdollisesti Open WebUI vain omaan koneeseen.
 - **V2:** rootless Docker tai gVisor, Headscale ja pörssisähkön mukaan ajoitetut eräajot.
+
+## 2026-10-28: kotinäytön sovellus (aiops istunto 2)
+
+- Vartija sallii `Sec-Fetch-Site`-arvot `cross-site` ja `same-site` vain ylätason navigoinnissa
+  (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`). Syy: kotinäytölle asennettu Hub sai virheen
+  "Ei pääsyä toisen sivuston kautta". Upotukset (iframe), kuvat ja haut toiselta sivustolta hylätään edelleen;
+  testit molempiin suuntiin `tests/test_production.py`:ssä. Gateway tarkistaa alkuperän vain lomakkeissa.
