@@ -1,0 +1,36 @@
+{
+ "tyo": 41,
+ "toive": "Lisää docs/TILANNE.md:hen rivi esimerkkitilasta.\nPidä muutos pienenä.",
+ "jatka": null,
+ "luotu": "2026-10-28T12:00:00+00:00",
+ "jattaja": "elias",
+ "tila": "succeeded",
+ "tila_teksti": "valmis",
+ "syy": "exit 0",
+ "kesto": "14 min 2 s",
+ "paivitetty": "2026-10-28T12:20:00+00:00",
+ "valmis": true,
+ "tulos": {
+  "paluukoodi": 0,
+  "haara": "ilmari/41",
+  "perus": "cccccccccccccccccccccccccccccccccccccccc",
+  "paa": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commiteja": 1,
+  "tiedostot": [
+   "docs/TILANNE.md"
+  ],
+  "muutokset": " 1 file changed, 2 insertions(+)",
+  "diff_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "vastaus": "Lisäsin TILANNE.md:hen rivin esimerkkitilasta ja ajoin testit.\n<b>ei html</b>",
+  "testit": {
+   "paluukoodi": 0,
+   "yhteenveto": "2300 passed, 2 skipped in 88.0s"
+  }
+ },
+ "tiedostot": [
+  "muutos.diff",
+  "testit.txt",
+  "vastaus.md",
+  "aiops-dsh.log"
+ ]
+}

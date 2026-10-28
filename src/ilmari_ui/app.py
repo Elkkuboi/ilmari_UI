@@ -27,6 +27,7 @@ from . import muodot
 from .config import HubConfig
 from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
                          hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
+from . import kehitys
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -415,6 +416,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return render_error(request, 422, "Dokumenttia ei voi näyttää", virhe or "Dokumentti on liian suuri.")
         return render(request, "document", dokumentti["otsikko"], kokoelma=kokoelma, dokumentti=dokumentti,
                       lohkot=lohkot)
+
+    # --- Kehitä (aiops istunto 2, ADR-0024): Hub näyttää, gateway toimii ------------------------------------------
+
+    def kehityslahteet(request: Request) -> tuple[Path | None, Path | None, frozenset[int] | None, int | None]:
+        """(kehityshakemisto, käyttöönottohakemisto, sallitut omistajat, historian omistaja) tai None-arvot."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            return kehitys.ESIMERKKI, kehitys.ESIMERKKI_KAYTTOONOTOT, None, None
+        if settings.identity is not None:
+            return kehitys.OLETUS, kehitys.OLETUS_KAYTTOONOTOT, kehitys.sallitut_omistajat(), 0
+        return None, None, None, None
+
+    def gateway_polku(polku: str, demo: bool) -> str:
+        """Gatewayn sivu samassa alkuperässä (Tailscale Serve: gateway juuressa, Hub polussa /hub)."""
+        if demo:
+            return "#esimerkkitila"
+        return (settings.identity.origin if settings.identity is not None else "") + polku
+
+    def yoajon_ehdotukset(data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Uusimman julkaistun yöajon ehdotukset toiveiksi (istunto 2, kohta 3)."""
+        if not data["runs"]:
+            return []
+        try:
+            detail = data["reader"].read_run(data["runs"][0]["run_id"])
+        except ReadFailure:
+            return []
+        rivit = []
+        for p in muodot.proposals(detail.proposals, detail.sol_result)[:10]:
+            toive = (p["title"] or "") + ("\n\n" + p["proposal"] if p["proposal"] else "")
+            rivit.append({**p, "run_id": detail.run_id,
+                          "toive_url": gateway_polku("/kehita?" + urlencode({"toive": toive[:1500]}), data["demo"])})
+        return rivit
+
+    @app.get("/hub/kehita", response_class=HTMLResponse)
+    async def develop(request: Request):
+        data = context(request, "develop", "Kehitä")
+        juuri, historia_juuri, omistajat, omistaja = kehityslahteet(request)
+        tyot = kehitys.lue_kehitystyot(juuri, omistajat=omistajat) if juuri is not None else None
+        historia = kehitys.lue_kayttoonotot(historia_juuri, omistaja=omistaja) if historia_juuri is not None else None
+        data.update(tyot=tyot, lahde=juuri is not None, historia=historia, ehdotukset=yoajon_ehdotukset(data),
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]),
+                    claude_code_url="https://claude.ai/code")
+        return templates.TemplateResponse(request=request, name="develop.html", context=data)
+
+    @app.get("/hub/kehita/{tyo}", response_class=HTMLResponse)
+    async def develop_detail(request: Request, tyo: str):
+        data = context(request, "develop_detail", "Kehitystyö")
+        juuri, _, omistajat, _ = kehityslahteet(request)
+        t = kehitys.lue_kehitystyo(juuri, int(tyo), omistajat=omistajat) if juuri is not None and kehitys._TYO.fullmatch(tyo) else None
+        if t is None:
+            return render_error(request, 404, "Kehitystyötä ei löydy", "Työtä ei ole julkaistu. Palaa Kehitä-näkymään.")
+        data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe,
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]))
+        return templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

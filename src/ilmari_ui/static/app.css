@@ -583,3 +583,9 @@ td a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .rules-doc table { border-collapse: collapse; margin: 0 0 16px; font-size: .85rem; }
 .rules-doc th, .rules-doc td { border: 1px solid var(--il-border); padding: 6px 10px; text-align: left; vertical-align: top; }
 .rules-note { margin: 14px 0 0; color: var(--il-warning); font-size: .8rem; }
+
+/* Kehitä (aiops ADR-0024) */
+.dev-list { margin: 0; padding: 0; list-style: none; }
+.dev-list li { padding: 14px 0; border-bottom: 1px solid var(--il-border); overflow-wrap: anywhere; }
+.dev-list li:last-child { border: 0; }
+.dev-list .badge { margin-top: 6px; }

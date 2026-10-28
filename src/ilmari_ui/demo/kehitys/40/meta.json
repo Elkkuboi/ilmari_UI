@@ -1,0 +1,33 @@
+{
+ "tyo": 40,
+ "toive": "Vaihda Hubin otsikkoväri.",
+ "jatka": null,
+ "luotu": "2026-10-27T20:00:00+00:00",
+ "jattaja": "elias",
+ "tila": "succeeded",
+ "tila_teksti": "valmis",
+ "syy": "exit 0",
+ "kesto": "9 min",
+ "paivitetty": "2026-10-27T20:10:00+00:00",
+ "valmis": true,
+ "tulos": {
+  "paluukoodi": 0,
+  "haara": "ilmari/40",
+  "perus": "cccccccccccccccccccccccccccccccccccccccc",
+  "paa": "ffffffffffffffffffffffffffffffffffffffff",
+  "commiteja": 1,
+  "tiedostot": [
+   "src/x.py"
+  ],
+  "muutokset": " 1 file changed",
+  "diff_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "vastaus": "Tein muutoksen.",
+  "testit": {
+   "paluukoodi": 1,
+   "yhteenveto": "1 failed, 2299 passed in 90.0s"
+  }
+ },
+ "tiedostot": [
+  "testit.txt"
+ ]
+}

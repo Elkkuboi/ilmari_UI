@@ -1151,3 +1151,19 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
   (root:ilmari-julkaisu, dokumentit.json + meta.json SHA-256:lla). Lukija `dokumentit.py` käyttää peruskirjan
   tiedostonlukijaa ja tarkistaa kentät uudelleen; teksti piirretään peruskirjan rajatulla Markdownilla ilman
   raakaa HTML:ää. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/dokumentit`. Esimerkkiaineisto `demo/dokumentit`.
+
+## 2026-10-28: Kehitä-näkymä (aiops istunto 2, ADR-0024)
+
+- `/hub/kehita` ja `/hub/kehita/<työ>`: kehitystyöt (toive → dsh-työ aiops-repoa vasten → testit kontissa → päätös),
+  niiden tulokset (diff, testit, dsh:n yhteenveto ja lokit, enintään rajojen verran) ja käyttöönottojen historia.
+  Lähteet: `/srv/aiops/ilmari/kehitys/<työ>/` (gateway aiops-gw kirjoittaa meta.json, paatos.json ja kopiot; root
+  kirjoittaa yhdistys.json ja kayttoonotto.json; tuotannossa vain nämä omistajat kelpaavat) ja
+  `/srv/aiops/ilmari/kayttoonotot/` (kääre julkaisee rootina historia.json + meta.json SHA-256:lla). Lukija
+  `src/ilmari_ui/kehitys.py`: tunnetut kentät tyypitettyinä, ohjausmerkit pois, rikkinäinen sivutiedosto näkyy
+  virheenä kaatamatta sivua.
+- Hub ei toimi: Hyväksy, Hylkää, Pyydä muutosta ja Ota käyttöön ovat gatewayn sivuja (`/kehita`, `/kehitys/<työ>`,
+  passkey), joihin Hub linkittää samassa alkuperässä (Serve: gateway juuressa, Hub polussa /hub). Yöajon uusimman
+  julkaistun ajon ehdotukset ovat linkkeinä gatewayn toivelomakkeeseen (`/kehita?toive=`), ja Claude Code -linkki.
+- Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/kehitys` ja `-/srv/aiops/ilmari/kayttoonotot` (käsin kirjoitettu
+  odotus päivitetty). Esimerkkiaineisto `demo/kehitys` ja `demo/kayttoonotot`. Testit `tests/test_kehitys.py` ja
+  `tests/test_kehitys_sivut.py`.

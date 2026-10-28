@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, badge, empty with context %}
+{% block content %}
+{% set vaihe_teksti, savy = vaihe %}
+<div class="page-heading"><div><span class="eyebrow">KEHITYSTYÖ {{ t.tyo }}{% if meta.jatka %} · JATKAA TYÖTÄ {{ meta.jatka }}{% endif %}</span><h1>{{ meta.toive.split('\n')[0][:120] or 'Kehitystyö' }}</h1><p><span class="badge badge--{{ savy }}">{{ vaihe_teksti }}</span> {{ meta.tila_teksti }}{% if meta.syy %} · {{ meta.syy }}{% endif %}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}</p></div><div class="page-heading-actions"><a href="{{ url('/hub/kehita') }}">Kaikki kehitystyöt</a> <a class="text-link" href="{{ gateway('/kehitys/' ~ t.tyo) }}">Päätä gatewayssa {{ icon('external') }}</a></div></div>
+<div class="stack">
+{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen kehitystyö.</p>{% endif %}
+{% if t.virheet %}<section class="panel panel-padding"><h2>Julkaisun ongelmat</h2><ul>{% for v in t.virheet %}<li>{{ v }}</li>{% endfor %}</ul></section>{% endif %}
+<section class="panel panel-padding" aria-labelledby="dev-wish"><h2 id="dev-wish">Toive</h2><pre class="code-scroll" tabindex="0">{{ meta.toive }}</pre><dl class="detail-facts detail-facts--two"><div><dt>Jättäjä</dt><dd>{{ meta.jattaja or '–' }}</dd></div><div><dt>Luotu</dt><dd>{{ meta.luotu[:16].replace('T', ' ') or '–' }}</dd></div></dl></section>
+{% if tulos %}
+<section class="panel panel-padding" aria-labelledby="dev-result"><h2 id="dev-result">Tulos</h2><dl class="detail-facts detail-facts--two"><div><dt>dsh</dt><dd>{{ 'onnistui' if tulos.paluukoodi == 0 else 'paluukoodi ' ~ tulos.paluukoodi }}</dd></div><div><dt>Haara</dt><dd><code>{{ tulos.haara or '–' }}</code></dd></div><div><dt>Committeja</dt><dd>{{ tulos.commiteja if tulos.commiteja is not none else '–' }}</dd></div><div><dt>Kärki</dt><dd><code>{{ tulos.paa[:12] or '–' }}</code></dd></div><div><dt>Muutokset</dt><dd>{{ tulos.muutokset or 'ei muutoksia' }}</dd></div><div><dt>Testit kontissa</dt><dd>{% if tulos.testit %}<span class="badge badge--{{ 'success' if tulos.testit.paluukoodi == 0 else 'danger' }}">{{ 'läpi' if tulos.testit.paluukoodi == 0 else 'epäonnistuivat' }}</span> {{ tulos.testit.yhteenveto }}{% else %}ei ajettu{% endif %}</dd></div></dl>{% if tulos.virhe %}<p class="rules-note">Virhe: {{ tulos.virhe }}</p>{% endif %}{% if tulos.tiedostot %}<p class="small">Muutetut tiedostot: {% for f in tulos.tiedostot %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if tulos.vastaus %}<h3>dsh:n yhteenveto</h3><pre class="code-scroll" tabindex="0">{{ tulos.vastaus }}</pre>{% endif %}</section>
+{% endif %}
+<section class="panel panel-padding" aria-labelledby="dev-decision"><h2 id="dev-decision">Päätös</h2>
+{% if t.paatos %}<p><strong>{{ t.paatos.teksti }}</strong> {{ t.paatos.aika[:16].replace('T', ' ') }}{% if t.paatos.commit %} · haara <code>{{ t.paatos.commit[:12] }}</code>{% endif %}</p>{% else %}<p>Ei päätöstä vielä.{% if meta.tila == 'succeeded' %} Hyväksy, hylkää tai pyydä muutosta gatewayssa.{% endif %}</p>{% endif %}
+{% if t.yhdistys %}<p><span class="badge badge--{{ 'success' if t.yhdistys.tila == 'yhdistetty' else 'danger' }}">{{ t.yhdistys.teksti }}</span> {{ t.yhdistys.viesti }}{% if t.yhdistys.commit %} · main <code>{{ t.yhdistys.commit[:12] }}</code>{% endif %}</p>{% endif %}
+{% if t.paatos and t.paatos.kayttoonotto_pyynto %}<p>Käyttöönotto pyydetty {{ t.paatos.kayttoonotto_aika[:16].replace('T', ' ') }} commitille <code>{{ t.paatos.kayttoonotto_commit[:12] }}</code>.</p>{% endif %}
+{% if t.kayttoonotto %}<p><span class="badge badge--{{ 'success' if t.kayttoonotto.tulos == 'asennettu' else 'danger' }}">{{ t.kayttoonotto.teksti }}</span> {{ t.kayttoonotto.viesti }}</p>{% endif %}
+<p><a class="text-link" href="{{ gateway('/kehitys/' ~ t.tyo) }}">Toiminnot gatewayssa (passkey) {{ icon('external') }}</a></p></section>
+{% for nimi, otsikko in [('muutos.diff', 'Muutos (diff)'), ('testit.txt', 'Testien tuloste'), ('vastaus.md', 'dsh:n vastaus'), ('muutos-stat.txt', 'Muutostilasto'), ('aiops-dsh.log', 'Työn loki'), ('dsh-stderr.log', 'dsh:n virhetuloste')] %}{% if nimi in t.tekstit %}
+<section class="panel panel-padding"><details{% if nimi == 'muutos.diff' %} open{% endif %}><summary>{{ otsikko }} <small>({{ t.tekstit[nimi]|length }} merkkiä)</small></summary><pre class="code-scroll" tabindex="0">{{ t.tekstit[nimi] }}</pre></details></section>
+{% endif %}{% endfor %}
+</div>
+{% endblock %}
