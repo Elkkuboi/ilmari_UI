@@ -1176,3 +1176,11 @@ tarkistettu; IQ3_S mittausvalmiina; ajattelun säätö koodissa; Ilmari-ready-lu
   merkit; täyttämätön rooli (kuva, ääni) näkyy "ei mallia", ei nollana. Roolin vaihto tulee gatewayn kautta
   myöhemmin istunnossa 3. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/mallit`. Esimerkkiaineisto `demo/mallit`,
   testit `tests/test_mallit.py`.
+
+## 2026-10-28: Keskustelu Hubissa (Hub pääpaikaksi)
+
+- `/hub/keskustelu` näyttää gatewayn julkaiseman keskustelun (`/srv/aiops/ilmari/keskustelu/viestit.json`, aiops-gw)
+  ja mallin tilan, päivittyy 15 s välein (`Refresh`-otsake, ei skriptiä). Viesti lähetetään tavallisella lomakkeella
+  gatewayn reittiin `/ilmari/viesti` samassa alkuperässä (`paluu=hub` → takaisin Hubiin); "Käynnistä malli" samoin
+  `/kehita/malli`. Hub ei kirjoita mitään. Palveluun `BindReadOnlyPaths=-/srv/aiops/ilmari/keskustelu`.
+  Lukija `src/ilmari_ui/keskustelu.py`, esimerkkiaineisto `demo/keskustelu`, testit `tests/test_keskustelu.py`.

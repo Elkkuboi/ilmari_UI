@@ -589,3 +589,11 @@ td a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .dev-list li { padding: 14px 0; border-bottom: 1px solid var(--il-border); overflow-wrap: anywhere; }
 .dev-list li:last-child { border: 0; }
 .dev-list .badge { margin-top: 6px; }
+
+/* Keskustelu Hubissa (28.10.) */
+.chat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.chat-msg { padding: 12px 14px; border-radius: 12px; background: var(--il-surface-raised); max-width: 85%; overflow-wrap: anywhere; }
+.chat-msg--elias { margin-left: auto; background: var(--il-accent-soft); }
+.chat-msg-head { font-size: .75rem; color: var(--il-text-muted); margin-bottom: 4px; }
+.chat-msg p { margin: 0; white-space: pre-wrap; }
+.chat-composer form, form.chat-composer { display: grid; gap: 8px; }
