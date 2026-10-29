@@ -239,7 +239,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers.update({
             "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             "Cache-Control": "no-store",
-            "Referrer-Policy": "no-referrer",
+            # Ei "no-referrer": silloin selain lähettää Hubin lomakkeet (roolin ja aivoprofiilin vaihto gatewayhin)
+            # otsakkeella Origin: null, ja gateway hylkää ne (29.10.). same-origin: Origin lähetetään, Referer ei
+            # vuoda muualle. Sama valinta kuin gatewayn omilla sivuilla.
+            "Referrer-Policy": "same-origin",
             "X-Content-Type-Options": "nosniff",
             "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
             "X-Frame-Options": "DENY",
