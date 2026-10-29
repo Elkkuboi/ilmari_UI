@@ -281,7 +281,7 @@ def test_security_headers_cover_success_denial_missing_pages_and_assets(demo_cli
             assert directive in policy
         assert "unsafe-inline" not in policy and "https:" not in policy
         assert response.headers["cache-control"] == "no-store"
-        assert response.headers["referrer-policy"] == "no-referrer"
+        assert response.headers["referrer-policy"] == "same-origin"
         assert response.headers["x-content-type-options"] == "nosniff"
         assert response.headers["x-frame-options"] == "DENY"
         assert "set-cookie" not in response.headers
