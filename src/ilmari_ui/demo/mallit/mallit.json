@@ -17,7 +17,8 @@
    "hinnasto": "gpt-6.1-sol/standard/2026-10-08",
    "roolit": [
     "tarkastaja",
-    "kallis_paattely"
+    "kallis_paattely",
+    "kuva_tulkki"
    ]
   },
   {
@@ -37,7 +38,10 @@
     "ceo",
     "tyontekija",
     "kirjoittaja"
-   ]
+   ],
+   "moottori": "llama",
+   "ram_gb": 32,
+   "kuvat": false
   },
   {
    "nimi": "q6",
@@ -54,7 +58,34 @@
    "hinnasto": "",
    "roolit": [
     "yoajo"
-   ]
+   ],
+   "moottori": "llama",
+   "ram_gb": 32,
+   "kuvat": false
+  },
+  {
+   "nimi": "flashnext-iq3s",
+   "kuvaus": "Qwen3.8-Flash-Next GSQ-RCO abliterated IQ3_S Stratalla: raskaat aivot, 128K konteksti, kuvat",
+   "tyyppi": "chat",
+   "sijainti": "paikallinen",
+   "konteksti_max": 131072,
+   "vram_gb": 32,
+   "kuva": "aiops/strata:1",
+   "tiedosto": "gguf/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S-00001-of-00002.gguf",
+   "koko": 55063448064,
+   "manifesti": "config/mallit/sc117-qwen3.8-flash-next-gsq-rco-abliterated-iq3s.tsv",
+   "tarjoaja": "",
+   "hinnasto": "",
+   "roolit": [
+    "ceo",
+    "tyontekija",
+    "kirjoittaja",
+    "kuva_tulkki",
+    "kuva_tulkki_paikallinen"
+   ],
+   "moottori": "strata",
+   "ram_gb": 58,
+   "kuvat": true
   }
  ],
  "roolit": {
@@ -63,6 +94,30 @@
   "kirjoittaja": "hauhau-q6",
   "tarkastaja": "gpt-6.1-sol",
   "kallis_paattely": "gpt-6.1-sol",
-  "yoajo": "q6"
+  "yoajo": "q6",
+  "kuva_tulkki": "gpt-6.1-sol",
+  "kuva_tulkki_paikallinen": "flashnext-iq3s"
+ },
+ "profiilit": {
+  "raskas": {
+   "kuvaus": "Raskaat aivot: Flash-Next Stratalla, 128K konteksti, kuvat paikallisesti",
+   "ram_gb": 58,
+   "roolit": {
+    "ceo": "flashnext-iq3s",
+    "tyontekija": "flashnext-iq3s",
+    "kirjoittaja": "flashnext-iq3s",
+    "kuva_tulkki": "flashnext-iq3s"
+   }
+  },
+  "kevyt": {
+   "kuvaus": "Kevyet aivot: Hauhau 64K, kuvat pilvessä",
+   "ram_gb": 32,
+   "roolit": {
+    "ceo": "hauhau-q6",
+    "tyontekija": "hauhau-q6",
+    "kirjoittaja": "hauhau-q6",
+    "kuva_tulkki": "gpt-6.1-sol"
+   }
+  }
  }
 }
