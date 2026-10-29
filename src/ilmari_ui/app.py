@@ -30,7 +30,7 @@ from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT
 from . import kehitys
 from . import keskustelu as keskustelu_lukija
 from .mallit import (ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, OLETUS_ROOLIT as MALLIT_YLIKIRJOITUS,
-                     lue_mallit, lue_ylikirjoitus)
+                     RAM_MARGINAALI_GB, lue_mallit, lue_ylikirjoitus, vapaa_ram_gb)
 from .peruskirja import lue_peruskirja
 from .runs import ReadFailure, RunReader
 from .themes import SKINS, normalize_skin
@@ -496,7 +496,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             gateway_url = settings.identity.origin
         else:
             rekisteri = None
-        return render(request, "models", "Mallit", mallit=rekisteri, ylikirjoitus=ylikirjoitus, gateway_url=gateway_url)
+        vapaa = vapaa_ram_gb() if rekisteri is not None and rekisteri.tila == "ready" else None
+        return render(request, "models", "Mallit", mallit=rekisteri, ylikirjoitus=ylikirjoitus, gateway_url=gateway_url,
+                      vapaa_ram_gb=vapaa, ram_marginaali=RAM_MARGINAALI_GB)
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def settings_page(request: Request):

@@ -65,7 +65,64 @@ def test_ristiriitainen_julkaisu_ei_nay(tmp_path, muutos):
 
 def test_esimerkkiaineisto_kelpaa():
     k = lue_mallit(ESIMERKKI, omistaja=None)
-    assert k.tila == "ready" and k.roolit["ceo"] == "hauhau-q6" and len(k.mallit) == 3
+    assert k.tila == "ready" and k.roolit["ceo"] == "hauhau-q6" and len(k.mallit) == 4
+    assert set(k.profiilit) == {"raskas", "kevyt"} and k.nykyinen_profiili() == "kevyt"
+
+
+# --- Aivoprofiilit (aiops ADR-0029) -------------------------------------------------------------------------------
+
+RASKAS = {"kuvaus": "Raskaat", "ram_gb": 58, "roolit": {r: "flashnext" for r in ("ceo", "tyontekija", "kirjoittaja", "kuva_tulkki")}}
+KEVYT = {"kuvaus": "Kevyet", "ram_gb": 32, "roolit": {"ceo": "hauhau-q6", "tyontekija": "hauhau-q6",
+                                                      "kirjoittaja": "hauhau-q6", "kuva_tulkki": "sol"}}
+KAIKKI = ["ceo", "tyontekija", "kirjoittaja", "kuva_tulkki"]
+
+
+def julkaise_profiilit(hak: Path, profiilit, mallit=None):
+    mallit = mallit if mallit is not None else [
+        malli(roolit=KAIKKI), malli("flashnext", roolit=KAIKKI, moottori="strata", ram_gb=58, kuvat=True, konteksti_max=131072),
+        malli("sol", sijainti="pilvi", vram_gb=None, kuva="", tiedosto="", koko=0, manifesti="", tarjoaja="openai",
+              hinnasto="x", roolit=["kuva_tulkki"])]
+    data = json.dumps({"muoto": "aiops-mallit-v1", "commit": COMMIT, "mallit": mallit,
+                       "roolit": {r: "hauhau-q6" for r in KAIKKI[:3]} | {"kuva_tulkki": "sol"},
+                       "profiilit": profiilit}, ensure_ascii=False).encode("utf-8")
+    return julkaise(hak, mallit, raaka=data)
+
+
+def test_profiilit_luetaan_ja_nykyinen_paatellaan(tmp_path):
+    k = lue_mallit(julkaise_profiilit(tmp_path / "m", {"raskas": RASKAS, "kevyt": KEVYT}), omistaja=UID)
+    assert k.tila == "ready" and set(k.profiilit) == {"raskas", "kevyt"} and k.profiilit["raskas"]["ram_gb"] == 58
+    assert k.nykyinen_profiili() == "kevyt" and k.nykyinen_profiili(None) == "kevyt"
+    assert k.nykyinen_profiili({r: "flashnext" for r in KAIKKI}) == "raskas"
+    assert k.nykyinen_profiili({"ceo": "flashnext"}) is None            # vain osa vaihdettu
+    assert k.nykyinen_profiili({"kuva_tulkki": ""}) is None             # rooli poistettu
+    assert k.mallit[1]["moottori"] == "strata" and k.mallit[1]["kuvat"] and k.mallit[0]["moottori"] == ""
+    # ilman profiileja (vanha julkaisu) toimii kuten ennen
+    k2 = lue_mallit(julkaise(tmp_path / "v"), omistaja=UID)
+    assert k2.tila == "ready" and k2.profiilit == {} and k2.nykyinen_profiili() is None
+
+
+@pytest.mark.parametrize("profiilit", [
+    [], {"Iso": RASKAS}, {"raskas": {**RASKAS, "lisa": 1}}, {"raskas": {**RASKAS, "roolit": {"ceo": "flashnext"}}},
+    {"raskas": {**RASKAS, "roolit": {**RASKAS["roolit"], "kuva_tulkki": "tuntematon"}}},
+    {"raskas": {**RASKAS, "roolit": {**RASKAS["roolit"], "ceo": "sol"}}},   # sol ei tarjoa ceo-roolia
+    {"raskas": {**RASKAS, "ram_gb": "58"}}, {"raskas": {**RASKAS, "kuvaus": "a\x07"}},
+])
+def test_kelvoton_profiili_estaa_julkaisun(tmp_path, profiilit):
+    assert lue_mallit(julkaise_profiilit(tmp_path / "m", profiilit), omistaja=UID).tila == "error"
+
+
+@pytest.mark.parametrize("muutos", [{"moottori": 5}, {"ram_gb": "58"}, {"kuvat": "kyllä"}])
+def test_kelvoton_lisakentta_estaa_julkaisun(tmp_path, muutos):
+    assert lue_mallit(julkaise(tmp_path / "m", [malli(**muutos)]), omistaja=UID).tila == "error"
+
+
+def test_aivot_nakyvat_esimerkkitilassa_ja_vapaa_ram():
+    from ilmari_ui.mallit import vapaa_ram_gb
+    r = asiakas().get("/hub/mallit?demo=1")
+    assert r.status_code == 200 and "Aivot" in r.text and "<code>raskas</code>" in r.text and "käytössä" in r.text
+    assert "RAM 58 Gt" in r.text and "strata" in r.text and 'action="' not in r.text   # esimerkkitila: ei lomaketta
+    assert vapaa_ram_gb(Path("/proc/meminfo")) is None or vapaa_ram_gb(Path("/proc/meminfo")) > 0
+    assert vapaa_ram_gb(Path("/ei/ole")) is None
 
 
 def asiakas() -> TestClient:

@@ -29,8 +29,14 @@ RAJA_META = 4 * 1024
 MUOTO = "aiops-mallit-v1"
 META_KENTAT = frozenset({"muoto", "commit", "sha256", "koko", "maara", "julkaistu"})
 DATA_KENTAT = frozenset({"muoto", "commit", "mallit", "roolit"})
+DATA_VALINNAISET = frozenset({"profiilit"})          # aivoprofiilit (aiops ADR-0029)
 MALLI_KENTAT = frozenset({"nimi", "kuvaus", "tyyppi", "sijainti", "konteksti_max", "vram_gb", "kuva", "tiedosto",
                           "koko", "manifesti", "tarjoaja", "hinnasto", "roolit"})
+MALLI_VALINNAISET = frozenset({"moottori", "ram_gb", "kuvat"})   # ADR-0029: moottori, muistiraja, kuvat
+PROFIILI_KENTAT = frozenset({"kuvaus", "roolit", "ram_gb"})
+PROFIILIEN_ROOLIT = ("ceo", "tyontekija", "kirjoittaja", "kuva_tulkki")
+RAM_MARGINAALI_GB = 2
+MEMINFO = Path("/proc/meminfo")
 ROOLIT = (("ceo", "Ilmarin aivot (CEO)"), ("tyontekija", "Työntekijä (dsh)"), ("kirjoittaja", "Kirjoittaja"),
           ("tarkastaja", "Tarkastaja"), ("kallis_paattely", "Kallis päättely"), ("kuva_tulkki", "Kuvantulkinta (Hubin valinta)"),
           ("kuva_tulkki_pilvi", "Kuvantulkinta pilvessä"), ("kuva_tulkki_paikallinen", "Kuvantulkinta paikallisesti"),
@@ -59,6 +65,18 @@ class Mallit:
     meta: dict[str, Any] | None = None
     mallit: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     roolit: dict[str, str] = field(default_factory=dict)
+    profiilit: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def nykyinen_profiili(self, ylikirjoitus: dict[str, str] | None = None) -> str | None:
+        """Profiili, jonka kaikki roolit täsmäävät nykyisiin valintoihin (ylikirjoitus voittaa rekisterin), tai None."""
+        nyt = {**self.roolit, **{r: m for r, m in (ylikirjoitus or {}).items() if m}}
+        for r, m in (ylikirjoitus or {}).items():
+            if m == "":
+                nyt.pop(r, None)
+        for nimi, p in self.profiilit.items():
+            if all(nyt.get(r) == m for r, m in p["roolit"].items()):
+                return nimi
+        return None
 
     def roolirivit(self, ylikirjoitus: dict[str, str] | None = None) -> list[dict[str, Any]]:
         """Kaikki roolit järjestyksessä; täyttämätön rooli näkyy tyhjänä, ei nollana. Ylikirjoitus (Eliaksen valinta
@@ -95,8 +113,42 @@ def _tarkista_meta(meta: Any, data: bytes) -> None:
         _virhe("Julkaisu on kesken tai ristiriitainen (tiiviste ei täsmää).")
 
 
-def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[str, Any], ...], dict[str, str]]:
-    if not isinstance(sisalto, dict) or set(sisalto) != DATA_KENTAT:
+def vapaa_ram_gb(polku: Path = MEMINFO) -> float | None:
+    """Käytettävissä oleva RAM gigatavuina (MemAvailable), tai None. Sama laskutapa kuin aiopsin gatewayssa."""
+    try:
+        for rivi in polku.read_text(encoding="ascii").splitlines():
+            if rivi.startswith("MemAvailable:"):
+                return round(int(rivi.split()[1]) / 1_000_000, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _tarkista_profiilit(raaka: Any, mallit: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    if type(raaka) is not dict or len(raaka) > 10:
+        _virhe("Profiilit eivät ole taulu.")
+    nimet = {m["nimi"]: m for m in mallit}
+    tulos: dict[str, dict[str, Any]] = {}
+    for nimi, p in raaka.items():
+        if type(nimi) is not str or _NIMI.fullmatch(nimi) is None or type(p) is not dict or set(p) != PROFIILI_KENTAT:
+            _virhe("Profiilin kentät eivät vastaa muotoa.")
+        if type(p["kuvaus"]) is not str or len(p["kuvaus"]) > 300 or not _kelpaa(p["kuvaus"], False):
+            _virhe("Profiilin kuvaus ei kelpaa.")
+        if p["ram_gb"] is not None and type(p["ram_gb"]) is not int:
+            _virhe("Profiilin ram_gb ei ole kokonaisluku.")
+        roolit = p["roolit"]
+        if type(roolit) is not dict or set(roolit) != set(PROFIILIEN_ROOLIT):
+            _virhe("Profiilin roolit eivät vastaa muotoa.")
+        for rooli, malli in roolit.items():
+            if type(malli) is not str or malli not in nimet or rooli not in nimet[malli]["roolit"]:
+                _virhe("Profiilin rooli osoittaa malliin, joka ei tarjoa sitä.")
+        tulos[nimi] = {"nimi": nimi, "kuvaus": p["kuvaus"], "roolit": dict(roolit), "ram_gb": p["ram_gb"]}
+    return tulos
+
+
+def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[str, Any], ...], dict[str, str],
+                                                                    dict[str, dict[str, Any]]]:
+    if not isinstance(sisalto, dict) or not DATA_KENTAT <= set(sisalto) <= DATA_KENTAT | DATA_VALINNAISET:
         _virhe("mallit.json:n kentät eivät vastaa muotoa.")
     if sisalto["muoto"] != MUOTO or sisalto["commit"] != meta["commit"]:
         _virhe("mallit.json ei vastaa meta.json:ia.")
@@ -107,8 +159,12 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[st
     nahty: set[str] = set()
     mallit: list[dict[str, Any]] = []
     for m in lista:
-        if type(m) is not dict or set(m) != MALLI_KENTAT:
+        if type(m) is not dict or not MALLI_KENTAT <= set(m) <= MALLI_KENTAT | MALLI_VALINNAISET:
             _virhe("Mallin kentät eivät vastaa muotoa.")
+        if ("moottori" in m and (type(m["moottori"]) is not str or len(m["moottori"]) > 20 or not _kelpaa(m["moottori"], False))
+                or ("ram_gb" in m and m["ram_gb"] is not None and type(m["ram_gb"]) is not int)
+                or ("kuvat" in m and type(m["kuvat"]) is not bool)):
+            _virhe("Mallin moottori, ram_gb tai kuvat ei kelpaa.")
         tekstit = ("nimi", "kuvaus", "tyyppi", "sijainti", "kuva", "tiedosto", "manifesti", "tarjoaja", "hinnasto")
         if any(type(m[k]) is not str for k in tekstit) or any(type(m[k]) is not int for k in ("konteksti_max", "koko")):
             _virhe("Mallin kenttä on väärää tyyppiä.")
@@ -123,8 +179,8 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[st
         if any(len(m[k]) > 300 or not _kelpaa(m[k], False) for k in tekstit):
             _virhe("Mallin kenttä on liian pitkä tai sisältää kielletyn merkin.")
         nahty.add(m["nimi"])
-        mallit.append({**m, "sijainti_teksti": SIJAINNIT[m["sijainti"]], "tyyppi_teksti": TYYPIT[m["tyyppi"]],
-                       "koko_gb": round(m["koko"] / 1e9, 1) if m["koko"] else None})
+        mallit.append({"moottori": "", "ram_gb": None, "kuvat": False, **m, "sijainti_teksti": SIJAINNIT[m["sijainti"]],
+                       "tyyppi_teksti": TYYPIT[m["tyyppi"]], "koko_gb": round(m["koko"] / 1e9, 1) if m["koko"] else None})
     if type(roolit) is not dict:
         _virhe("Roolit eivät ole taulu.")
     for rooli, nimi in roolit.items():
@@ -132,7 +188,8 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[st
             _virhe("Rooli osoittaa tuntemattomaan malliin.")
         if rooli not in next(m["roolit"] for m in mallit if m["nimi"] == nimi):
             _virhe("Rooli osoittaa malliin, joka ei tarjoa sitä.")
-    return tuple(mallit), dict(roolit)
+    profiilit = _tarkista_profiilit(sisalto["profiilit"], mallit) if "profiilit" in sisalto else {}
+    return tuple(mallit), dict(roolit), profiilit
 
 
 def lue_mallit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: float = 2.0) -> Mallit:
@@ -150,8 +207,8 @@ def lue_mallit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: f
             meta_raaka = _lue(hd, META, omistaja, deadline, RAJA_META)
         meta = _json(meta_raaka)
         _tarkista_meta(meta, data)
-        mallit, roolit = _tarkista_sisalto(_json(data), meta)
-        return Mallit("ready", None, meta, mallit, roolit)
+        mallit, roolit, profiilit = _tarkista_sisalto(_json(data), meta)
+        return Mallit("ready", None, meta, mallit, roolit, profiilit)
     except ReadFailure as error:
         if error.code == "not_found":
             return Mallit("not_published", "Mallirekisteriä ei ole julkaistu. aiopsin asennus (deploy.sh) julkaisee sen.")
