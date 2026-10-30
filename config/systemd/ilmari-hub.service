@@ -13,6 +13,7 @@
 #   BindReadOnlyPaths=-/srv/aiops/ilmari/kehitys ja -/srv/aiops/ilmari/kayttoonotot (aiops ADR-0024: Kehitä-näkymä;
 #       kehitys on gatewayn ja rootin kirjoittama, kayttoonotot käyttöönoton kääreen julkaisema)
 #   BindReadOnlyPaths=-/srv/aiops/ilmari/mallit (aiops istunto 3: mallirekisteri, deploy.sh julkaisee)
+#   BindReadOnlyPaths=-/srv/aiops/ilmari/jarjestelma (aiops 30.10.2026: koneen mittarit, dispatcher julkaisee)
 #   BindReadOnlyPaths=-/srv/aiops/ilmari/keskustelu (28.10.: gateway julkaisee keskustelun; Hub on pääpaikka)
 #   BindReadOnlyPaths=-/srv/aiops/ilmari/roolit (ADR-0025 kohta 5: Eliaksen roolivalinnat, gateway kirjoittaa)
 #       Peruskirja, jonka aiopsin deploy.sh julkaisee (root:ilmari-julkaisu). Miinus: puuttuva hakemisto ei estä
@@ -56,6 +57,7 @@ BindReadOnlyPaths=-/srv/aiops/ilmari/kayttoonotot
 BindReadOnlyPaths=-/srv/aiops/ilmari/mallit
 BindReadOnlyPaths=-/srv/aiops/ilmari/keskustelu
 BindReadOnlyPaths=-/srv/aiops/ilmari/roolit
+BindReadOnlyPaths=-/srv/aiops/ilmari/jarjestelma
 InaccessiblePaths=/etc/aiops
 
 # Ei verkkoa: polkuun sidottu Unix-soketti toimii ilman verkkoa
