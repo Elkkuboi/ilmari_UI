@@ -473,16 +473,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                           "toive_url": gateway_polku("/kehita?" + urlencode({"toive": toive[:1500]}), data["demo"])})
         return rivit
 
+    def mallin_tila(request: Request) -> dict[str, Any] | None:
+        """Ilmarin mallin tila gatewayn keskustelujulkaisusta (tila, dsh-työ): Kehitä-lomake kertoo, alkaako työ heti.
+        None, kun julkaisua ei ole."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            k = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.ESIMERKKI)
+        elif settings.identity is not None:
+            k = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+        else:
+            return None
+        return k.malli if k.tila == "ready" else None
+
     @app.get("/hub/kehita", response_class=HTMLResponse)
     async def develop(request: Request):
+        """Kehitä Hubissa (aiops 31.10.: Hub ensisijaiseksi): toive jätetään tästä gatewaylle (paluu=hub), lista
+        näyttää käynnissä olevan työn viimeisimmän etenemisrivin ja päivittyy itsestään, kun työ on kesken."""
         data = context(request, "develop", "Kehitä")
         juuri, historia_juuri, omistajat, omistaja = kehityslahteet(request)
         tyot = kehitys.lue_kehitystyot(juuri, omistajat=omistajat) if juuri is not None else None
         historia = kehitys.lue_kayttoonotot(historia_juuri, omistaja=omistaja) if historia_juuri is not None else None
+        gateway_url = settings.identity.origin if settings.identity is not None and not data["demo"] else None
         data.update(tyot=tyot, lahde=juuri is not None, historia=historia, ehdotukset=yoajon_ehdotukset(data),
-                    gateway=lambda polku: gateway_polku(polku, data["demo"]),
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]), gateway_url=gateway_url,
+                    lahteet=kehitys.LAHTEET, malli=mallin_tila(request), toive=request.query_params.get("toive", "")[:4000],
                     claude_code_url="https://claude.ai/code")
-        return templates.TemplateResponse(request=request, name="develop.html", context=data)
+        response = templates.TemplateResponse(request=request, name="develop.html", context=data)
+        if tyot and any(t.meta.get("tila") not in kehitys.LOPULLISET for t in tyot[:5]):
+            response.headers["Refresh"] = "15"
+        return response
 
     @app.get("/hub/kehita/{tyo}", response_class=HTMLResponse)
     async def develop_detail(request: Request, tyo: str):
@@ -491,9 +509,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         t = kehitys.lue_kehitystyo(juuri, int(tyo), omistajat=omistajat) if juuri is not None and kehitys._TYO.fullmatch(tyo) else None
         if t is None:
             return render_error(request, 404, "Kehitystyötä ei löydy", "Työtä ei ole julkaistu. Palaa Kehitä-näkymään.")
-        data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe,
-                    gateway=lambda polku: gateway_polku(polku, data["demo"]))
-        return templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
+        gateway_url = settings.identity.origin if settings.identity is not None and not data["demo"] else None
+        data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe, toimet=t.toimet,
+                    diffit=kehitys.jaa_diff(t.tekstit["muutos.diff"]) if "muutos.diff" in t.tekstit else [],
+                    gateway=lambda polku: gateway_polku(polku, data["demo"]), gateway_url=gateway_url)
+        response = templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
+        if t.kesken:
+            response.headers["Refresh"] = "15"
+        return response
 
     @app.get("/hub/mallit", response_class=HTMLResponse)
     async def models(request: Request):

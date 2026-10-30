@@ -1,4 +1,21 @@
-# ilmari_UI: tämän repositorion tilanne 20.10.2026
+# ilmari_UI: tämän repositorion tilanne 31.10.2026
+
+## Päivitys 31.10.2026: Kehitä Hubissa ensisijaisesti (aiops ADR-0024 tarkennus 31.10.)
+
+- `/hub/kehita`: toive jätetään Hubista (teksti ja lähde aiops tai Ravintopolku) lomakkeella gatewayn `/kehita`-reittiin
+  samassa alkuperässä kentällä `paluu=hub`; gateway palaa Hubin työn sivulle. Mallin tila luetaan gatewayn
+  keskustelujulkaisusta (`viestit.json` `malli`), jotta lomake kertoo, alkaako työ heti. Lista näyttää käynnissä olevan
+  työn viimeisimmän etenemisrivin ja päivittyy 15 s välein, kun jokin viidestä uusimmasta on kesken.
+- `/hub/kehita/<työ>`: "Ilmari nyt" (meta.json `eteneminen`, enintään 10 riviä à 200 merkkiä), diff tiedostoittain
+  (`kehitys.jaa_diff`: +/− määrät, rivit lajeittain, 200 tiedostoa / 4000 riviä), toimet tilan mukaan (`Kehitystyo.toimet`):
+  Hyväksy, Ota käyttöön ja Palauta edelliseen linkkeinä gatewayn passkey-sivuille `?paluu=hub`, Hylkää ja Pyydä muutosta
+  lomakkeina gatewaylle. Sivu päivittyy itsestään, kun työ, yhdistys, käyttöönotto tai palautus on kesken (`kesken`).
+  Uusi tiedosto `palautus.json` (sama muoto kuin käyttöönotto) ja `kayttoonotto.json`-kenttä `edellinen`.
+- ANSI-värikoodit siivotaan näytettävistä teksteistä (npm:n ja vitestin tulosteet).
+- Navigaatio: Kehitä on puhelimen alapalkissa (Koti, Keskustelu, Kehitä, Ajot, Sovellukset).
+- Hub ei edelleenkään kirjoita mitään: kaikki toimet ovat gatewayn reittejä, jotka tarkistavat tilan itse.
+- Testit: 698 passed, 69 skipped (ilman selainryhmää ja roottia).
+
 
 ## Päivitys 20.10.2026: sääntöpaneeli (aiops ADR-0017, ADR-0013 tarkennus 2026-10-20)
 

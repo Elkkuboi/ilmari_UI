@@ -589,6 +589,32 @@ td a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .dev-list li { padding: 14px 0; border-bottom: 1px solid var(--il-border); overflow-wrap: anywhere; }
 .dev-list li:last-child { border: 0; }
 .dev-list .badge { margin-top: 6px; }
+.dev-now { color: var(--il-text-muted); font-style: italic; }
+/* Hub ensisijaiseksi (31.10.): toive, muutospyyntö ja toimet Hubissa, lomakkeet gatewaylle */
+.dev-form form, .dev-change form { display: grid; gap: 10px; }
+.dev-form label, .dev-change label { display: block; font-size: .75rem; color: var(--il-text-muted); }
+.dev-form textarea, .dev-change textarea { width: 100%; resize: vertical; min-height: 90px; padding: 12px; border: 1px solid var(--il-border-strong); border-radius: 10px; background: var(--il-bg); color: var(--il-text); font-size: .85rem; line-height: 1.6; }
+.dev-form select { margin-left: 6px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--il-border-strong); border-radius: 8px; background: var(--il-bg); color: var(--il-text); font-size: .8rem; }
+.dev-form-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.dev-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 6px; align-items: center; }
+.dev-actions form { margin: 0; }
+.dev-change { margin-top: 12px; }
+.dev-change summary { cursor: pointer; font-weight: 550; }
+.dev-change form { margin-top: 10px; }
+/* Diff tiedostoittain (31.10.) */
+.diff-file { margin: 10px 0; border: 1px solid var(--il-border); border-radius: 12px; overflow: hidden; }
+.diff-file summary { cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: .8rem; }
+.diff-counts { font: .75rem ui-monospace, SFMono-Regular, Consolas, monospace; }
+.diff-plus { color: var(--il-success); }
+.diff-minus { color: var(--il-danger); }
+.diff-body { border-radius: 0; line-height: 1.55; padding: 12px 0; }
+.diff-line { display: block; padding: 0 14px; }
+.diff-line--add { background: var(--il-success-soft); color: var(--il-text); }
+.diff-line--del { background: var(--il-danger-soft); color: var(--il-text); }
+.diff-line--hunk { color: var(--il-accent); margin-top: 6px; }
+.diff-line--meta { color: var(--il-text-subtle); }
+.progress-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--il-text-muted); font-size: .85rem; overflow-wrap: anywhere; }
+.progress-list .is-now { color: var(--il-text); font-weight: 600; }
 
 /* Keskustelu Hubissa (28.10.) */
 .chat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }

@@ -9,5 +9,11 @@
  "syy": "käynnissä",
  "kesto": "3 min tähän mennessä",
  "paivitetty": "2026-10-28T13:03:00+00:00",
- "lahde": "ravintopolku"
+ "lahde": "ravintopolku",
+ "eteneminen": [
+  "13:00:10 malli vastaa",
+  "13:00:11 dsh alkaa",
+  "Let me read AGENTS.md and docs/TILANNE.md first.",
+  "Suunnittelen SearXNG:n käynnistysohjeen paikan: docs/ARKKITEHTUURI.md vai muutosloki."
+ ]
 }

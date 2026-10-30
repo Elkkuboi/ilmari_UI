@@ -82,7 +82,7 @@ def test_vieraat_kentat_ja_tyypit_siivotaan(tmp_path):
     assert t.meta["tulos"]["testit"] == {"paluukoodi": 0, "yhteenveto": ""} and t.meta["tulos"]["tiedostot"] == []
     assert t.meta["tiedostot"] == ["muutos.diff"] and "ylimaarainen" not in t.meta
     assert t.paatos is None and t.yhdistys == {"tila": "yhdistetty", "teksti": "Yhdistetty mainiin", "commit": "",
-                                                "viesti": "", "aika": "", "paluukoodi": None}
+                                                "viesti": "", "aika": "", "paluukoodi": None, "edellinen": ""}
 
 
 @pytest.mark.parametrize("m", [meta(tyo=42), meta(tila="outo"), "ei objekti", {"tyo": 41}])
@@ -170,3 +170,63 @@ def test_esimerkkiaineisto_kelpaa():
     assert [t.tyo for t in tyot] == [42, 41, 40] and all(t.virheet == () for t in tyot)
     assert lue_kehitystyo(ESIMERKKI, 41).vaihe == ("Otettu käyttöön", "success")
     assert lue_kayttoonotot(ESIMERKKI_KAYTTOONOTOT, omistaja=None).tila == "ready"
+
+
+# --- 31.10.: eteneminen, palautus, toimet ja diff tiedostoittain ------------------------------------------------------
+
+
+def test_eteneminen_ja_ansi_siivotaan(tmp_path):
+    m = meta(tila="running", tulos={"paluukoodi": 0, "testit": {"paluukoodi": 0, "yhteenveto": "\x1b[2m Duration \x1b[22m 343ms"}},
+             eteneminen=["11:05 dsh alkaa", 5, "  ", "Luen README.md\x07", "x" * 300] + ["y"] * 20)
+    julkaise(tmp_path, m=m)
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.meta["eteneminen"][:2] == ["11:05 dsh alkaa", "Luen README.md"] and len(t.meta["eteneminen"][2]) == 200
+    assert len(t.meta["eteneminen"]) <= 10 and t.kesken is True and t.vaihe == ("Käynnissä", "muted")
+    assert t.meta["tulos"]["testit"]["yhteenveto"] == " Duration  343ms"
+    julkaise(tmp_path, m=meta(eteneminen="ei lista"))
+    assert lue_kehitystyo(tmp_path, 41, omistajat=OMAT).meta["eteneminen"] == []
+
+
+def test_palautus_ja_toimet(tmp_path):
+    k = {"tulos": "asennettu", "viesti": "ok", "paluukoodi": 0, "edellinen": "e" * 40}
+    p = {"paatos": "hyvaksytty", "aika": "x", "kuka": "elias", "commit": PAA, "kayttoonotto_pyynto": "k"}
+    julkaise(tmp_path, paatos=p, yhdistys={"tila": "yhdistetty", "commit": "d" * 40}, kayttoonotto=k)
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.kayttoonotto["edellinen"] == "e" * 40 and t.toimet["palauta"] is True and t.kesken is False
+    assert t.toimet == {"hyvaksy": False, "hylkaa": False, "muutos": False, "kayttoonotto": False, "palauta": True}
+    julkaise(tmp_path, paatos={**p, "palautus_pyynto": "q", "palautus_commit": "e" * 40, "palautus_aika": "x"},
+             yhdistys={"tila": "yhdistetty", "commit": "d" * 40}, kayttoonotto=k)
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.vaihe == ("Palautus pyydetty", "accent") and t.kesken is True and t.toimet["palauta"] is False
+    julkaise(tmp_path, paatos={**p, "palautus_pyynto": "q"}, yhdistys={"tila": "yhdistetty", "commit": "d" * 40},
+             kayttoonotto=k, palautus={"tulos": "asennettu", "viesti": "Tulos: asennettu", "paluukoodi": 0})
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.vaihe == ("Palautettu edelliseen", "success") and t.kesken is False
+    julkaise(tmp_path, paatos={**p, "palautus_pyynto": "q"}, yhdistys={"tila": "yhdistetty", "commit": "d" * 40},
+             kayttoonotto=k, palautus={"tulos": "virhe", "viesti": "x", "paluukoodi": 2})
+    assert lue_kehitystyo(tmp_path, 41, omistajat=OMAT).vaihe == ("Palautus: virhe", "danger")
+    # ilman edellistä ei palautusta; valmis työ ilman päätöstä: hyväksy, hylkää, muutos (omat hakemistot: julkaise lisää)
+    a, b, c, d = (tmp_path / n for n in "abcd")
+    julkaise(a, paatos=p, yhdistys={"tila": "yhdistetty", "commit": "d" * 40}, kayttoonotto={**k, "edellinen": "lyhyt"})
+    assert lue_kehitystyo(a, 41, omistajat=OMAT).toimet["palauta"] is False
+    julkaise(b)
+    t = lue_kehitystyo(b, 41, omistajat=OMAT)
+    assert t.toimet == {"hyvaksy": True, "hylkaa": True, "muutos": True, "kayttoonotto": False, "palauta": False}
+    julkaise(c, paatos={"paatos": "hyvaksytty", "aika": "x", "kuka": "elias"})
+    t = lue_kehitystyo(c, 41, omistajat=OMAT)
+    assert t.kesken is True and not any(t.toimet.values())
+    julkaise(d, paatos={"paatos": "hyvaksytty", "aika": "x", "kuka": "elias"}, yhdistys={"tila": "yhdistetty", "commit": "d" * 40})
+    assert lue_kehitystyo(d, 41, omistajat=OMAT).toimet["kayttoonotto"] is True
+
+
+def test_diff_jaetaan_tiedostoittain():
+    from ilmari_ui.kehitys import jaa_diff
+    teksti = ("diff --git a/src/a.py b/src/a.py\nindex 1..2 100644\n--- a/src/a.py\n+++ b/src/a.py\n@@ -1,2 +1,3 @@\n x\n-y\n+y2\n+z\n"
+              "diff --git a/kuva.png b/kuva.png\nBinary files a/kuva.png and b/kuva.png differ\n")
+    d = jaa_diff(teksti)
+    assert [x["tiedosto"] for x in d] == ["src/a.py", "kuva.png"]
+    assert (d[0]["lisatty"], d[0]["poistettu"], d[1]["binaari"]) == (2, 1, True)
+    assert [l for l, _ in d[0]["rivit"]] == ["meta", "meta", "meta", "meta", "hunk", "ctx", "del", "add", "add"]
+    assert jaa_diff("") == [] and jaa_diff("+rivi\n")[0]["tiedosto"] == "(ilman otsikkoa)"
+    iso = "diff --git a/x b/x\n" + "+r\n" * 5000
+    assert jaa_diff(iso)[0]["leikattu"] is True and len(jaa_diff(iso)[0]["rivit"]) <= 4000

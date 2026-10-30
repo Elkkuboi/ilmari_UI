@@ -8,8 +8,11 @@ Kaksi lähdettä:
 - /srv/aiops/ilmari/kayttoonotot/: käyttöönoton kääre (root) julkaisee historian historia.json + meta.json
   SHA-256:lla, sama malli kuin dokumenteissa.
 
-Hub ei kirjoita mitään eikä tee toimia: Hyväksy, Hylkää, Pyydä muutosta ja Ota käyttöön ovat gatewayn sivuja, joihin
-tästä vain linkitetään (passkey gatewayssa). Tiedostot luetaan peruskirjan lukijalla (linkkejä seuraamatta, kokorajat,
+Hub ei kirjoita mitään eikä tee toimia: Hyväksy, Ota käyttöön ja Palauta edelliseen ovat gatewayn passkey-sivuja, joihin
+tästä linkitetään (paluu=hub tuo takaisin), ja toive, muutospyyntö ja hylkäys ovat tavallisia lomakkeita, jotka
+lähetetään gatewaylle samassa alkuperässä (aiops 31.10.2026: Hub on Kehitä-polun ensisijainen näkymä).
+Käynnissä olevan työn eteneminen (meta.json `eteneminen`: kontin vaiheet ja dsh:n päättelyn alkurivit) näytetään
+sellaisenaan ilman ohjausmerkkejä; diff jaetaan tiedostoittain näyttöä varten (jaa_diff). Tiedostot luetaan peruskirjan lukijalla (linkkejä seuraamatta, kokorajat,
 aikaraja), JSON tiukasti (ei toistuvia kenttiä, ei vakioita) ja tekstit näytetään vain ilman ohjausmerkkejä.
 """
 
@@ -35,6 +38,7 @@ ESIMERKKI_KAYTTOONOTOT = Path(__file__).resolve().parent / "demo" / "kayttoonoto
 GATEWAY_KAYTTAJA = "aiops-gw"
 TOITA_MAX = 50
 RAJAT = {"meta.json": 256 * 1024, "paatos.json": 16 * 1024, "yhdistys.json": 16 * 1024, "kayttoonotto.json": 16 * 1024,
+         "palautus.json": 16 * 1024,
          "muutos.diff": 1024 * 1024 + 256, "muutos-stat.txt": 64 * 1024 + 256, "vastaus.md": 64 * 1024 + 256,
          "testit.txt": 256 * 1024 + 256, "aiops-dsh.log": 64 * 1024 + 256, "dsh-stderr.log": 256 * 1024 + 256}
 TEKSTIT = ("muutos.diff", "muutos-stat.txt", "vastaus.md", "testit.txt", "aiops-dsh.log", "dsh-stderr.log")
@@ -48,6 +52,15 @@ KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin m
                 "testit_epaonnistuivat": "Testit epäonnistuivat", "tyot_kaynnissa": "Töitä käynnissä, yritä myöhemmin",
                 "palautettu": "Palautettu edelliseen", "palautus_epaonnistui": "Palautus epäonnistui", "virhe": "Virhe",
                 "hylatty": "Pyyntö hylätty"}
+PALAUTUKSET = {"asennettu": "Palautettu edelliseen", **{k: "Palautus: " + v.lower() for k, v in KAYTTOONOTOT.items()
+                                                           if k != "asennettu"}}
+LOPULLISET = ("succeeded", "failed", "cancelled")
+ETENEMINEN_MAX = 10
+ETENEMINEN_RIVI_MAX = 200
+# Kehityslähteet (aiops ADR-0030, kehitys.LAHTEET): lomakkeen valinnat; gateway tarkistaa arvon joka tapauksessa.
+LAHTEET = (("aiops", "aiops (Ilmarin oma koodi)"), ("ravintopolku", "Ravintopolku (ravintopäiväkirja)"))
+DIFF_TIEDOSTOJA_MAX = 200
+DIFF_RIVEJA_MAX = 4000
 MUOTO_KAYTTOONOTOT = "aiops-kayttoonotot-v1"
 META_KENTAT = frozenset({"muoto", "commit", "sha256", "koko", "maara", "julkaistu"})
 HISTORIA_KENTAT = frozenset({"muoto", "commit", "kayttoonotot"})
@@ -74,10 +87,16 @@ class Kehitystyo:
     kayttoonotto: dict[str, Any] | None = None
     tekstit: dict[str, str] = field(default_factory=dict)
     virheet: tuple[str, ...] = ()
+    palautus: dict[str, Any] | None = None
 
     @property
     def vaihe(self) -> tuple[str, str]:
         """(teksti, sävy): yksi rivi, joka kertoo, missä työ on menossa."""
+        if self.palautus is not None:
+            t = self.palautus.get("tulos", "virhe")
+            return PALAUTUKSET.get(t, "Palautus: " + str(t)), "success" if t == "asennettu" else "danger"
+        if self.paatos is not None and self.paatos.get("palautus_pyynto"):
+            return "Palautus pyydetty", "accent"
         if self.kayttoonotto is not None:
             t = self.kayttoonotto.get("tulos", "virhe")
             return KAYTTOONOTOT.get(t, "Käyttöönotto: " + str(t)), "success" if t == "asennettu" else "danger"
@@ -98,6 +117,34 @@ class Kehitystyo:
         if tila in ("failed", "cancelled"):
             return TILAT[tila].capitalize(), "danger"
         return TILAT.get(tila, tila or "tuntematon").capitalize(), "muted"
+
+    @property
+    def kesken(self) -> bool:
+        """Sivu päivittyy itsestään: työ käynnissä tai pyydetty yhdistys, käyttöönotto tai palautus odottaa vastausta."""
+        p = self.paatos or {}
+        return (self.meta.get("tila") not in LOPULLISET
+                or (p.get("paatos") == "hyvaksytty" and self.yhdistys is None)
+                or bool(p.get("kayttoonotto_pyynto") and self.kayttoonotto is None)
+                or bool(p.get("palautus_pyynto") and self.palautus is None))
+
+    @property
+    def toimet(self) -> dict[str, bool]:
+        """Mitkä gatewayn toimet ovat tässä tilassa mahdollisia (gateway tarkistaa saman itse)."""
+        p = self.paatos or {}
+        tulos = self.meta.get("tulos") or {}
+        valmis = self.meta.get("tila") == "succeeded"
+        lopullinen = self.meta.get("tila") in LOPULLISET
+        haara = bool(tulos.get("haara")) and (tulos.get("commiteja") or 0) > 0
+        return {
+            "hyvaksy": valmis and haara and not p,
+            "hylkaa": lopullinen and not p and (haara or valmis),
+            "muutos": lopullinen and haara and p.get("paatos") != "hyvaksytty",
+            "kayttoonotto": (self.yhdistys or {}).get("tila") == "yhdistetty" and p.get("paatos") == "hyvaksytty"
+            and not p.get("kayttoonotto_pyynto"),
+            "palauta": (self.kayttoonotto or {}).get("tulos") == "asennettu"
+            and _COMMIT.fullmatch((self.kayttoonotto or {}).get("edellinen") or "") is not None
+            and not p.get("palautus_pyynto"),
+        }
 
 
 @dataclass(frozen=True)
@@ -131,11 +178,15 @@ def _teksti(data: bytes, raja: int) -> str:
     return puhdas[:raja]
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
 def _siisti(arvo: Any, raja: int = 2000, rivinvaihdot: bool = False) -> str:
-    """Näytettävä merkkijono: vain merkkijonot kelpaavat, ohjausmerkit pois, pituus rajattu."""
+    """Näytettävä merkkijono: vain merkkijonot kelpaavat, ANSI-värikoodit (npm:n ja vitestin tulosteet) ja
+    ohjausmerkit pois, pituus rajattu."""
     if type(arvo) is not str:
         return ""
-    puhdas = "".join(c for c in arvo.replace("\r\n", "\n") if _kelpaa(c, rivinvaihdot))
+    puhdas = "".join(c for c in _ANSI.sub("", arvo.replace("\r\n", "\n")) if _kelpaa(c, rivinvaihdot))
     return puhdas[:raja]
 
 
@@ -165,8 +216,10 @@ def _siivoa_meta(tyo: int, meta: Any) -> dict[str, Any]:
         "testit": None if testit_raaka is None else {"paluukoodi": _kokonaisluku(testit_raaka.get("paluukoodi")),
                                                      "yhteenveto": _siisti(testit_raaka.get("yhteenveto"), 300)},
     }
+    eteneminen_raaka = meta.get("eteneminen") if isinstance(meta.get("eteneminen"), list) else []
     return {
         "tyo": tyo, "toive": _siisti(meta.get("toive"), 4000, rivinvaihdot=True), "jatka": _kokonaisluku(meta.get("jatka")),
+        "eteneminen": [_siisti(r, ETENEMINEN_RIVI_MAX) for r in eteneminen_raaka[:ETENEMINEN_MAX] if type(r) is str and r.strip()],
         "luotu": _siisti(meta.get("luotu"), 40), "paivitetty": _siisti(meta.get("paivitetty"), 40),
         "jattaja": _siisti(meta.get("jattaja"), 40), "tila": tila, "tila_teksti": TILAT[tila],
         "lahde": _siisti(meta.get("lahde"), 40),  # kehityslähde (aiops ADR-0030); vanhoilla töillä tyhjä
@@ -187,7 +240,10 @@ def _siivoa_paatos(paatos: Any) -> dict[str, Any] | None:
             "kuka": _siisti(paatos.get("kuka"), 40), "commit": _siisti(paatos.get("commit"), 64),
             "kayttoonotto_pyynto": _siisti(paatos.get("kayttoonotto_pyynto"), 120),
             "kayttoonotto_commit": _siisti(paatos.get("kayttoonotto_commit"), 64),
-            "kayttoonotto_aika": _siisti(paatos.get("kayttoonotto_aika"), 40)}
+            "kayttoonotto_aika": _siisti(paatos.get("kayttoonotto_aika"), 40),
+            "palautus_pyynto": _siisti(paatos.get("palautus_pyynto"), 120),
+            "palautus_commit": _siisti(paatos.get("palautus_commit"), 64),
+            "palautus_aika": _siisti(paatos.get("palautus_aika"), 40)}
 
 
 def _siivoa_vastaus(vastaus: Any, tilat: dict[str, str], avain: str) -> dict[str, Any] | None:
@@ -198,7 +254,8 @@ def _siivoa_vastaus(vastaus: Any, tilat: dict[str, str], avain: str) -> dict[str
         return None
     return {avain: t, "teksti": tilat[t], "commit": _siisti(vastaus.get("commit"), 64),
             "viesti": _siisti(vastaus.get("viesti"), 600), "aika": _siisti(vastaus.get("aika"), 40),
-            "paluukoodi": _kokonaisluku(vastaus.get("paluukoodi"))}
+            "paluukoodi": _kokonaisluku(vastaus.get("paluukoodi")),
+            "edellinen": _siisti(vastaus.get("edellinen"), 64)}
 
 
 def _lue_json(hd: int, nimi: str, omistajat: frozenset[int] | None, deadline: float) -> Any | None:
@@ -239,7 +296,8 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
                 osat: dict[str, Any] = {}
                 for nimi, siivoa in (("paatos.json", _siivoa_paatos),
                                      ("yhdistys.json", lambda v: _siivoa_vastaus(v, YHDISTYKSET, "tila")),
-                                     ("kayttoonotto.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos"))):
+                                     ("kayttoonotto.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos")),
+                                     ("palautus.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos"))):
                     try:
                         osat[nimi] = siivoa(_lue_json(hd, nimi, omistajat, deadline))
                     except ReadFailure as error:
@@ -259,10 +317,10 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
             return None
         return Kehitystyo(tyo, {"tyo": tyo, "toive": "", "tila": "failed", "tila_teksti": "ei luettavissa", "syy": "",
                                 "tulos": None, "tiedostot": [], "jatka": None, "luotu": "", "paivitetty": "",
-                                "jattaja": "", "kesto": "", "valmis": False, "lahde": ""},
+                                "jattaja": "", "kesto": "", "valmis": False, "lahde": "", "eteneminen": []},
                           virheet=(f"meta.json: {VIESTIT.get(error.code, error.message)}",))
     return Kehitystyo(tyo, meta, osat["paatos.json"], osat["yhdistys.json"], osat["kayttoonotto.json"], tekstit_luettu,
-                      tuple(virheet))
+                      tuple(virheet), palautus=osat["palautus.json"])
 
 
 def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None,
@@ -288,6 +346,59 @@ def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None
         if t is not None:
             tyot.append(t)
     return tuple(tyot)
+
+
+def jaa_diff(teksti: str) -> list[dict[str, Any]]:
+    """Unified diff tiedostoittain näyttöä varten (31.10.): jokaiselle tiedostolle nimi, lisättyjen ja poistettujen
+    rivien määrät ja rivit lajeineen (meta, hunk, add, del, ctx). Teksti on jo siivottu (_teksti). Rivimäärä ja
+    tiedostomäärä on rajattu; ylimenevä osa jää pois ja merkitään `leikattu`."""
+    tiedostot: list[dict[str, Any]] = []
+    nykyinen: dict[str, Any] | None = None
+    riveja = 0
+    for rivi in teksti.split("\n"):
+        if rivi.startswith("diff --git "):
+            if len(tiedostot) >= DIFF_TIEDOSTOJA_MAX:
+                nykyinen = None
+                break
+            osat = rivi.split(" ")
+            nimi = osat[-1][2:] if len(osat) >= 4 and osat[-1].startswith("b/") else rivi[len("diff --git "):]
+            nykyinen = {"tiedosto": nimi[:300], "lisatty": 0, "poistettu": 0, "rivit": [], "leikattu": False, "binaari": False}
+            tiedostot.append(nykyinen)
+            laji = "meta"
+        elif nykyinen is None:
+            if not rivi.strip():
+                continue
+            nykyinen = {"tiedosto": "(ilman otsikkoa)", "lisatty": 0, "poistettu": 0, "rivit": [], "leikattu": False,
+                        "binaari": False}
+            tiedostot.append(nykyinen)
+            laji = _diff_laji(rivi, nykyinen)
+        else:
+            laji = _diff_laji(rivi, nykyinen)
+        riveja += 1
+        if riveja > DIFF_RIVEJA_MAX:
+            nykyinen["leikattu"] = True
+            break
+        nykyinen["rivit"].append((laji, rivi))
+    return tiedostot
+
+
+def _diff_laji(rivi: str, tiedosto: dict[str, Any]) -> str:
+    if rivi.startswith("@@"):
+        return "hunk"
+    if rivi.startswith("+++ ") or rivi.startswith("--- "):
+        return "meta"
+    if rivi.startswith("+"):
+        tiedosto["lisatty"] += 1
+        return "add"
+    if rivi.startswith("-"):
+        tiedosto["poistettu"] += 1
+        return "del"
+    if rivi.startswith(("index ", "new file", "deleted file", "similarity", "rename ", "old mode", "new mode")):
+        return "meta"
+    if rivi.startswith("Binary files"):
+        tiedosto["binaari"] = True
+        return "meta"
+    return "ctx"
 
 
 def _tarkista_historia(meta: Any, data: bytes) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
