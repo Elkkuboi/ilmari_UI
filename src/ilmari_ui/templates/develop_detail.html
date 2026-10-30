@@ -2,7 +2,7 @@
 {% from 'macros.html' import icon, badge, empty with context %}
 {% block content %}
 {% set vaihe_teksti, savy = vaihe %}
-<div class="page-heading"><div><span class="eyebrow">KEHITYSTYÖ {{ t.tyo }}{% if meta.jatka %} · JATKAA TYÖTÄ {{ meta.jatka }}{% endif %}</span><h1>{{ meta.toive.split('\n')[0][:120] or 'Kehitystyö' }}</h1><p><span class="badge badge--{{ savy }}">{{ vaihe_teksti }}</span> {{ meta.tila_teksti }}{% if meta.syy %} · {{ meta.syy }}{% endif %}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}</p></div><div class="page-heading-actions"><a href="{{ url('/hub/kehita') }}">Kaikki kehitystyöt</a> <a class="text-link" href="{{ gateway('/kehitys/' ~ t.tyo) }}">Päätä gatewayssa {{ icon('external') }}</a></div></div>
+<div class="page-heading"><div><span class="eyebrow">KEHITYSTYÖ {{ t.tyo }}{% if meta.lahde %} · LÄHDE {{ meta.lahde|upper }}{% endif %}{% if meta.jatka %} · JATKAA TYÖTÄ {{ meta.jatka }}{% endif %}</span><h1>{{ meta.toive.split('\n')[0][:120] or 'Kehitystyö' }}</h1><p><span class="badge badge--{{ savy }}">{{ vaihe_teksti }}</span> {{ meta.tila_teksti }}{% if meta.syy %} · {{ meta.syy }}{% endif %}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}</p></div><div class="page-heading-actions"><a href="{{ url('/hub/kehita') }}">Kaikki kehitystyöt</a> <a class="text-link" href="{{ gateway('/kehitys/' ~ t.tyo) }}">Päätä gatewayssa {{ icon('external') }}</a></div></div>
 <div class="stack">
 {% if demo %}<p class="rules-note">Esimerkkitila: synteettinen kehitystyö.</p>{% endif %}
 {% if t.virheet %}<section class="panel panel-padding"><h2>Julkaisun ongelmat</h2><ul>{% for v in t.virheet %}<li>{{ v }}</li>{% endfor %}</ul></section>{% endif %}
