@@ -29,6 +29,7 @@ from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT
                          hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
 from . import kehitys
 from . import keskustelu as keskustelu_lukija
+from . import jarjestelma as jarjestelma_lukija
 from .mallit import (ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, OLETUS_ROOLIT as MALLIT_YLIKIRJOITUS,
                      RAM_MARGINAALI_GB, lue_mallit, lue_ylikirjoitus, vapaa_ram_gb)
 from .peruskirja import lue_peruskirja
@@ -387,7 +388,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/jarjestelma", response_class=HTMLResponse)
     async def system(request: Request):
-        return render(request, "system", "Järjestelmä")
+        """Koneen mittarit (aiops jarjestelma.py, 30.10.2026). Tuotannossa vain dispatcherin julkaisema kelpaa."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            mittarit = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.ESIMERKKI, now=datetime(2026, 10, 30, 12, 0, 20, tzinfo=timezone.utc))
+        elif settings.identity is not None:
+            mittarit = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.OLETUS, omistajat=jarjestelma_lukija.sallitut_omistajat())
+        else:
+            mittarit = None
+        return render(request, "system", "Järjestelmä", mittarit=mittarit)
 
     @app.get("/hub/saannot", response_class=HTMLResponse)
     async def rules(request: Request):

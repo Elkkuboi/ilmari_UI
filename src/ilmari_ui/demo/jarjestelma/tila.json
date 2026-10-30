@@ -1,0 +1,11 @@
+{
+ "muoto": "aiops-jarjestelma-v1",
+ "paivitetty": "2026-10-30T12:00:00+00:00",
+ "cpu": {"kaytto": 37.5, "kuorma": [10.85, 4.16, 3.13], "ytimet": 32},
+ "muisti": {"yhteensa_gb": 65.5, "kaytettavissa_gb": 6.2},
+ "gpu": {"nimi": "NVIDIA GeForce RTX 5090", "kayttoaste": 99, "vram_kaytossa_gb": 31.2, "vram_yhteensa_gb": 31.8, "lampotila_c": 58, "teho_w": 357},
+ "tyot": [
+  {"id": 52, "tyyppi": "malli", "nimi": "ilmari-malli", "malli": "flashnext-iq3s", "tila": "running", "jattaja": "ilmari", "luotu": "2026-10-30T11:40:00+00:00"},
+  {"id": 53, "tyyppi": "dsh", "nimi": "kehitys", "malli": "", "tila": "running", "jattaja": "elias", "luotu": "2026-10-30T11:05:00+00:00"}
+ ]
+}
