@@ -169,6 +169,7 @@ def _siivoa_meta(tyo: int, meta: Any) -> dict[str, Any]:
         "tyo": tyo, "toive": _siisti(meta.get("toive"), 4000, rivinvaihdot=True), "jatka": _kokonaisluku(meta.get("jatka")),
         "luotu": _siisti(meta.get("luotu"), 40), "paivitetty": _siisti(meta.get("paivitetty"), 40),
         "jattaja": _siisti(meta.get("jattaja"), 40), "tila": tila, "tila_teksti": TILAT[tila],
+        "lahde": _siisti(meta.get("lahde"), 40),  # kehityslähde (aiops ADR-0030); vanhoilla töillä tyhjä
         "syy": _siisti(meta.get("syy"), 500), "kesto": _siisti(meta.get("kesto"), 60), "valmis": meta.get("valmis") is True,
         "tulos": tulos if tulos_raaka else None,
         "tiedostot": [t for t in meta.get("tiedostot", []) if type(t) is str and t in TEKSTIT]
@@ -258,7 +259,7 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
             return None
         return Kehitystyo(tyo, {"tyo": tyo, "toive": "", "tila": "failed", "tila_teksti": "ei luettavissa", "syy": "",
                                 "tulos": None, "tiedostot": [], "jatka": None, "luotu": "", "paivitetty": "",
-                                "jattaja": "", "kesto": "", "valmis": False},
+                                "jattaja": "", "kesto": "", "valmis": False, "lahde": ""},
                           virheet=(f"meta.json: {VIESTIT.get(error.code, error.message)}",))
     return Kehitystyo(tyo, meta, osat["paatos.json"], osat["yhdistys.json"], osat["kayttoonotto.json"], tekstit_luettu,
                       tuple(virheet))

@@ -17,6 +17,13 @@ def test_lista_esimerkkitilassa():
     assert "Yöajon ehdotukset" in r.text and "Käyttöönotot" in r.text and "Testit epäonnistuivat" in r.text
     assert 'href="https://claude.ai/code"' in r.text and 'href="#esimerkkitila"' in r.text  # gateway ei esimerkkitilassa
     assert "<script" not in r.text.replace("<script>alert", "")  # ei skriptejä (CSP)
+    assert "· ravintopolku" in r.text and r.text.count("· aiops") == 0  # lähde (aiops ADR-0030), oletusta ei toisteta
+
+
+def test_tyon_lahde_nakyy_otsikossa():
+    c = asiakas()
+    assert "· LÄHDE RAVINTOPOLKU" in c.get("/hub/kehita/42?demo=1").text
+    assert "LÄHDE" not in c.get("/hub/kehita/41?demo=1").text  # vanha työ ilman lähdettä
 
 
 def test_tyo_ja_escapetus():
