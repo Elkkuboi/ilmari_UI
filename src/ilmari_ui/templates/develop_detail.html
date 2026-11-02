@@ -18,6 +18,7 @@
 {% endif %}
 <section class="panel panel-padding" aria-labelledby="dev-decision"><h2 id="dev-decision">Päätös</h2>
 {% if t.paatos %}<p><strong>{{ t.paatos.teksti }}</strong> {{ t.paatos.aika[:16].replace('T', ' ') }}{% if t.paatos.commit %} · haara <code>{{ t.paatos.commit[:12] }}</code>{% endif %}</p>{% else %}<p>Ei päätöstä vielä.{% if meta.tila == 'succeeded' %} Katso diff ja testit alta ja päätä: hyväksy, pyydä muutosta tai hylkää.{% endif %}</p>{% endif %}
+{% if t.sulku %}<p><span class="badge badge--neutral">Suljettu käsin</span> {{ t.sulku.aika[:16].replace('T', ' ') }} · {{ t.sulku.viesti }}</p>{% endif %}
 {% if t.yhdistys %}<p><span class="badge badge--{{ 'success' if t.yhdistys.tila == 'yhdistetty' else 'danger' }}">{{ t.yhdistys.teksti }}</span> {{ t.yhdistys.viesti }}{% if t.yhdistys.commit %} · main <code>{{ t.yhdistys.commit[:12] }}</code>{% endif %}</p>{% elif t.paatos and t.paatos.paatos == 'hyvaksytty' %}<p class="small">Käyttöönottopalvelu tarkistaa allekirjoituksen ja yhdistää haaran GitHubin mainiin. Sivu päivittyy, kun tulos on tiedossa.</p>{% endif %}
 {% if t.paatos and t.paatos.kayttoonotto_pyynto %}<p>Käyttöönotto pyydetty {{ t.paatos.kayttoonotto_aika[:16].replace('T', ' ') }} commitille <code>{{ t.paatos.kayttoonotto_commit[:12] }}</code>.</p>{% endif %}
 {% if t.kayttoonotto %}<p><span class="badge badge--{{ 'success' if t.kayttoonotto.tulos == 'asennettu' else 'danger' }}">{{ t.kayttoonotto.teksti }}</span> {{ t.kayttoonotto.viesti }}{% if t.kayttoonotto.edellinen %} · edellinen <code>{{ t.kayttoonotto.edellinen[:12] }}</code>{% endif %}</p>{% elif t.paatos and t.paatos.kayttoonotto_pyynto %}<p class="small">Käyttöönotto on kesken: testit, asennus ja terveystarkistus. Tulos tulee tähän ja käyttöönottojen historiaan.</p>{% endif %}
@@ -28,6 +29,7 @@
 {% if toimet.hyvaksy %}<a class="button button--primary" href="{{ gateway_url }}/kehitys/{{ t.tyo }}/hyvaksy?paluu=hub">Hyväksy puhelimella {{ icon('shield') }}</a>{% endif %}
 {% if toimet.kayttoonotto %}<a class="button button--primary" href="{{ gateway_url }}/kehitys/{{ t.tyo }}/kayttoonotto?paluu=hub">Ota käyttöön puhelimella {{ icon('shield') }}</a>{% endif %}
 {% if toimet.palauta %}<a class="button" href="{{ gateway_url }}/kehitys/{{ t.tyo }}/palauta?paluu=hub">Palauta edelliseen puhelimella {{ icon('shield') }}</a>{% endif %}
+{% if toimet.sulje %}<form method="post" action="{{ gateway_url }}/kehitys/{{ t.tyo }}/sulje" class="dev-sulku"><label for="sulku-viesti">Sulje käsin: miten työ hoidettiin?</label><input id="sulku-viesti" name="viesti" maxlength="200" required placeholder="esim. yhdistetty käsin PR #8"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Sulje</button></form>{% endif %}
 {% if toimet.hylkaa %}<form method="post" action="{{ gateway_url }}/kehitys/{{ t.tyo }}/hylkaa"><input type="hidden" name="toiminto" value="hylkaa"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Hylkää</button></form>{% endif %}
 </div>
 {% if toimet.muutos %}

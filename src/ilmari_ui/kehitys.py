@@ -38,7 +38,7 @@ ESIMERKKI_KAYTTOONOTOT = Path(__file__).resolve().parent / "demo" / "kayttoonoto
 GATEWAY_KAYTTAJA = "aiops-gw"
 TOITA_MAX = 50
 RAJAT = {"meta.json": 256 * 1024, "paatos.json": 16 * 1024, "yhdistys.json": 16 * 1024, "kayttoonotto.json": 16 * 1024,
-         "palautus.json": 16 * 1024,
+         "palautus.json": 16 * 1024, "sulku.json": 16 * 1024,
          "muutos.diff": 1024 * 1024 + 256, "muutos-stat.txt": 64 * 1024 + 256, "vastaus.md": 64 * 1024 + 256,
          "testit.txt": 256 * 1024 + 256, "aiops-dsh.log": 64 * 1024 + 256, "dsh-stderr.log": 256 * 1024 + 256}
 TEKSTIT = ("muutos.diff", "muutos-stat.txt", "vastaus.md", "testit.txt", "aiops-dsh.log", "dsh-stderr.log")
@@ -55,6 +55,7 @@ KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin m
 PALAUTUKSET = {"asennettu": "Palautettu edelliseen", **{k: "Palautus: " + v.lower() for k, v in KAYTTOONOTOT.items()
                                                            if k != "asennettu"}}
 LOPULLISET = ("succeeded", "failed", "cancelled")
+SULJETTAVAT = ("ristiriita", "virhe", "hylatty")
 ETENEMINEN_MAX = 10
 ETENEMINEN_RIVI_MAX = 200
 # Kehityslähteet (aiops ADR-0030, kehitys.LAHTEET): lomakkeen valinnat; gateway tarkistaa arvon joka tapauksessa.
@@ -88,10 +89,13 @@ class Kehitystyo:
     tekstit: dict[str, str] = field(default_factory=dict)
     virheet: tuple[str, ...] = ()
     palautus: dict[str, Any] | None = None
+    sulku: dict[str, Any] | None = None  # 3.11.: ristiriitaan jäänyt yhdistys suljettu käsin viestillä
 
     @property
     def vaihe(self) -> tuple[str, str]:
         """(teksti, sävy): yksi rivi, joka kertoo, missä työ on menossa."""
+        if self.sulku is not None:
+            return "Suljettu käsin: " + (self.sulku.get("viesti") or "ei viestiä"), "muted"
         if self.palautus is not None:
             t = self.palautus.get("tulos", "virhe")
             return PALAUTUKSET.get(t, "Palautus: " + str(t)), "success" if t == "asennettu" else "danger"
@@ -122,6 +126,8 @@ class Kehitystyo:
     def kesken(self) -> bool:
         """Sivu päivittyy itsestään: työ käynnissä tai pyydetty yhdistys, käyttöönotto tai palautus odottaa vastausta."""
         p = self.paatos or {}
+        if self.sulku is not None:
+            return False
         return (self.meta.get("tila") not in LOPULLISET
                 or (p.get("paatos") == "hyvaksytty" and self.yhdistys is None)
                 or bool(p.get("kayttoonotto_pyynto") and self.kayttoonotto is None)
@@ -144,6 +150,9 @@ class Kehitystyo:
             "palauta": (self.kayttoonotto or {}).get("tulos") == "asennettu"
             and _COMMIT.fullmatch((self.kayttoonotto or {}).get("edellinen") or "") is not None
             and not p.get("palautus_pyynto"),
+            # 3.11.: hyväksytty työ, jonka yhdistys jäi ristiriitaan tai virheeseen, suljetaan käsin viestillä
+            "sulje": p.get("paatos") == "hyvaksytty" and not p.get("kayttoonotto_pyynto") and self.kayttoonotto is None
+            and (self.yhdistys or {}).get("tila") in SULJETTAVAT and self.sulku is None,
         }
 
 
@@ -246,6 +255,13 @@ def _siivoa_paatos(paatos: Any) -> dict[str, Any] | None:
             "palautus_aika": _siisti(paatos.get("palautus_aika"), 40)}
 
 
+def _siivoa_sulku(sulku: Any) -> dict[str, Any] | None:
+    if not isinstance(sulku, dict):
+        return None
+    return {"aika": _siisti(sulku.get("aika"), 40), "kuka": _siisti(sulku.get("kuka"), 40),
+            "viesti": _siisti(sulku.get("viesti"), 200)}
+
+
 def _siivoa_vastaus(vastaus: Any, tilat: dict[str, str], avain: str) -> dict[str, Any] | None:
     if not isinstance(vastaus, dict):
         return None
@@ -297,7 +313,8 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
                 for nimi, siivoa in (("paatos.json", _siivoa_paatos),
                                      ("yhdistys.json", lambda v: _siivoa_vastaus(v, YHDISTYKSET, "tila")),
                                      ("kayttoonotto.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos")),
-                                     ("palautus.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos"))):
+                                     ("palautus.json", lambda v: _siivoa_vastaus(v, KAYTTOONOTOT, "tulos")),
+                                     ("sulku.json", _siivoa_sulku)):
                     try:
                         osat[nimi] = siivoa(_lue_json(hd, nimi, omistajat, deadline))
                     except ReadFailure as error:
@@ -320,7 +337,7 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
                                 "jattaja": "", "kesto": "", "valmis": False, "lahde": "", "eteneminen": []},
                           virheet=(f"meta.json: {VIESTIT.get(error.code, error.message)}",))
     return Kehitystyo(tyo, meta, osat["paatos.json"], osat["yhdistys.json"], osat["kayttoonotto.json"], tekstit_luettu,
-                      tuple(virheet), palautus=osat["palautus.json"])
+                      tuple(virheet), palautus=osat["palautus.json"], sulku=osat["sulku.json"])
 
 
 def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None,

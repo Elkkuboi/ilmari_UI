@@ -193,7 +193,7 @@ def test_palautus_ja_toimet(tmp_path):
     julkaise(tmp_path, paatos=p, yhdistys={"tila": "yhdistetty", "commit": "d" * 40}, kayttoonotto=k)
     t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
     assert t.kayttoonotto["edellinen"] == "e" * 40 and t.toimet["palauta"] is True and t.kesken is False
-    assert t.toimet == {"hyvaksy": False, "hylkaa": False, "muutos": False, "kayttoonotto": False, "palauta": True}
+    assert t.toimet == {"hyvaksy": False, "hylkaa": False, "muutos": False, "kayttoonotto": False, "palauta": True, "sulje": False}
     julkaise(tmp_path, paatos={**p, "palautus_pyynto": "q", "palautus_commit": "e" * 40, "palautus_aika": "x"},
              yhdistys={"tila": "yhdistetty", "commit": "d" * 40}, kayttoonotto=k)
     t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
@@ -211,7 +211,7 @@ def test_palautus_ja_toimet(tmp_path):
     assert lue_kehitystyo(a, 41, omistajat=OMAT).toimet["palauta"] is False
     julkaise(b)
     t = lue_kehitystyo(b, 41, omistajat=OMAT)
-    assert t.toimet == {"hyvaksy": True, "hylkaa": True, "muutos": True, "kayttoonotto": False, "palauta": False}
+    assert t.toimet == {"hyvaksy": True, "hylkaa": True, "muutos": True, "kayttoonotto": False, "palauta": False, "sulje": False}
     julkaise(c, paatos={"paatos": "hyvaksytty", "aika": "x", "kuka": "elias"})
     t = lue_kehitystyo(c, 41, omistajat=OMAT)
     assert t.kesken is True and not any(t.toimet.values())
@@ -230,3 +230,20 @@ def test_diff_jaetaan_tiedostoittain():
     assert jaa_diff("") == [] and jaa_diff("+rivi\n")[0]["tiedosto"] == "(ilman otsikkoa)"
     iso = "diff --git a/x b/x\n" + "+r\n" * 5000
     assert jaa_diff(iso)[0]["leikattu"] is True and len(jaa_diff(iso)[0]["rivit"]) <= 4000
+
+
+def test_ristiriitaan_jaaneen_tyon_sulku(tmp_path):
+    """3.11.: hyväksytty työ, jonka yhdistys jäi ristiriitaan, tarjoaa vain sulkemisen; sulun jälkeen vaihe kertoo viestin
+    eikä sivu enää päivity itsestään."""
+    p = {"paatos": "hyvaksytty", "aika": "x", "kuka": "elias", "commit": PAA}
+    julkaise(tmp_path, paatos=p, yhdistys={"tila": "ristiriita", "commit": "", "viesti": "ei yhdisty"})
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.vaihe == ("Ristiriita mainin kanssa", "danger") and t.toimet["sulje"] is True
+    assert t.toimet["hylkaa"] is False and t.toimet["kayttoonotto"] is False
+    julkaise(tmp_path / "b", paatos=p, yhdistys={"tila": "ristiriita", "commit": "", "viesti": "ei yhdisty"},
+             sulku={"aika": "2026-11-03T00:30:00+00:00", "kuka": "elias", "viesti": "yhdistetty käsin PR #8 <b>\nx"})
+    t = lue_kehitystyo(tmp_path / "b", 41, omistajat=OMAT)
+    assert t.vaihe == ("Suljettu käsin: yhdistetty käsin PR #8 <b>x", "muted") and t.kesken is False
+    assert t.toimet["sulje"] is False and t.sulku["kuka"] == "elias"
+    julkaise(tmp_path / "c", paatos=p, yhdistys={"tila": "yhdistetty", "commit": "d" * 40})
+    assert lue_kehitystyo(tmp_path / "c", 41, omistajat=OMAT).toimet["sulje"] is False
