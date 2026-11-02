@@ -44,7 +44,14 @@ APP_CATALOG = (
     {"id": "unicafe", "name": "UniCafe", "description": "Päivätty ruokalista, valitut kriteerit ja alkuperäinen lähde.", "data_class": "public", "icon": "food"},
     {"id": "ideat", "name": "Kolme business-ideaa", "description": "Ongelma, hypoteesi ja seuraava koe. Tilaa harkitulle ideoinnille.", "data_class": "private", "icon": "idea"},
     {"id": "jarvis", "name": "Joonaksen Jarvis", "description": "Vain omistajan erikseen hyväksymät ja jakamat päivitykset.", "data_class": "private", "icon": "feed"},
+    {"id": "hahmo", "name": "Hahmo", "description": "Paikallinen roolipeli- ja fantasiahahmo: keskustelu, puhe ja kuvat omalla työasemalla. Oma sovellus, johon Hub linkittää.", "data_class": "private", "icon": "palette"},
 )
+# Hahmo (aiops ADR-0026, 2.11.2026): oma sovellus työasemalla (hahmo.service, 127.0.0.1:8700). Hub ei kutsu sitä
+# (PrivateNetwork), vaan linkittää Tailscale Serven porttiin, jossa Hahmon oma käyttöliittymä on; tila luetaan
+# keskustelun julkaisusta (Hahmo tarvitsee käynnissä olevan Ilmarin mallityön).
+HAHMO_PORTTI = 8444
+HAHMO_TILA = {"status": "oma sovellus", "status_label": "Oma sovellus",
+              "message": "Hahmo on oma sovellus työasemalla. Hub ei lue sen keskusteluja, vaan linkittää siihen."}
 APP_IDS = tuple(app["id"] for app in APP_CATALOG)
 SERVE_PREFIX = "/hub"
 RUN_COUNT_LIMIT = 200
@@ -285,6 +292,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cards, apps = [], []
         for entry in APP_CATALOG:
             state = card_states[entry["id"]]
+            if entry["id"] == "hahmo":
+                apps.append({**entry, **HAHMO_TILA})
+                continue
             apps.append({**entry, "status": state.status, "status_label": state.status, "message": state.message})
             for card in state.cards:
                 item = card.model_dump(mode="json")
@@ -380,7 +390,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cards = [card for card in data["cards"] if card["app_id"] == app_id]
         card = cards[0] if cards else None
         data.update(app=next(app for app in data["apps"] if app["id"] == app_id), cards=cards, card=card, chart=series_chart(card, data["days"]))
+        if app_id == "hahmo":
+            data.update(hahmo=hahmo_tila(data["demo"]))
         return templates.TemplateResponse(request=request, name="app_detail.html", context=data)
+
+    def hahmo_tila(demo: bool) -> dict[str, Any]:
+        """Linkki Hahmon omaan käyttöliittymään (Serve, portti HAHMO_PORTTI samalla nimellä kuin Hub) ja Ilmarin
+        mallin tila keskustelun julkaisusta. Esimerkkitilassa ei linkkiä eikä tilaa."""
+        if demo or settings.identity is None:
+            return {"url": None, "malli": None}
+        keskustelu = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+        malli = keskustelu.malli if keskustelu.tila == "ready" else None
+        return {"url": f"https://{settings.identity.rp_id}:{HAHMO_PORTTI}/", "malli": malli}
 
     @app.get("/hub/ideat", response_class=HTMLResponse)
     async def ideas(request: Request):

@@ -78,6 +78,7 @@
     {% elif card.kind == 'idea_list' %}<p class="app-description">Kolme hypoteesia, kolme seuraavaa koetta. Ideat odottavat näyttöä.</p>
     {% elif card.kind == 'metric' %}<p class="metric-value">{{ card.data.value if card.data.value is not none else 'Tietoa ei saatavilla' }}{% if card.units %} <span>{{ card.units }}</span>{% endif %}</p><p class="muted">{{ card.data.note }}</p>{% endif %}
     {{ card_meta(card) }}
+  {% elif app.id == 'hahmo' %}<p class="app-description">{{ app.description }}</p><div class="app-connection">{{ badge(app.status_label, 'accent') }}</div><p class="small muted">Keskustelu, hahmot, puhe ja kuvat Hahmon omassa näkymässä.</p>
   {% else %}<p class="app-description">{{ app.description }}</p><div class="app-connection">{{ badge(app.status_label|default('Ei yhdistetty'), 'danger' if app.status == 'virhe' else 'neutral') }}</div><p class="small muted">Lähde ja päivitysaika näkyvät yhdistämisen jälkeen.</p>{% endif %}
   <a class="text-link app-card-link" href="{{ url('/hub/sovellukset/' ~ app.id) }}">Avaa näkymä {{ icon('arrow') }}</a>
 </article>
