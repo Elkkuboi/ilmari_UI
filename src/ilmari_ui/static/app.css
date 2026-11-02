@@ -168,7 +168,7 @@ hr { border: 0; border-top: 1px solid var(--il-border); margin: 24px 0; }
 .app-card-heading h3 { font-size: .8rem; }
 .app-card-heading .small { font-size: .75rem; }
 .app-icon { display: grid; place-items: center; height: 36px; width: 36px; flex: 0 0 36px; border: 1px solid var(--il-border); background: var(--il-surface-raised); border-radius: 9px; color: var(--il-accent); }
-.app-icon--unicafe, .app-icon--jarvis { color: var(--il-secondary); }
+.app-icon--unicafe, .app-icon--jarvis, .app-icon--hahmo { color: var(--il-secondary); }
 .app-icon .icon { width: 18px; height: 18px; }
 .app-chevron { margin-left: auto; width: 14px; height: 14px; flex-basis: 14px; color: var(--il-text-subtle); }
 .app-description { color: var(--il-text-muted); font-size: .75rem; line-height: 1.7; }

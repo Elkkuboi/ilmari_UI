@@ -30,7 +30,7 @@ PAGES = (
     "/hub/jarjestelma",
     "/hub/asetukset",
 )
-APP_PAGES = tuple(f"/hub/sovellukset/{app}" for app in ("ravintopolku", "unicafe", "ideat", "jarvis"))
+APP_PAGES = tuple(f"/hub/sovellukset/{app}" for app in ("ravintopolku", "unicafe", "ideat", "jarvis", "hahmo"))
 
 
 def test_series_at_start_of_calendar_does_not_break_home_chart():
