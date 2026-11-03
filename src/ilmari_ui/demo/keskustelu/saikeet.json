@@ -1,0 +1,51 @@
+{
+ "muoto": "aiops-saikeet-v1",
+ "paivitetty": "2026-10-28T20:00:00+00:00",
+ "aktiivinen": 3,
+ "saikeet": [
+  {
+   "id": 3,
+   "nimi": "Mitä olen syönyt tänään?",
+   "kansio": "Ravintopolku",
+   "nimen_lahde": "alustava",
+   "luotu": "2026-10-28T19:47:50+00:00",
+   "arkistoitu": null,
+   "kanava": "sovellus",
+   "viesteja": 3,
+   "viimeisin": "2026-10-28T19:48:30+00:00"
+  },
+  {
+   "id": 2,
+   "nimi": "Hahmon kuvaohje",
+   "kansio": "",
+   "nimen_lahde": "elias",
+   "luotu": "2026-10-27T18:00:00+00:00",
+   "arkistoitu": null,
+   "kanava": "sovellus",
+   "viesteja": 12,
+   "viimeisin": "2026-10-27T18:40:00+00:00"
+  },
+  {
+   "id": 4,
+   "nimi": "Telegram 28.10. 07:15",
+   "kansio": "Telegram",
+   "nimen_lahde": "alustava",
+   "luotu": "2026-10-28T05:15:00+00:00",
+   "arkistoitu": null,
+   "kanava": "telegram",
+   "viesteja": 2,
+   "viimeisin": "2026-10-28T05:16:00+00:00"
+  },
+  {
+   "id": 1,
+   "nimi": "Aiemmat keskustelut",
+   "kansio": "",
+   "nimen_lahde": "elias",
+   "luotu": "2026-10-20T20:00:00+00:00",
+   "arkistoitu": "2026-10-28T19:47:00+00:00",
+   "kanava": "sovellus",
+   "viesteja": 240,
+   "viimeisin": "2026-10-28T19:40:00+00:00"
+  }
+ ]
+}
