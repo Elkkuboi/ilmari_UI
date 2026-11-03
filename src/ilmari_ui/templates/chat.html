@@ -2,15 +2,42 @@
 {% from 'macros.html' import icon, badge, empty with context %}
 {% block content %}
 <div class="page-heading"><div><span class="eyebrow">KESKUSTELU · ILMARI</span><h1>Keskustelu.</h1><p>Viestit kulkevat gatewayn kautta samassa osoitteessa; Hub näyttää ne ja päivittyy itsestään. Ilmari voi käyttää kykyjään (Ravintopolku, Hahmo, dsh) keskustelusta.</p></div><div class="page-heading-actions">{% if keskustelu and keskustelu.tila == 'ready' %}{{ badge('Malli: ' ~ keskustelu.malli.tila_teksti, 'success' if keskustelu.malli.tila == 'running' else 'warning') }}{% endif %}</div></div>
-<div class="chat-layout">
-  <section class="panel chat-panel" aria-labelledby="chat-title"><div class="panel-heading"><div class="chat-heading"><span class="chat-avatar">{{ icon('chat') }}</span><div><h2 id="chat-title">Ilmari</h2><p>{% if keskustelu and keskustelu.tila == 'ready' %}Päivitetty {{ format_time(keskustelu.paivitetty) }}{% if keskustelu.malli.dsh_tyo %} · dsh-työ {{ keskustelu.malli.dsh_tyo }} käynnissä{% endif %}{% if keskustelu.malli.yoajo %} · yöajo käyttää mallia{% endif %}{% else %}Ei yhteyttä{% endif %}</p></div></div></div>
+{% set saikeet_kaytossa = keskustelu and keskustelu.tila == 'ready' and keskustelu.saie is not none %}
+<div class="chat-layout{% if saikeet_kaytossa %} chat-layout--saikeet{% endif %}">
+{% if saikeet_kaytossa %}
+  <aside class="chat-threads" aria-label="Keskustelut">
+    <details class="chat-threads-details" open>
+      <summary class="chat-threads-summary">{{ icon('chat') }} Keskustelut <span class="chat-threads-count">{{ keskustelu.saikeet|length }}</span></summary>
+      <div class="chat-threads-body">
+{% if gateway_url %}
+        <form method="post" action="{{ gateway_url }}/ilmari/saie" class="thread-new"><input type="hidden" name="paluu" value="hub"><button class="button" type="submit">{{ icon('idea') }} Uusi keskustelu</button></form>
+{% endif %}
+{% for kansio, lista in keskustelu.kansiot %}
+        <section class="thread-folder"><h3 class="thread-folder-name">{% if kansio %}{{ kansio }}{% else %}Ilman kansiota{% endif %}</h3>
+          <ul class="thread-list">{% for s in lista %}<li class="thread-item{% if s.id == keskustelu.aktiivinen %} thread-item--active{% endif %}">{% if gateway_url and s.id != keskustelu.aktiivinen %}<form method="post" action="{{ gateway_url }}/ilmari/saie/{{ s.id }}/valitse"><input type="hidden" name="paluu" value="hub"><button class="thread-button" type="submit"><span class="thread-name safe-text">{{ s.nimi }}</span><small>{{ s.viesteja }} viestiä{% if s.viimeisin %} · {{ format_time(s.viimeisin) }}{% endif %}</small></button></form>{% else %}<div class="thread-button" aria-current="{% if s.id == keskustelu.aktiivinen %}true{% else %}false{% endif %}"><span class="thread-name safe-text">{{ s.nimi }}</span><small>{{ s.viesteja }} viestiä{% if s.viimeisin %} · {{ format_time(s.viimeisin) }}{% endif %}</small></div>{% endif %}</li>{% endfor %}</ul>
+        </section>
+{% endfor %}
+{% if keskustelu.arkistoidut %}
+        <details class="thread-archive"><summary>Arkisto ({{ keskustelu.arkistoidut|length }})</summary>
+          <ul class="thread-list">{% for s in keskustelu.arkistoidut %}<li class="thread-item">{% if gateway_url %}<form method="post" action="{{ gateway_url }}/ilmari/saie/{{ s.id }}/palauta"><input type="hidden" name="paluu" value="hub"><button class="thread-button" type="submit"><span class="thread-name safe-text">{{ s.nimi }}</span><small>{{ s.viesteja }} viestiä · palauta</small></button></form>{% else %}<div class="thread-button"><span class="thread-name safe-text">{{ s.nimi }}</span><small>{{ s.viesteja }} viestiä</small></div>{% endif %}</li>{% endfor %}</ul>
+        </details>
+{% endif %}
+      </div>
+    </details>
+  </aside>
+{% endif %}
+  <section class="panel chat-panel" aria-labelledby="chat-title"><div class="panel-heading"><div class="chat-heading"><span class="chat-avatar">{{ icon('chat') }}</span><div><h2 id="chat-title">{% if saikeet_kaytossa %}<span class="safe-text">{{ keskustelu.saie.nimi }}</span>{% else %}Ilmari{% endif %}</h2><p>{% if saikeet_kaytossa and keskustelu.saie.kansio %}{{ icon('apps') }} <span class="safe-text">{{ keskustelu.saie.kansio }}</span> · {% endif %}{% if keskustelu and keskustelu.tila == 'ready' %}Päivitetty {{ format_time(keskustelu.paivitetty) }}{% if keskustelu.malli.dsh_tyo %} · dsh-työ {{ keskustelu.malli.dsh_tyo }} käynnissä{% endif %}{% if keskustelu.malli.yoajo %} · yöajo käyttää mallia{% endif %}{% else %}Ei yhteyttä{% endif %}</p></div></div>{% if saikeet_kaytossa and gateway_url %}<details class="thread-tools"><summary class="button button--quiet">Säie {{ icon('arrow') }}</summary><div class="thread-tools-body">
+      <form method="post" action="{{ gateway_url }}/ilmari/saie/{{ keskustelu.saie.id }}/nimea" class="thread-form"><label for="saie-nimi">Nimi</label><input id="saie-nimi" name="nimi" maxlength="60" required value="{{ keskustelu.saie.nimi }}"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Nimeä</button></form>
+      <form method="post" action="{{ gateway_url }}/ilmari/saie/{{ keskustelu.saie.id }}/kansio" class="thread-form"><label for="saie-kansio">Kansio</label><input id="saie-kansio" name="kansio" maxlength="40" list="kansiot" value="{{ keskustelu.saie.kansio }}" placeholder="tyhjä = ei kansiota"><datalist id="kansiot">{% for k in keskustelu.kansionimet %}<option value="{{ k }}"></option>{% endfor %}</datalist><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Siirrä</button></form>
+      <form method="post" action="{{ gateway_url }}/ilmari/saie/{{ keskustelu.saie.id }}/arkistoi" class="thread-form"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Arkistoi säie</button></form>
+    </div></details>{% endif %}</div>
     <div class="chat-messages">
 {% if keskustelu is none %}
       {{ empty('Keskustelun lähdettä ei ole määritetty', 'Tuotannossa gateway julkaisee keskustelun hakemistoon /srv/aiops/ilmari/keskustelu.', 'chat') }}
 {% elif keskustelu.tila != 'ready' %}
       {{ empty('Keskustelua ei voi näyttää', keskustelu.viesti, 'chat') }}
 {% elif not keskustelu.viestit %}
-      {{ empty('Ei viestejä vielä', 'Kirjoita Ilmarille alla.', 'chat') }}
+      {{ empty('Ei viestejä vielä', 'Kirjoita Ilmarille alla. Uusi keskustelu alkaa tyhjästä: Ilmari ei näe muiden säikeiden viestejä.', 'chat') }}
 {% else %}
       <ol class="chat-list">{% for v in keskustelu.viestit %}<li class="chat-msg chat-msg--{{ v.lahettaja }}"><div class="chat-msg-head"><strong>{{ v.nimi }}</strong> <small>{{ format_time(v.aika) }}</small></div><p class="safe-text">{{ v.teksti }}</p></li>{% endfor %}</ol>
 {% endif %}
@@ -25,6 +52,6 @@
     <div class="chat-composer" aria-disabled="true"><label for="upcoming-message">Viestin kirjoitusalue</label><textarea id="upcoming-message" disabled placeholder="Lähetys on käytössä vain tuotannossa (gateway samassa osoitteessa)."></textarea></div>
 {% endif %}
   </section>
-  <aside class="stack chat-context" aria-label="Keskustelun toimintaperiaate"><section class="panel context-panel"><h2>{{ icon('runs') }} Näin viesti etenee</h2><ol class="workflow-list"><li><span>1</span><div><strong>Lomake gatewaylle</strong><p>Sama osoite, sama portti kuin ennen: tunnus Tailscalesta.</p></div></li><li><span>2</span><div><strong>Ilmari vastaa</strong><p>Malli vastaa tai käyttää kykyä (Ravintopolku, Hahmo, dsh-työ).</p></div></li><li><span>3</span><div><strong>Hub päivittyy</strong><p>Gateway julkaisee viestit; tämä sivu latautuu uudelleen 15 s välein.</p></div></li></ol></section><section class="panel context-panel"><h2>{{ icon('idea') }} Kokeile</h2><ul class="proposal-files"><li>Mitä olen syönyt tänään?</li><li>Ehdota lounas ja laita se luonnoslaatikkoon.</li><li>Hae netistä UniCafen tämän päivän lista.</li></ul></section></aside>
+  <aside class="stack chat-context" aria-label="Keskustelun toimintaperiaate"><section class="panel context-panel"><h2>{{ icon('runs') }} Näin viesti etenee</h2><ol class="workflow-list"><li><span>1</span><div><strong>Lomake gatewaylle</strong><p>Sama osoite, sama portti kuin ennen: tunnus Tailscalesta.</p></div></li><li><span>2</span><div><strong>Ilmari vastaa</strong><p>Malli vastaa tai käyttää kykyä (Ravintopolku, Hahmo, dsh-työ).</p></div></li><li><span>3</span><div><strong>Hub päivittyy</strong><p>Gateway julkaisee viestit; tämä sivu latautuu uudelleen 15 s välein.</p></div></li><li><span>4</span><div><strong>Säikeet</strong><p>Uusi keskustelu tyhjentää Ilmarin muistin aiheesta; vanhat säikeet säilyvät listassa ja nimi tulee ensimmäisestä viestistä. Nimen ja kansion voi vaihtaa Säie-valikosta.</p></div></li></ol></section><section class="panel context-panel"><h2>{{ icon('idea') }} Kokeile</h2><ul class="proposal-files"><li>Mitä olen syönyt tänään?</li><li>Ehdota lounas ja laita se luonnoslaatikkoon.</li><li>Hae netistä UniCafen tämän päivän lista.</li></ul></section></aside>
 </div>
 {% endblock %}
