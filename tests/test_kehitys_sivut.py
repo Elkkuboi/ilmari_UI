@@ -1,5 +1,6 @@
 """Kehitä-näkymä (aiops ADR-0024): lista, työ, linkit gatewayhin, escapetus, 404 ja lähteettömyys."""
 
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from ilmari_ui.app import Settings, create_app
@@ -100,7 +101,13 @@ def test_ilmarin_oma_tyo_listassa_ja_sivulla():
     päätöstä ja linkkiä gatewayn kehitystyösivulle."""
     c = asiakas()
     r = c.get("/hub/kehita?demo=1")
-    assert r.status_code == 200 and 'href="/hub/kehita/43?' in r.text and "· oma · Ilmarin oma työ" in r.text
+    # Pala 1b: Ilmarin työ omassa listassaan, ei Eliaksen kehitystöissä
+    sivu = BeautifulSoup(r.text, "html.parser")
+    eliaksen, ilmarin = (sivu.find("section", attrs={"aria-labelledby": n}) for n in ("dev-jobs", "dev-ilmari"))
+    assert r.status_code == 200 and ilmarin.find("a", href=lambda h: h.startswith("/hub/kehita/43?"))
+    assert "· oma" in ilmarin.get_text() and "Ilmarin omat työt 1" in " ".join(ilmarin.h2.get_text().split())
+    assert not eliaksen.find("a", href=lambda h: h.startswith("/hub/kehita/43?"))
+    assert eliaksen.find("a", href=lambda h: h.startswith("/hub/kehita/41?"))
     r = c.get("/hub/kehita/43?demo=1")
     assert r.status_code == 200 and "ILMARIN OMA TYÖ" in r.text and "LÄHDE OMA" in r.text
     assert "Ilmarin oma pysyvä työtila" in r.text and "päätöstä ei tarvita" in r.text
@@ -131,3 +138,38 @@ def test_tuotannossa_tyotilan_tyolle_ei_hyvaksyntaa(tmp_path, monkeypatch):
     assert oma.status_code == 200 and aiops.status_code == 200
     assert "/kehitys/43/hyvaksy" not in oma.text and "/kehitys/43/hylkaa" not in oma.text and 'name="jatka"' not in oma.text
     assert 'href="https://tyoasema.test/kehitys/44/hyvaksy?paluu=hub"' in aiops.text and "ILMARIN OMA TYÖ" in aiops.text
+
+
+def test_tuotannossa_kaksi_listaa(tmp_path, monkeypatch):
+    """Pala 1b: Eliaksen toive näkyy Kehitystöissä, vaikka Ilmari on tehnyt sen jälkeen 60 omaa työtä; Ilmarin työt
+    omassa listassaan (50 uusinta). Käynnissä oleva Ilmarin työ päivittää sivun kuten Eliaksenkin."""
+    import json
+    import os
+    juuri = tmp_path / "kehitys"
+
+    def kirjoita(tyo, jattaja, tila="succeeded"):
+        (juuri / str(tyo)).mkdir(parents=True)
+        (juuri / str(tyo) / "meta.json").write_text(json.dumps({
+            "tyo": tyo, "toive": f"Työ {tyo} <b>x</b>", "jatka": None, "luotu": "2026-11-18T12:00:00+00:00",
+            "jattaja": jattaja, "lahde": "oma" if jattaja == "aiops-ceo" else "aiops", "tila": tila, "valmis": True,
+            "tiedostot": []}))
+    kirjoita(5, "elias")
+    for tyo in range(10, 70):
+        kirjoita(tyo, "aiops-ceo", "running" if tyo == 69 else "succeeded")
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({os.getuid()}))
+    root = tmp_path / "ajot"
+    root.mkdir()
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
+                    client=None) as client:
+        r = client.get("/kehita", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"})
+    sivu = BeautifulSoup(r.text, "html.parser")
+    eliaksen, ilmarin = (sivu.find("section", attrs={"aria-labelledby": n}) for n in ("dev-jobs", "dev-ilmari"))
+
+    def numerot(osio):
+        return [int(a["href"].split("?")[0].rsplit("/", 1)[1]) for a in osio.find_all("a", href=True)
+                if "/kehita/" in a["href"]]
+    assert r.status_code == 200 and numerot(eliaksen) == [5]
+    assert numerot(ilmarin) == list(range(69, 19, -1)) and r.headers.get("Refresh") == "15"
+    assert "&lt;b&gt;x&lt;/b&gt;" in r.text and not sivu.find_all("b")

@@ -39,7 +39,8 @@ GATEWAY_KAYTTAJA = "aiops-gw"
 # Ilmarin omat dsh-työt (aiops ADR-0032, Pala 1): gateway julkaisee myös nimellä ilmari-dsh luodut työt samassa muodossa,
 # jättäjänä Ilmarin tunnus. Lähde voi olla myös tyhja tai oma (Ilmarin pysyvä työtila), joita ei yhdistetä mihinkään.
 CEO_KAYTTAJA = "aiops-ceo"
-TOITA_MAX = 50
+TOITA_MAX = 50        # Kehitä-listan raja kummallekin erikseen: Eliaksen toiveet ja Ilmarin omat työt (Pala 1b)
+SELAA_MAX = 2000      # listaa varten luetaan enintään näin monta uusinta työhakemistoa (gateway ei poista vanhoja)
 RAJAT = {"meta.json": 256 * 1024, "paatos.json": 16 * 1024, "yhdistys.json": 16 * 1024, "kayttoonotto.json": 16 * 1024,
          "palautus.json": 16 * 1024, "sulku.json": 16 * 1024,
          "muutos.diff": 1024 * 1024 + 256, "muutos-stat.txt": 64 * 1024 + 256, "vastaus.md": 64 * 1024 + 256,
@@ -364,7 +365,10 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
 
 def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None,
                     timeout_seconds: float = 2.0) -> tuple[Kehitystyo, ...] | None:
-    """Kehitystyöt uusin ensin (enintään TOITA_MAX) tai None, jos hakemistoa ei ole."""
+    """Kehitystyöt uusin ensin tai None, jos hakemistoa ei ole. Eliaksen toiveita ja Ilmarin omia töitä (ilmarin)
+    enintään TOITA_MAX kumpaakin: raja sovelletaan vasta luetun jättäjän mukaan, joten Ilmarin monet työt eivät
+    työnnä Eliaksen töitä pois listalta. Selaus päättyy, kun molemmat ovat täynnä, SELAA_MAX hakemistoa on luettu
+    tai (uusimpien TOITA_MAX:n jälkeen) aikaraja ylittyy, jotta sivu ei jää odottamaan."""
     try:
         kavelija = RunReader(root, timeout_seconds=timeout_seconds)
     except ValueError:
@@ -377,12 +381,17 @@ def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None
             nimet = os.listdir(juuri_fd)
     except (ReadFailure, OSError):
         return None
-    numerot = sorted((int(n) for n in nimet if _TYO.fullmatch(n)), reverse=True)[:TOITA_MAX]
-    tyot = []
-    for tyo in numerot:
+    numerot = sorted((int(n) for n in nimet if _TYO.fullmatch(n)), reverse=True)[:SELAA_MAX]
+    tyot: list[Kehitystyo] = []
+    maarat = {False: 0, True: 0}   # ilmarin -> listalla
+    for i, tyo in enumerate(numerot):
+        # uusimmat TOITA_MAX luetaan aina kuten ennen; niiden jälkeen selaus päättyy aikarajaan
+        if min(maarat.values()) >= TOITA_MAX or (i >= TOITA_MAX and time.monotonic() > deadline):
+            break
         t = lue_kehitystyo(root, tyo, omistajat=omistajat, timeout_seconds=max(0.2, deadline - time.monotonic()),
                            tekstit=False)
-        if t is not None:
+        if t is not None and maarat[t.ilmarin] < TOITA_MAX:
+            maarat[t.ilmarin] += 1
             tyot.append(t)
     return tuple(tyot)
 
