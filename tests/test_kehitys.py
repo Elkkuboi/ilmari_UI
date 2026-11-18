@@ -281,6 +281,20 @@ def test_ilmarin_repotyo_ja_vanha_tyo_ovat_yhdistettavia(tmp_path):
     assert lue_kehitystyo(tmp_path / "d", 41, omistajat=OMAT).vaihe == ("Valmis, testit epäonnistuivat", "warning")
 
 
+def test_gatewayn_kirjoittama_ilmarin_meta_on_ilmarin_tyo(tmp_path):
+    """Ristiinlukittu aiopsin kanssa (aiops tests/test_gateway_toiminta.py ja test_pala1_paasta_paahan.py: dsh_aja
+    kirjoittaa jattaja = aiops-ceo): gatewayn luontihetken meta täsmälleen niillä kentillä merkitään Ilmarin omaksi
+    työksi myös repolähteellä, jolloin Kehitä-lista ei näytä sitä Eliaksen toiveena. Kielletty: muu jättäjä
+    (esim. 'ilmari') ei ole Ilmarin työ, joten arvon on oltava sama molemmissa repoissa."""
+    m = {"tyo": 61, "toive": "Korjaa parseri\nyksityiskohdat", "jatka": None, "lahde": "aiops",
+         "luotu": "2026-11-19T00:10:00.000+00:00", "jattaja": "aiops-ceo", "tila": "queued", "tila_teksti": "jonossa"}
+    julkaise(tmp_path, 61, m=m, tiedostot={})
+    t = lue_kehitystyo(tmp_path, 61, omistajat=OMAT)
+    assert t.virheet == () and t.ilmarin is True and t.yhdistettava is True and t.kesken is True
+    julkaise(tmp_path / "b", 61, m={**m, "jattaja": "ilmari"}, tiedostot={})
+    assert lue_kehitystyo(tmp_path / "b", 61, omistajat=OMAT).ilmarin is False
+
+
 def test_esimerkin_ilmarin_tyo():
     t = lue_kehitystyo(ESIMERKKI, 43)
     assert t.ilmarin and t.meta["lahde"] == "oma" and t.toimet == KAIKKI_POIS and t.vaihe == ("Valmis", "success")

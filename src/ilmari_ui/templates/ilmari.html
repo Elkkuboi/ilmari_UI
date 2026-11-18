@@ -45,7 +45,7 @@
 </section>
 
 <section class="panel panel-padding" aria-labelledby="ilmari-ohjeet"><h2 id="ilmari-ohjeet">Pysyvät ohjeet{% if toiminta.ohjeet %} <span class="section-heading-count">{{ toiminta.ohjeet|length }}</span>{% endif %}</h2>
-<p class="small">Korjauksesi, jotka Ilmari on tallentanut ja joita se noudattaa jatkossa. Gateway hyväksyy uuden ohjeen vain vuorossa, jonka sinun viestisi aloitti, ja vain ennen kuin Ilmari käynnistää siinä työn: työkalujen tai verkkosivujen teksti ei voi istuttaa ohjeita.</p>
+<p class="small">Korjauksesi, jotka Ilmari on tallentanut ja joita se noudattaa jatkossa. Gateway hyväksyy uuden ohjeen vain vuorossa, jonka sinun viestisi aloitti, ennen kuin Ilmari käynnistää siinä työn, ja vain jos ohjeen sanoista valtaosa (ja jokainen osoite tai polku sellaisenaan) on siinä viestissäsi. Jos liität viestiin muiden tekstiä, sekin lasketaan sinun sanoiksesi: poista ohje, jota et tunnista.</p>
 {% if toiminta.ohjeet is none %}<p>Ohjeita ei voi lukea.</p>
 {% elif toiminta.ohjeet %}<ul class="dev-list">{% for o in toiminta.ohjeet %}<li><p class="safe-text">{{ o.teksti }}</p><div class="ilmari-ohje-rivi"><small>{{ format_time(o.aika) }} · nro {{ o.id }}</small>{% if gateway_url %}<form method="post" action="{{ gateway_url }}/ilmari/ohje/{{ o.id }}/poista"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Poista</button></form>{% endif %}</div></li>{% endfor %}</ul>
 {% else %}<p>Ei pysyviä ohjeita vielä.</p>{% endif %}
