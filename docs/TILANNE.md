@@ -1,4 +1,32 @@
-# ilmari_UI: tämän repositorion tilanne 31.10.2026
+# ilmari_UI: tämän repositorion tilanne 18.11.2026
+
+## Päivitys 18.11.2026: Ilmari nyt (aiops ADR-0032, Pala 1 "Ilmari toimii itse"), haara `ilmari-nyt`
+
+- Uusi sivu `/hub/ilmari` ("Ilmari nyt", navigaatiossa Keskustelun jälkeen ja puhelimen alapalkissa; Sovellukset
+  siirtyi alapalkista Kaikki osiot -valikkoon ja sivupalkin TYÖTILA-ryhmään): tila (käynnissä / Seis / yöajo käynnissä
+  klo HH.MM asti), Seis ja Jatka, yöajon asetukset (päällä/pois, kellonaika), tavoitteet (tekstialue), pysyvät ohjeet
+  Poista-napein, rajatestin tulos ja Aja rajatesti nyt -nappi sekä tekoloki (uusin ensin, 100 riviä: aika, tekijä,
+  laji, mitä, miksi, peruminen). Lomakkeet ovat POST-lomakkeita gatewayn reitteihin `/ilmari/seis`, `/ilmari/jatka`,
+  `/ilmari/asetukset` (`yoajo_paalla`=1 tai puuttuu, `yoajo_kello` HH:MM), `/ilmari/tavoitteet` (`rivit`),
+  `/ilmari/ohje/<id>/poista` ja `/ilmari/rajatesti`, kaikissa `paluu=hub`, ja ne näkyvät vain tuotannossa. Ei
+  automaattista päivitystä (tavoitelomake tyhjenisi); sivulla on Päivitä-linkki.
+- Uusi lukija `toiminta.py` gatewayn hakemistolle `/srv/aiops/ilmari/toiminta` (aiops-gw:ilmari-julkaisu 2750):
+  `asetukset.json`, `tila.json`, `ohjeet.json`, `tavoitteet.json` (tarkat kentät, `versio` 1, kokorajat, omistaja root
+  tai aiops-gw, puuttuva tiedosto = gatewayn oletus, puuttuva hakemisto = not_published) ja `teot.jsonl` (vain
+  lisättävä: luetaan avaushetken koon viimeiset 512 KiB, lisäys luvun aikana ei haittaa, katkaisu tai linkitys on
+  virhe; kelvoton rivi ohitetaan ja lasketaan; kierrätyksen jälkeen loppu luetaan `teot.1.jsonl`:stä). Jokaisen
+  tiedoston virhe on oma: rikkinäinen tekoloki, vuoro tai rajatesti ei piilota Seis-tilaa. Jos tilaa ei voi lukea,
+  sivu tarjoaa sekä Seis- että Jatka-napin (gateway päättää).
+- Kaikki mallin ja gatewayn teksti näytetään koodattuna (ei `|safe`, ei Markdownia). Tekolokissa tekijä "Gateway" on
+  gatewayn havaitsema teko ja "Ilmari" Ilmarin oma kirjaus.
+- Kehitä: gateway julkaisee nyt myös Ilmarin omat dsh-työt (`ilmari-dsh`, jättäjä `aiops-ceo`). Lista merkitsee ne
+  "Ilmarin oma työ". Lähteillä `oma` ja `tyhja` (ja Ilmarin työllä ilman lähdettä) ei tarjota Hyväksy-, Hylkää-,
+  muutos-, käyttöönotto- eikä palautustoimia eikä linkkiä gatewayn kehitystyösivulle (`Kehitystyo.yhdistettava`);
+  vaihe on "Valmis". Ilmarin aiops- ja Ravintopolku-töillä toimet ovat samat kuin Eliaksen toiveella.
+- Palvelutiedosto: `BindReadOnlyPaths=-/srv/aiops/ilmari/toiminta` (käsin kirjoitettu odotus päivitetty). Asennus
+  vaatii, että aiopsin deploy.sh on luonut hakemiston; ilman sitä sivu kertoo, ettei gateway ole julkaissut tilaa.
+- Esimerkkiaineisto: `demo/toiminta/` ja Ilmarin työ `demo/kehitys/43` (lähde oma).
+- Testit: 764 passed, 72 skipped (ilman selainryhmää, shellcheckiä ja roottia).
 
 ## Päivitys 31.10.2026: Kehitä Hubissa ensisijaisesti (aiops ADR-0024 tarkennus 31.10.)
 

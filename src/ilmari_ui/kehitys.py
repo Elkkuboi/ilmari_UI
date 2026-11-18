@@ -36,6 +36,9 @@ OLETUS_KAYTTOONOTOT = Path("/srv/aiops/ilmari/kayttoonotot")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "kehitys"
 ESIMERKKI_KAYTTOONOTOT = Path(__file__).resolve().parent / "demo" / "kayttoonotot"
 GATEWAY_KAYTTAJA = "aiops-gw"
+# Ilmarin omat dsh-työt (aiops ADR-0032, Pala 1): gateway julkaisee myös nimellä ilmari-dsh luodut työt samassa muodossa,
+# jättäjänä Ilmarin tunnus. Lähde voi olla myös tyhja tai oma (Ilmarin pysyvä työtila), joita ei yhdistetä mihinkään.
+CEO_KAYTTAJA = "aiops-ceo"
 TOITA_MAX = 50
 RAJAT = {"meta.json": 256 * 1024, "paatos.json": 16 * 1024, "yhdistys.json": 16 * 1024, "kayttoonotto.json": 16 * 1024,
          "palautus.json": 16 * 1024, "sulku.json": 16 * 1024,
@@ -117,6 +120,8 @@ class Kehitystyo:
             testit = (self.meta.get("tulos") or {}).get("testit")
             if isinstance(testit, dict) and testit.get("paluukoodi") not in (0, None):
                 return "Valmis, testit epäonnistuivat", "warning"
+            if not self.yhdistettava:
+                return "Valmis", "success"  # työtila tai tyhjä kontti: ei päätettävää
             return "Valmis, odottaa päätöstä", "accent"
         if tila in ("failed", "cancelled"):
             return TILAT[tila].capitalize(), "danger"
@@ -134,8 +139,25 @@ class Kehitystyo:
                 or bool(p.get("palautus_pyynto") and self.palautus is None))
 
     @property
+    def ilmarin(self) -> bool:
+        """Ilmarin itse käynnistämä työ (ilmari-dsh), ei Eliaksen toive."""
+        return self.meta.get("jattaja") == CEO_KAYTTAJA
+
+    @property
+    def yhdistettava(self) -> bool:
+        """Voiko haaran hyväksyä, yhdistää ja ottaa käyttöön: vain kehityslähteet (LAHTEET). Ilmarin työtila (oma) ja
+        tyhjä kontti (tyhja) eivät ole repoja, joten niille ei tarjota päätöstä (gateway kieltäytyy joka tapauksessa).
+        Vanhoilla Eliaksen töillä lähde puuttuu (= aiops); Ilmarin työllä puuttuva lähde ei ole yhdistettävä."""
+        lahde = self.meta.get("lahde") or ""
+        if lahde:
+            return lahde in {nimi for nimi, _ in LAHTEET}
+        return not self.ilmarin
+
+    @property
     def toimet(self) -> dict[str, bool]:
         """Mitkä gatewayn toimet ovat tässä tilassa mahdollisia (gateway tarkistaa saman itse)."""
+        if not self.yhdistettava:
+            return dict.fromkeys(("hyvaksy", "hylkaa", "muutos", "kayttoonotto", "palauta", "sulje"), False)
         p = self.paatos or {}
         tulos = self.meta.get("tulos") or {}
         valmis = self.meta.get("tila") == "succeeded"

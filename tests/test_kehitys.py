@@ -167,7 +167,7 @@ def test_ristiriitainen_historia_ei_nay(tmp_path, muutos):
 
 def test_esimerkkiaineisto_kelpaa():
     tyot = lue_kehitystyot(ESIMERKKI)
-    assert [t.tyo for t in tyot] == [42, 41, 40] and all(t.virheet == () for t in tyot)
+    assert [t.tyo for t in tyot] == [43, 42, 41, 40] and all(t.virheet == () for t in tyot)  # 43: Ilmarin oma (18.11.)
     assert lue_kehitystyo(ESIMERKKI, 41).vaihe == ("Otettu käyttöön", "success")
     assert lue_kayttoonotot(ESIMERKKI_KAYTTOONOTOT, omistaja=None).tila == "ready"
 
@@ -247,3 +247,54 @@ def test_ristiriitaan_jaaneen_tyon_sulku(tmp_path):
     assert t.toimet["sulje"] is False and t.sulku["kuka"] == "elias"
     julkaise(tmp_path / "c", paatos=p, yhdistys={"tila": "yhdistetty", "commit": "d" * 40})
     assert lue_kehitystyo(tmp_path / "c", 41, omistajat=OMAT).toimet["sulje"] is False
+
+
+# --- 18.11.: Ilmarin omat dsh-työt (aiops ADR-0032, nimi ilmari-dsh) Kehitä-listassa ----------------------------------
+
+KAIKKI_POIS = {"hyvaksy": False, "hylkaa": False, "muutos": False, "kayttoonotto": False, "palauta": False, "sulje": False}
+
+
+@pytest.mark.parametrize("lahde", ["oma", "tyhja", "keksitty", ""])
+def test_ilmarin_tyotila_ei_tarjoa_yhdistysta(tmp_path, lahde):
+    """Työtila (oma), tyhjä kontti ja tuntematon lähde: ei hyväksyntää, yhdistystä, käyttöönottoa eikä muutospyyntöä,
+    vaikka kontti teki haaran ja commitin. Vaihe on Valmis eikä 'odottaa päätöstä'."""
+    julkaise(tmp_path, m=meta(jattaja="aiops-ceo", lahde=lahde))
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.ilmarin is True and t.yhdistettava is False and t.virheet == ()
+    assert t.toimet == KAIKKI_POIS and t.vaihe == ("Valmis", "success") and t.kesken is False
+
+
+def test_ilmarin_repotyo_ja_vanha_tyo_ovat_yhdistettavia(tmp_path):
+    """Sallittu suunta: Ilmarin työ lähteellä aiops tai ravintopolku saa samat toimet kuin Eliaksen toive; vanha
+    Eliaksen työ ilman lähdettä on aiops kuten ennen."""
+    a, b, c = (tmp_path / n for n in "abc")
+    julkaise(a, m=meta(jattaja="aiops-ceo", lahde="aiops"))
+    julkaise(b, m=meta(jattaja="aiops-ceo", lahde="ravintopolku"))
+    julkaise(c, m=meta())
+    for juuri, ilmarin in ((a, True), (b, True), (c, False)):
+        t = lue_kehitystyo(juuri, 41, omistajat=OMAT)
+        assert t.ilmarin is ilmarin and t.yhdistettava is True
+        assert t.toimet["hyvaksy"] is True and t.vaihe == ("Valmis, odottaa päätöstä", "accent")
+    # testit epäonnistuivat näkyy myös työtilan työssä
+    julkaise(tmp_path / "d", m=meta(jattaja="aiops-ceo", lahde="oma",
+                                    tulos={**meta()["tulos"], "testit": {"paluukoodi": 1, "yhteenveto": "1 failed"}}))
+    assert lue_kehitystyo(tmp_path / "d", 41, omistajat=OMAT).vaihe == ("Valmis, testit epäonnistuivat", "warning")
+
+
+def test_gatewayn_kirjoittama_ilmarin_meta_on_ilmarin_tyo(tmp_path):
+    """Ristiinlukittu aiopsin kanssa (aiops tests/test_gateway_toiminta.py ja test_pala1_paasta_paahan.py: dsh_aja
+    kirjoittaa jattaja = aiops-ceo): gatewayn luontihetken meta täsmälleen niillä kentillä merkitään Ilmarin omaksi
+    työksi myös repolähteellä, jolloin Kehitä-lista ei näytä sitä Eliaksen toiveena. Kielletty: muu jättäjä
+    (esim. 'ilmari') ei ole Ilmarin työ, joten arvon on oltava sama molemmissa repoissa."""
+    m = {"tyo": 61, "toive": "Korjaa parseri\nyksityiskohdat", "jatka": None, "lahde": "aiops",
+         "luotu": "2026-11-19T00:10:00.000+00:00", "jattaja": "aiops-ceo", "tila": "queued", "tila_teksti": "jonossa"}
+    julkaise(tmp_path, 61, m=m, tiedostot={})
+    t = lue_kehitystyo(tmp_path, 61, omistajat=OMAT)
+    assert t.virheet == () and t.ilmarin is True and t.yhdistettava is True and t.kesken is True
+    julkaise(tmp_path / "b", 61, m={**m, "jattaja": "ilmari"}, tiedostot={})
+    assert lue_kehitystyo(tmp_path / "b", 61, omistajat=OMAT).ilmarin is False
+
+
+def test_esimerkin_ilmarin_tyo():
+    t = lue_kehitystyo(ESIMERKKI, 43)
+    assert t.ilmarin and t.meta["lahde"] == "oma" and t.toimet == KAIKKI_POIS and t.vaihe == ("Valmis", "success")

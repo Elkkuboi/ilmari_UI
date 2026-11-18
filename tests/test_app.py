@@ -23,6 +23,7 @@ SKINS = ("arctic-command", "slate-electric", "nordic-paper", "aurora-lab")
 PAGES = (
     "/hub",
     "/hub/keskustelu",
+    "/hub/ilmari",
     "/hub/ajot",
     "/hub/hyvaksynnat",
     "/hub/sovellukset",

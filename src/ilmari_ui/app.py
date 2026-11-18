@@ -30,6 +30,7 @@ from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT
 from . import kehitys
 from . import keskustelu as keskustelu_lukija
 from . import jarjestelma as jarjestelma_lukija
+from . import toiminta as toiminta_lukija
 from .mallit import (ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, OLETUS_ROOLIT as MALLIT_YLIKIRJOITUS,
                      RAM_MARGINAALI_GB, lue_mallit, lue_ylikirjoitus, vapaa_ram_gb)
 from .peruskirja import lue_peruskirja
@@ -39,6 +40,7 @@ from .themes import SKINS, normalize_skin
 PACKAGE_DIR = Path(__file__).parent
 HELSINKI = ZoneInfo("Europe/Helsinki")
 DEMO_NOW = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
+TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 1, 10, tzinfo=timezone.utc)  # esimerkin yöajo käynnissä (03.10 Helsingissä)
 APP_CATALOG = (
     {"id": "ravintopolku", "name": "Ravintopolku", "description": "Kirjauksista julkaistu ravintokooste. Puuttuvat päivät säilyvät puuttuvina.", "data_class": "private", "icon": "leaf"},
     {"id": "unicafe", "name": "UniCafe", "description": "Päivätty ruokalista, valitut kriteerit ja alkuperäinen lähde.", "data_class": "public", "icon": "food"},
@@ -538,6 +540,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if t.kesken:
             response.headers["Refresh"] = "15"
         return response
+
+    # --- Ilmari nyt (aiops ADR-0032, Pala 1, 18.11.2026): Hub näyttää, gateway toimii --------------------------------
+
+    @app.get("/hub/ilmari", response_class=HTMLResponse)
+    async def ilmari_nyt(request: Request):
+        """Ilmarin tila, Seis ja Jatka, yöajon asetukset, tavoitteet, pysyvät ohjeet, rajatesti ja tekoloki gatewayn
+        julkaisusta (/srv/aiops/ilmari/toiminta). Lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub), ja
+        gateway valvoo kaiken itse. Ei automaattista päivitystä: se tyhjentäisi kesken kirjoitetut tavoitteet."""
+        if settings.demo_enabled and request.query_params.get("demo") == "1":
+            toiminta = toiminta_lukija.lue_toiminta(toiminta_lukija.ESIMERKKI)
+            gateway_url, nyt = None, TOIMINTA_DEMO_NYT
+        elif settings.identity is not None:
+            toiminta = toiminta_lukija.lue_toiminta(toiminta_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+            gateway_url, nyt = settings.identity.origin, datetime.now(timezone.utc)
+        else:
+            toiminta, gateway_url, nyt = None, None, datetime.now(timezone.utc)
+        return render(request, "ilmari", "Ilmari nyt", toiminta=toiminta, gateway_url=gateway_url,
+                      tilarivi=toiminta_lukija.tilarivi(toiminta, nyt), malli=mallin_tila(request))
 
     @app.get("/hub/mallit", response_class=HTMLResponse)
     async def models(request: Request):

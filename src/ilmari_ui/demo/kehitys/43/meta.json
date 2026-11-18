@@ -1,0 +1,29 @@
+{
+ "tyo": 43,
+ "toive": "Avaa oma työtila ja lue tehtavat.md. Jos sitä ei ole, luo se tavoitteista.",
+ "jatka": null,
+ "luotu": "2026-10-28T14:00:00+00:00",
+ "jattaja": "aiops-ceo",
+ "lahde": "oma",
+ "tila": "succeeded",
+ "tila_teksti": "valmis",
+ "syy": "dsh päättyi (paluukoodi 0)",
+ "kesto": "4 min",
+ "paivitetty": "2026-10-28T14:04:10+00:00",
+ "valmis": true,
+ "tulos": {
+  "paluukoodi": 0,
+  "haara": "ilmari/43",
+  "perus": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "paa": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commiteja": 1,
+  "tiedostot": [
+   "tehtavat.md"
+  ],
+  "muutokset": "1 tiedosto, 12 lisäystä",
+  "vastaus": "Loin tehtavat.md: kolme tehtävää.",
+  "virhe": "",
+  "testit": null
+ },
+ "tiedostot": []
+}

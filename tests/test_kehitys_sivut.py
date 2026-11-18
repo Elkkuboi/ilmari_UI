@@ -93,3 +93,41 @@ def test_kehita_on_puhelimen_alapalkissa():
     r = asiakas().get("/hub?demo=1")
     alapalkki = r.text.split('class="bottom-nav"')[1].split("</nav>")[0]
     assert 'href="/hub/kehita' in alapalkki and "Kehitä" in alapalkki
+
+
+def test_ilmarin_oma_tyo_listassa_ja_sivulla():
+    """18.11. (aiops ADR-0032): gateway julkaisee myös Ilmarin omat dsh-työt (ilmari-dsh); työtilan työ näkyy ilman
+    päätöstä ja linkkiä gatewayn kehitystyösivulle."""
+    c = asiakas()
+    r = c.get("/hub/kehita?demo=1")
+    assert r.status_code == 200 and 'href="/hub/kehita/43?' in r.text and "· oma · Ilmarin oma työ" in r.text
+    r = c.get("/hub/kehita/43?demo=1")
+    assert r.status_code == 200 and "ILMARIN OMA TYÖ" in r.text and "LÄHDE OMA" in r.text
+    assert "Ilmarin oma pysyvä työtila" in r.text and "päätöstä ei tarvita" in r.text
+    assert "Katso diff ja testit alta ja päätä" not in r.text and "Työn sivu gatewayssa" not in r.text
+
+
+def test_tuotannossa_tyotilan_tyolle_ei_hyvaksyntaa(tmp_path, monkeypatch):
+    """Kielletty suunta: työtilan (oma) työlle ei Hyväksy-, Hylkää- eikä muutoslomaketta. Sallittu suunta: Ilmarin
+    aiops-työlle sama Hyväksy-linkki kuin Eliaksen toiveelle."""
+    import json
+    import os
+    juuri = tmp_path / "kehitys"
+    for tyo, lahde in ((43, "oma"), (44, "aiops")):
+        (juuri / str(tyo)).mkdir(parents=True)
+        (juuri / str(tyo) / "meta.json").write_text(json.dumps({
+            "tyo": tyo, "toive": "Ilmarin tehtävä", "jatka": None, "luotu": "2026-11-18T12:00:00+00:00",
+            "jattaja": "aiops-ceo", "lahde": lahde, "tila": "succeeded", "valmis": True, "tiedostot": [],
+            "tulos": {"paluukoodi": 0, "haara": f"ilmari/{tyo}", "paa": "b" * 40, "commiteja": 1}}))
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({os.getuid()}))
+    root = tmp_path / "ajot"
+    root.mkdir()
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
+    otsakkeet = {"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"}
+    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
+                    client=None) as client:
+        oma, aiops = client.get("/kehita/43", headers=otsakkeet), client.get("/kehita/44", headers=otsakkeet)
+    assert oma.status_code == 200 and aiops.status_code == 200
+    assert "/kehitys/43/hyvaksy" not in oma.text and "/kehitys/43/hylkaa" not in oma.text and 'name="jatka"' not in oma.text
+    assert 'href="https://tyoasema.test/kehitys/44/hyvaksy?paluu=hub"' in aiops.text and "ILMARIN OMA TYÖ" in aiops.text
