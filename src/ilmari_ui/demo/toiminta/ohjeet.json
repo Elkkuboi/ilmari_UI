@@ -1,0 +1,20 @@
+{
+ "versio": 1,
+ "ohjeet": [
+  {
+   "id": 1,
+   "aika": "2026-11-17T21:14:03+02:00",
+   "teksti": "Aamuraportti lyhyesti: enintään viisi riviä otsikkoa kohden."
+  },
+  {
+   "id": 2,
+   "aika": "2026-11-18T08:02:40+02:00",
+   "teksti": "Ravintopolun muutoksissa aja npm test ennen committia.\nJos testit kaatuvat, älä jätä haaraa hyväksyttäväksi."
+  },
+  {
+   "id": 4,
+   "aika": "2026-11-18T19:30:11+02:00",
+   "teksti": "Merkintä kuten <b>ei html</b> näkyy tekstinä."
+  }
+ ]
+}

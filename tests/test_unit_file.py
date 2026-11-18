@@ -44,7 +44,7 @@ def test_unit_matches_hand_written_specification():
                               "-/srv/aiops/ilmari/dokumentit", "-/srv/aiops/ilmari/kehitys",
                               "-/srv/aiops/ilmari/kayttoonotot", "-/srv/aiops/ilmari/mallit",
                               "-/srv/aiops/ilmari/keskustelu", "-/srv/aiops/ilmari/roolit",
-                              "-/srv/aiops/ilmari/jarjestelma"],
+                              "-/srv/aiops/ilmari/jarjestelma", "-/srv/aiops/ilmari/toiminta"],
         "InaccessiblePaths": ["/etc/aiops"],
         "PrivateNetwork": ["yes"],
         "RestrictAddressFamilies": ["AF_UNIX"],

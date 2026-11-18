@@ -1,0 +1,129 @@
+{
+ "versio": 1,
+ "seis": false,
+ "seis_aika": null,
+ "seis_kuka": null,
+ "yoajo_viimeisin": "2026-11-19",
+ "vuoro": {
+  "laji": "yoajo",
+  "saie": 12,
+  "istunto": 31,
+  "alkoi": "2026-11-19T02:01:12+02:00",
+  "paattyy": "2026-11-19T04:56:12+02:00"
+ },
+ "rajatesti": {
+  "aika": "2026-11-19T02:00:41+02:00",
+  "tyo": 101,
+  "lapi": true,
+  "kohdat": [
+   {
+    "nimi": "koti_luku",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/home/elias: Permission denied"
+   },
+   {
+    "nimi": "aiops_asetukset",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/etc/aiops: ei olemassa"
+   },
+   {
+    "nimi": "kanta_luku",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/srv/aiops/db: ei olemassa"
+   },
+   {
+    "nimi": "shadow_luku",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/etc/shadow: Permission denied"
+   },
+   {
+    "nimi": "docker_soketti",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/var/run/docker.sock: ei olemassa"
+   },
+   {
+    "nimi": "sudo",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "sudo: komentoa ei ole"
+   },
+   {
+    "nimi": "uid",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "uid 10001"
+   },
+   {
+    "nimi": "kyvyt",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "CapEff 0000000000000000, NoNewPrivs 1"
+   },
+   {
+    "nimi": "juuren_kirjoitus",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "/: Read-only file system"
+   },
+   {
+    "nimi": "silta_22",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "172.30.0.1:22: yhteys estetty"
+   },
+   {
+    "nimi": "silta_8089",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "172.30.0.1:8089: aikaraja 3 s"
+   },
+   {
+    "nimi": "lahiverkko",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "192.168.1.1:80: aikaraja 3 s"
+   },
+   {
+    "nimi": "tailnet",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "100.100.100.100:53: yhteys estetty"
+   },
+   {
+    "nimi": "metadata",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "169.254.169.254:80: aikaraja 3 s"
+   },
+   {
+    "nimi": "salaisuudet",
+    "odotus": "estetty",
+    "lapi": true,
+    "havainto": "ei salaisuuksilta näyttäviä muuttujia tai tiedostoja"
+   },
+   {
+    "nimi": "internet",
+    "odotus": "sallittu",
+    "lapi": true,
+    "havainto": "1.1.1.1:443 yhdistyi"
+   },
+   {
+    "nimi": "tuloste",
+    "odotus": "sallittu",
+    "lapi": true,
+    "havainto": "/output kirjoitettavissa"
+   },
+   {
+    "nimi": "oma_luku",
+    "odotus": "sallittu",
+    "lapi": true,
+    "havainto": "/oma luettavissa (vain luku)"
+   }
+  ]
+ }
+}

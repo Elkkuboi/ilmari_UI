@@ -651,3 +651,22 @@ button.thread-button:hover { background: var(--il-surface-raised); border-color:
 .chat-msg-head { font-size: .75rem; color: var(--il-text-muted); margin-bottom: 4px; }
 .chat-msg p { margin: 0; white-space: pre-wrap; }
 .chat-composer form, form.chat-composer { display: grid; gap: 8px; }
+
+/* Ilmari nyt (aiops ADR-0032, 18.11.): Seis, yöajo, tavoitteet, pysyvät ohjeet ja tekoloki */
+.button--danger { background: var(--il-danger-soft); color: var(--il-danger); border-color: var(--il-danger); }
+.button--danger:hover { background: var(--il-danger-soft); border-color: var(--il-danger); filter: brightness(1.06); }
+.ilmari-state-line .badge { font-size: .85rem; padding: 6px 12px; }
+.ilmari-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0 6px; }
+.ilmari-form label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: .8rem; color: var(--il-text-muted); }
+.ilmari-form input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--il-accent); }
+.ilmari-form input[type="time"] { min-height: 40px; padding: 6px 10px; border: 1px solid var(--il-border-strong); border-radius: 8px; background: var(--il-bg); color: var(--il-text); font-size: .85rem; }
+.ilmari-goals { margin: 0; padding-left: 22px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.ilmari-ohje-rivi { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; color: var(--il-text-subtle); }
+.ilmari-ohje-rivi form { margin: 0; }
+.teko-list { list-style: none; margin: 0; padding: 0; }
+.teko-list li { padding: 12px 0; border-bottom: 1px solid var(--il-border); overflow-wrap: anywhere; }
+.teko-list li:last-child { border: 0; }
+.teko-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .75rem; color: var(--il-text-muted); }
+.teko-mita { margin: 6px 0 2px; }
+.teko-list .small { margin: 2px 0; color: var(--il-text-muted); }
+.teko-label { color: var(--il-text-subtle); }

@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icon, empty with context %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">ILMARI NYT · TILA, OHJEET JA TEOT</span><h1>Ilmari nyt.</h1><p>Mitä Ilmari tekee, mitä se on tehnyt ja millä ehdoilla. Gateway valvoo rajat koodissa: tämä sivu näyttää sen julkaiseman tilan ja lähettää muutokset sille.</p></div><div class="page-heading-actions"><a class="text-link" href="{{ url('/hub/ilmari') }}">Päivitä {{ icon('arrow') }}</a></div></div>
+<div class="stack">
+{% if demo %}<p class="rules-note">Esimerkkitila: synteettinen tila, ohjeet ja tekoloki.</p>{% endif %}
+{% if toiminta is none %}
+<section class="panel">{{ empty('Toiminnan lähdettä ei ole määritetty', 'Tuotannossa gateway julkaisee Ilmarin tilan, ohjeet ja tekolokin hakemistoon /srv/aiops/ilmari/toiminta.', 'pulse') }}</section>
+{% else %}
+<section class="panel panel-padding" aria-labelledby="ilmari-tila"><h2 id="ilmari-tila">Tila</h2>
+<p class="ilmari-state-line"><span class="badge badge--{{ tilarivi.savy }}">{{ tilarivi.teksti }}</span></p>
+<p>{{ tilarivi.selitys }}</p>
+{% if toiminta.tila != 'ready' %}<p class="rules-note">{{ toiminta.viesti }}</p>{% endif %}
+{% if malli %}<p class="small">Malli: {{ malli.tila_teksti or 'ei tiedossa' }}{% if malli.dsh_tyo %} · dsh-työ <a href="{{ url('/hub/kehita/' ~ malli.dsh_tyo) }}">{{ malli.dsh_tyo }}</a> käynnissä{% endif %}</p>{% endif %}
+{% if gateway_url %}
+<div class="dev-actions">
+{% if tilarivi.seis is not sameas true %}<form method="post" action="{{ gateway_url }}/ilmari/seis"><input type="hidden" name="paluu" value="hub"><button class="button button--danger" type="submit">{{ icon('pause') }} Seis</button></form>{% endif %}
+{% if tilarivi.seis is not sameas false %}<form method="post" action="{{ gateway_url }}/ilmari/jatka"><input type="hidden" name="paluu" value="hub"><button class="button button--primary" type="submit">Jatka {{ icon('arrow') }}</button></form>{% endif %}
+</div>
+<p class="small">Seis peruu Ilmarin käynnissä olevat työt ja yöajon heti ja estää uudet, kunnes painat Jatka. Tila säilyy uudelleenkäynnistysten yli.</p>
+{% elif not demo %}<p class="small">Seis ja Jatka ovat käytössä vain työasemalla (gateway samassa osoitteessa).</p>{% endif %}
+</section>
+{% if toiminta.tila == 'ready' %}
+{% set tilanne = toiminta.tilanne %}
+{% if toiminta.virheet %}<section class="panel panel-padding"><h2>Julkaisun ongelmat</h2><ul>{% for v in toiminta.virheet %}<li>{{ v }}</li>{% endfor %}</ul></section>{% endif %}
+
+<section class="panel panel-padding" aria-labelledby="ilmari-yoajo"><h2 id="ilmari-yoajo">Yöajo</h2>
+{% set a = toiminta.asetukset %}
+{% if a is none %}<p>Asetuksia ei voi lukea. Tallennus alla korvaa ne.</p>
+{% else %}<p>{% if a.paalla %}Päällä: alkaa klo {{ a.kello|replace(':', '.') }}, kesto enintään 3 h.{% else %}Pois päältä.{% endif %}{% if a.oletus %} <small>(oletus, ei vielä tallennettu)</small>{% endif %}{% if tilanne and tilanne.yoajo_viimeisin %} Viimeisin yöajo {{ format_date(tilanne.yoajo_viimeisin) }}.{% endif %}</p>{% endif %}
+{% if gateway_url %}
+<form method="post" action="{{ gateway_url }}/ilmari/asetukset" class="ilmari-form"><label><input type="checkbox" name="yoajo_paalla" value="1"{% if a is none or a.paalla %} checked{% endif %}> Yöajo päällä</label><label for="yoajo-kello">Alkaa klo <input id="yoajo-kello" type="time" name="yoajo_kello" value="{{ a.kello if a else '02:00' }}" step="60" required></label><input type="hidden" name="paluu" value="hub"><button class="button" type="submit">Tallenna</button></form>
+{% endif %}
+<p class="small">Yöajo alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten, eikä Seis ole päällä. Aamuraportti tulee keskusteluun kansioon Yöajot.</p>
+</section>
+
+<section class="panel panel-padding" aria-labelledby="ilmari-tavoitteet"><h2 id="ilmari-tavoitteet">Tavoitteet</h2>
+{% set tv = toiminta.tavoitteet %}
+{% if tv is none %}<p>Tavoitteita ei voi lukea.</p>
+{% elif tv.rivit %}<ol class="ilmari-goals">{% for r in tv.rivit %}<li>{{ r }}</li>{% endfor %}</ol>{% if tv.aika %}<p class="small">Päivitetty {{ format_time(tv.aika) }}.</p>{% endif %}
+{% else %}<p>Ei tavoitteita vielä. Ilmari tekee yöllä tavoitteista tehtävälistan.</p>{% endif %}
+{% if gateway_url %}
+<details class="dev-change"><summary>Muokkaa tavoitteita</summary><form method="post" action="{{ gateway_url }}/ilmari/tavoitteet"><label for="rivit">Yksi tavoite riville, tärkein ensin (enintään 20 riviä, rivi enintään 200 merkkiä)</label><textarea id="rivit" name="rivit" rows="6" maxlength="4100">{{ tv.rivit|join('\n') if tv else '' }}</textarea><input type="hidden" name="paluu" value="hub"><div class="dev-form-row"><span class="small">Tyhjät rivit jätetään pois.</span><button class="button button--primary" type="submit">Tallenna tavoitteet</button></div></form></details>
+{% endif %}
+</section>
+
+<section class="panel panel-padding" aria-labelledby="ilmari-ohjeet"><h2 id="ilmari-ohjeet">Pysyvät ohjeet{% if toiminta.ohjeet %} <span class="section-heading-count">{{ toiminta.ohjeet|length }}</span>{% endif %}</h2>
+<p class="small">Korjauksesi, jotka Ilmari on tallentanut ja joita se noudattaa jatkossa. Gateway hyväksyy uuden ohjeen vain vuorossa, jonka sinun viestisi aloitti, ja vain ennen kuin Ilmari käynnistää siinä työn: työkalujen tai verkkosivujen teksti ei voi istuttaa ohjeita.</p>
+{% if toiminta.ohjeet is none %}<p>Ohjeita ei voi lukea.</p>
+{% elif toiminta.ohjeet %}<ul class="dev-list">{% for o in toiminta.ohjeet %}<li><p class="safe-text">{{ o.teksti }}</p><div class="ilmari-ohje-rivi"><small>{{ format_time(o.aika) }} · nro {{ o.id }}</small>{% if gateway_url %}<form method="post" action="{{ gateway_url }}/ilmari/ohje/{{ o.id }}/poista"><input type="hidden" name="paluu" value="hub"><button class="button button--quiet" type="submit">Poista</button></form>{% endif %}</div></li>{% endfor %}</ul>
+{% else %}<p>Ei pysyviä ohjeita vielä.</p>{% endif %}
+</section>
+
+<section class="panel panel-padding" aria-labelledby="ilmari-rajatesti"><h2 id="ilmari-rajatesti">Rajatesti</h2>
+<p class="small">Kontti kokeilee omia rajojaan: kotihakemiston, salaisuuksien, Docker-soketin, sudon ja lähiverkon pitää estyä, ja internetin ja tulostehakemiston pitää toimia.</p>
+{% if tilanne is none or tilanne.rajatesti_virhe %}<p>Rajatestin tulosta ei voi lukea.</p>
+{% elif tilanne.rajatesti is none %}<p>Rajatestiä ei ole vielä ajettu.</p>
+{% else %}{% set r = tilanne.rajatesti %}
+<p><span class="badge badge--{{ 'success' if r.lapi else 'danger' }}">{{ 'Läpi' if r.lapi else 'Ei läpi' }}</span> {{ format_time(r.aika) }} · työ {{ r.tyo }} · {{ r.kohdat|length }} kohtaa{% if r.hylatyt %}, {{ r.hylatyt|length }} ei läpi{% endif %}</p>
+{% if r.hylatyt %}<ul class="dev-list">{% for k in r.hylatyt %}<li><strong>{{ k.nimi }}</strong> ({{ k.odotus_teksti }}) <span class="badge badge--danger">ei läpi</span>{% if k.havainto %}<br><small>{{ k.havainto }}</small>{% endif %}</li>{% endfor %}</ul>{% endif %}
+{% if r.kohdat %}<details><summary>Kaikki kohdat ({{ r.kohdat|length }})</summary><div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">Kohta</th><th scope="col">Odotus</th><th scope="col">Tulos</th><th scope="col">Havainto</th></tr></thead><tbody>{% for k in r.kohdat %}<tr><td>{{ k.nimi }}</td><td>{{ k.odotus_teksti }}</td><td><span class="badge badge--{{ 'success' if k.lapi else 'danger' }}">{{ 'läpi' if k.lapi else 'ei läpi' }}</span></td><td>{{ k.havainto }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+{% endif %}
+{% if gateway_url %}
+<form method="post" action="{{ gateway_url }}/ilmari/rajatesti" class="dev-actions"><input type="hidden" name="paluu" value="hub"><button class="button" type="submit"{% if malli and malli.dsh_tyo %} disabled{% endif %}>{{ icon('shield') }} Aja rajatesti nyt</button><span class="small">{% if malli and malli.dsh_tyo %}Rajatestin voi ajaa, kun dsh-työ {{ malli.dsh_tyo }} on valmis.{% else %}Tulos tulee tähän noin minuutissa (päivitä sivu).{% endif %}</span></form>
+{% endif %}
+</section>
+
+<section class="panel panel-padding" aria-labelledby="ilmari-teot"><h2 id="ilmari-teot">Tekoloki{% if toiminta.teot %} <span class="section-heading-count">{{ toiminta.teot|length }}</span>{% endif %}</h2>
+<p class="small">Uusin ensin, enintään 100. <strong>Gateway</strong> on gatewayn itse havaitsema teko. <strong>Ilmari</strong> on Ilmarin oma kirjaus: sen kertoma, ei gatewayn todentama.</p>
+{% if toiminta.teot_ohitettu %}<p class="rules-note">{{ toiminta.teot_ohitettu }} kelvotonta riviä ohitettiin.</p>{% endif %}
+{% if toiminta.teot is none %}<p>Tekolokia ei voi lukea.</p>
+{% elif toiminta.teot %}<ol class="teko-list">{% for t in toiminta.teot %}<li><div class="teko-head"><span class="badge badge--{{ 'neutral' if t.lahde == 'gateway' else 'accent' }}">{{ t.tekija }}</span> <time datetime="{{ t.aika }}">{{ format_time(t.aika) }}</time> · {{ t.laji }}{% if t.tyo %} · <a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% endif %}{% if t.saie %} · säie {{ t.saie }}{% endif %}</div><p class="teko-mita">{{ t.mita }}</p>{% if t.miksi %}<p class="small"><span class="teko-label">Miksi:</span> {{ t.miksi }}</p>{% endif %}{% if t.peru %}<p class="small"><span class="teko-label">Peruminen:</span> {{ t.peru }}</p>{% endif %}</li>{% endfor %}</ol>
+{% else %}<p>Ei tekoja vielä.</p>{% endif %}
+</section>
+{% endif %}
+{% endif %}
+</div>
+{% endblock %}

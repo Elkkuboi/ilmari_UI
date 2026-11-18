@@ -78,7 +78,7 @@ def test_home_skins_and_responsive_layout(page, skin, width):
         assert page.get_by_role("navigation", name="Kaikki osiot").is_visible()
 
 
-PAGES = ["/hub", "/hub/keskustelu", "/hub/ajot", "/hub/hyvaksynnat", "/hub/sovellukset", "/hub/ideat", "/hub/jarjestelma", "/hub/asetukset", "/hub/sovellukset/ravintopolku", "/hub/sovellukset/unicafe", "/hub/sovellukset/ideat", "/hub/sovellukset/jarvis", "/hub/ajot/20261013-001914-yo-demo"]
+PAGES = ["/hub", "/hub/keskustelu", "/hub/ilmari", "/hub/ajot", "/hub/hyvaksynnat", "/hub/sovellukset", "/hub/ideat", "/hub/jarjestelma", "/hub/asetukset", "/hub/sovellukset/ravintopolku", "/hub/sovellukset/unicafe", "/hub/sovellukset/ideat", "/hub/sovellukset/jarvis", "/hub/ajot/20261013-001914-yo-demo"]
 
 
 @pytest.mark.parametrize("width", [320, 768, 1440])
