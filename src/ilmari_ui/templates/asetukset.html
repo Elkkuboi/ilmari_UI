@@ -98,6 +98,10 @@
   <p class="empty">Koneen mittareita ei ole saatavilla.</p>
 {% endif %}
 </section>
+<section id="ulkoasu" aria-labelledby="h-ulko">
+  <h2 id="h-ulko" class="label">Ulkoasu <span class="aside">käytössä: {{ ulkoasu.nimi }}</span></h2>
+  <ul class="swatches">{% for v in varit %}<li><a class="swatch" data-vari="{{ v.tunniste }}" href="{{ url('/hub/ulkoasu/' ~ v.tunniste) }}"{% if v.tunniste == vari %} aria-current="true"{% endif %}><span class="swatch-name">{{ v.nimi }}</span><span class="swatch-line"><span class="dot" aria-hidden="true"></span>{{ v.kuvaus }}</span></a></li>{% endfor %}</ul>
+</section>
 <section aria-labelledby="h-muut">
   <h2 id="h-muut" class="label">Muut</h2>
   <ul class="rows"><li><a href="{{ url('/hub/dokumentit') }}">Dokumentit ja säännöt</a></li><li><a href="{{ gateway('/tyot') }}">Kaikki työt (raaka lista)</a></li><li><a href="{{ gateway('/passkey') }}">Puhelimen passkey</a></li></ul>

@@ -1,6 +1,6 @@
 # Ilmari Hub
 
-Suomenkielinen, responsiivinen Ilmari UI. Python 3.12, FastAPI, Jinja2 ja paikallinen CSS. Yksi tyyli: vaalea paperi, tumma muste ja tasalevyinen IBM Plex Mono (OFL, `static/fonts/`). Ei teemoja, JavaScriptiä, CDN:ää, tietokantaa tai mallikutsuja.
+Suomenkielinen, responsiivinen Ilmari UI. Python 3.12, FastAPI, Jinja2 ja paikallinen CSS. Yksi tyyli ja tasalevyinen IBM Plex Mono (OFL, `static/fonts/`). Värit vaihdetaan Asetuksissa (Ulkoasu): Paperi (oletus), Liitu, Terminaali ja Fosfori, joista kaksi viimeistä ovat tummia; valinta on eväste `ilmari_vari`, joka ohjaa myös gatewayn sivuja. Ei JavaScriptiä, CDN:ää, tietokantaa tai mallikutsuja.
 
 Hub on Ilmarin juuri ja Eliaksen ohjauspaikka. Valikossa on neljä sivua: **Nyt** (`/hub`: tila, Töihin nyt, Seis ja Jatka, mikä odottaa sinua, viimeisin raportti, teot ja linkit Ravintopolkuun ja Hahmoon), **Keskustelu**, **Työt** (`/hub/kehita`: toiveet, Ilmarin omat työt ja työn sivu) ja **Asetukset** (yöajo, tavoitteet, pysyvät ohjeet, aivot, rajatesti, kone, dokumentit). Jokainen muutos on lomake gatewaylle samassa alkuperässä; Hubissa ei ole POST-reittejä. Vanhat osoitteet (`/hub/ilmari`, `/hub/mallit`, `/hub/jarjestelma`, `/hub/saannot`, `/hub/ajot`, `/hub/sovellukset`, `/hub/hyvaksynnat`, `/hub/ideat`) ohjautuvat uusiin.
 

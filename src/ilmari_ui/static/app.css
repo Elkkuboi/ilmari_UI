@@ -1,11 +1,13 @@
-/* Ilmari Hub: yksi tyyli. Vaalea paperi, tumma muste, tasalevyinen kirjasin, ei varjoja eikä pyöristyksiä.
-   Värit ja mitat ovat vain tässä lohkossa; komponentit käyttävät muuttujia. */
+/* Ilmari Hub: yksi tyyli, vaihdettavat värit. Tasalevyinen kirjasin, ei varjoja eikä pyöristyksiä.
+   Värit ovat vain väriyhdistelmien lohkoissa; komponentit käyttävät muuttujia. */
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("fonts/IBMPlexMono-Italic.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/IBMPlexMono-SemiBold.woff2") format("woff2"); }
 
-:root {
+/* Värit: neljä valmista yhdistelmää. Oletus on paperi. Valinta on <html data-vari="…">; sama attribuutti missä tahansa
+   elementissä näyttää sen sisällön kyseisillä väreillä (värinäytteet Asetuksissa). */
+:root, [data-vari="paperi"] {
   color-scheme: light;
   --paper: #f1ead9;        /* sivun tausta */
   --sheet: #f9f5ea;        /* tuloste, syötekenttä, Ilmarin viesti */
@@ -18,13 +20,33 @@
   --ok: #2f6b3c;
   --warn: #8a5a00;
   --stop: #9b1c1c;
+}
+[data-vari="liitu"] {      /* vaalea, viileä: liitupaperi ja mustesininen */
+  color-scheme: light;
+  --paper: #ecece6; --sheet: #f8f8f4; --shade: #deded6;
+  --ink: #1b1c1e; --ink-2: #45474b; --ink-3: #63666b; --rule: #c3c4bb;
+  --accent: #1f4e8c; --ok: #2a6a3a; --warn: #7d5600; --stop: #9a1f1f;
+}
+[data-vari="terminaali"] { /* tumma, lämmin: meripihka mustalla */
+  color-scheme: dark;
+  --paper: #17140f; --sheet: #201c15; --shade: #2b251b;
+  --ink: #eadfc6; --ink-2: #bdb198; --ink-3: #9a8f78; --rule: #3f382a;
+  --accent: #e8a33a; --ok: #7fc48a; --warn: #e0b04a; --stop: #e8776a;
+}
+[data-vari="fosfori"] {    /* tumma, vihreä: fosforinäyttö */
+  color-scheme: dark;
+  --paper: #0e1411; --sheet: #141c18; --shade: #1c2721;
+  --ink: #cfe6d2; --ink-2: #a3c2a8; --ink-3: #7f9d85; --rule: #2b3b31;
+  --accent: #6fe08a; --ok: #6fe08a; --warn: #e0c05a; --stop: #f0776b;
+}
+:root {
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --measure: 49.5rem;      /* noin 88 merkkiä; rem, jotta pienempi teksti ei kavenna runkoa */
   --gap: 2.25rem;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background: var(--paper); }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 400 15px/1.6 var(--mono); font-variant-ligatures: none; overflow-wrap: anywhere; }
 h1, h2, h3, h4, p, ul, ol, dl, dd, figure, pre, blockquote { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
@@ -159,6 +181,16 @@ pre.code { background: var(--sheet); border: 1px solid var(--rule); padding: .8r
 .prose ul { list-style: "- "; } .prose ol { list-style: decimal; }
 .prose blockquote { border-left: 3px solid var(--rule); padding-left: 1.5ch; color: var(--ink-2); }
 .prose hr { border: 0; border-top: 1px solid var(--rule); }
+
+/* --- Värinäytteet (Asetukset → Ulkoasu) ----------------------------------------------------------------------- */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: .8rem; }
+.swatch { display: block; text-decoration: none; background: var(--paper); color: var(--ink); border: 1px solid var(--rule); padding: .7rem .85rem; }
+.swatch:hover { color: var(--ink); border-color: var(--ink); }
+.swatch[aria-current="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.swatch-name { display: flex; justify-content: space-between; gap: 1ch; font-weight: 600; }
+.swatch-name::after { content: ""; width: .55em; height: 1.05em; background: var(--accent); }
+.swatch-line { display: flex; align-items: center; gap: .6ch; color: var(--ink-2); font-size: 13px; margin-top: .3rem; }
+.swatch-line .dot { background: var(--ok); }
 
 @media (max-width: 640px) {
   body { font-size: 14.5px; }

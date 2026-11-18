@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="fi">
+<html lang="fi" data-vari="{{ vari }}">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="theme-color" content="#f1ead9">
+<meta name="color-scheme" content="{{ 'dark' if ulkoasu.tumma else 'light' }}"><meta name="theme-color" content="{{ ulkoasu.tausta }}">
 <title>{{ otsikko }} · Ilmari</title>
 <link rel="icon" href="/hub/static/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="/hub/static/manifest.webmanifest">
