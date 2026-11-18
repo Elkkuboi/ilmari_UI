@@ -560,8 +560,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             gateway_url, nyt = settings.identity.origin, datetime.now(timezone.utc)
         else:
             toiminta, gateway_url, nyt = None, None, datetime.now(timezone.utc)
+        malli = mallin_tila(request)
+        # Gateway palaa tänne ?toihin=rajatesti, kun Töihin nyt ajaa ensin rajatestin (vuoro alkaa sen jälkeen itsestään).
         return render(request, "ilmari", "Ilmari nyt", toiminta=toiminta, gateway_url=gateway_url,
-                      tilarivi=toiminta_lukija.tilarivi(toiminta, nyt), malli=mallin_tila(request))
+                      tilarivi=toiminta_lukija.tilarivi(toiminta, nyt), malli=malli,
+                      rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, (malli or {}).get("dsh_tyo")),
+                      toihin_rajatesti=request.query_params.get("toihin") == "rajatesti")
 
     @app.get("/hub/mallit", response_class=HTMLResponse)
     async def models(request: Request):

@@ -11,7 +11,7 @@
 <p class="ilmari-state-line"><span class="badge badge--{{ tilarivi.savy }}">{{ tilarivi.teksti }}</span></p>
 <p>{{ tilarivi.selitys }}</p>
 {% if toiminta.tila != 'ready' %}<p class="rules-note">{{ toiminta.viesti }}</p>{% endif %}
-{% if malli %}<p class="small">Malli: {{ malli.tila_teksti or 'ei tiedossa' }}{% if malli.dsh_tyo %} · dsh-työ <a href="{{ url('/hub/kehita/' ~ malli.dsh_tyo) }}">{{ malli.dsh_tyo }}</a> käynnissä{% endif %}</p>{% endif %}
+{% if malli %}<p class="small">Malli: {{ malli.tila_teksti or 'ei tiedossa' }}{% if malli.dsh_tyo and rajatesti_kaynnissa %} · rajatesti (työ {{ malli.dsh_tyo }}) käynnissä{% elif malli.dsh_tyo %} · dsh-työ <a href="{{ url('/hub/kehita/' ~ malli.dsh_tyo) }}">{{ malli.dsh_tyo }}</a> käynnissä{% endif %}</p>{% endif %}
 {% if gateway_url %}
 <div class="dev-actions">
 {% if tilarivi.seis is not sameas true %}<form method="post" action="{{ gateway_url }}/ilmari/seis"><input type="hidden" name="paluu" value="hub"><button class="button button--danger" type="submit">{{ icon('pause') }} Seis</button></form>{% endif %}
@@ -19,7 +19,8 @@
 </div>
 <p class="small">Seis peruu Ilmarin käynnissä olevat työt ja vuoron (yöajo tai työvuoro) heti ja estää uudet, kunnes painat Jatka. Tila säilyy uudelleenkäynnistysten yli.</p>
 {% if tilarivi.toihin %}{% set varattu = malli and (malli.dsh_tyo or malli.yoajo) %}
-<form method="post" action="{{ gateway_url }}/ilmari/vuoro" class="dev-actions"><input type="hidden" name="paluu" value="hub"><button class="button button--primary" type="submit"{% if varattu %} disabled{% endif %}>Töihin nyt {{ icon('arrow') }}</button><span class="small">Ilmari tekee saman kierroksen kuin yöllä (rästit, itsearviointi, tutkimus, raportti), enintään 90 min. Seis pysäyttää heti. Jos rajatestistä on yli 26 tuntia, gateway ajaa sen ensin ja vuoro alkaa, kun se on läpi.{% if malli and malli.dsh_tyo %} Töihin nyt toimii, kun dsh-työ {{ malli.dsh_tyo }} on valmis.{% elif malli and malli.yoajo %} Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</span></form>
+{% if toihin_rajatesti %}<p class="rules-note" role="status">Töihin nyt vastaanotettu: rajatesti ajetaan ensin (noin minuutti), ja työvuoro alkaa sen jälkeen itsestään, jos testi menee läpi. Nappia ei tarvitse painaa uudelleen; päivitä sivu hetken kuluttua.</p>{% endif %}
+<form method="post" action="{{ gateway_url }}/ilmari/vuoro" class="dev-actions"><input type="hidden" name="paluu" value="hub"><button class="button button--primary" type="submit"{% if varattu %} disabled{% endif %}>Töihin nyt {{ icon('arrow') }}</button><span class="small">Ilmari tekee saman kierroksen kuin yöllä (rästit, itsearviointi, tutkimus, raportti), enintään 90 min. Seis pysäyttää heti. Jos rajatestistä on yli 26 tuntia, gateway ajaa sen ensin ja vuoro alkaa, kun se on läpi.{% if malli and malli.dsh_tyo and rajatesti_kaynnissa %} Rajatesti (työ {{ malli.dsh_tyo }}) on käynnissä: jos painoit jo Töihin nyt, työvuoro alkaa sen jälkeen itsestään.{% elif malli and malli.dsh_tyo %} Töihin nyt toimii, kun dsh-työ {{ malli.dsh_tyo }} on valmis.{% elif malli and malli.yoajo %} Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</span></form>
 {% endif %}
 {% elif not demo %}<p class="small">Seis ja Jatka ovat käytössä vain työasemalla (gateway samassa osoitteessa).</p>{% endif %}
 </section>

@@ -72,8 +72,10 @@ RAPORTTI_KENTAT = frozenset({"versio", "aika", "saie", "laji", "teksti"})
 OLETUS_ASETUKSET = {"paalla": True, "kello": "02:00"}
 VUOROT = {"yoajo": "Yöajo", "tyovuoro": "Työvuoro"}   # vuoron ja raportin laji (gateway: yöajo tai Töihin nyt)
 VUORON_TYOT = {"yoajo": "yön työt", "tyovuoro": "työvuoron työt"}
-# Tekolokin "työ N" on linkki Kehitä-sivulle vain gatewayn työriveillä: muiden rivien työtä (esim. rajatesti) ei
-# julkaista, joten linkki veisi 404-sivulle.
+# Tekolokin "työ N" on linkki Kehitä-sivulle vain työriveillä, joiden työ julkaistaan siellä: muiden rivien työtä
+# (esim. rajatesti) ei julkaista, joten linkki veisi 404-sivulle. Gateway kirjoittaa näiden rivien työn numeron aina
+# itse; tyo_alkoi-rivin lähde on silti "ilmari", koska sen teksti on mallin (tehtävän ensimmäinen rivi). Ilmarin omat
+# kirjaukset ovat lajia "kirjaus", eivätkä ne voi olla näitä lajeja.
 TYO_LINKIT = frozenset({"tyo_alkoi", "tyo_paattyi", "tyo_peruttu"})
 ODOTUKSET = {"estetty": "pitää estyä", "sallittu": "pitää toimia"}
 TEKIJAT = {"gateway": "Gateway", "ilmari": "Ilmari"}
@@ -295,7 +297,7 @@ def tarkista_teko(raaka: bytes) -> dict[str, Any]:
                 "laji": _siisti(t["laji"], 40), "mita": _siisti(t["mita"], TEKO_TEKSTI_MAX),
                 "miksi": _siisti(t["miksi"], TEKO_TEKSTI_MAX), "peru": _siisti(t["peru"], TEKO_TEKSTI_MAX),
                 "tyo": tyo, "saie": _kokonaisluku(t["saie"], tyhja=True),
-                "tyo_linkki": tyo is not None and t["lahde"] == "gateway" and t["laji"] in TYO_LINKIT}
+                "tyo_linkki": tyo is not None and t["laji"] in TYO_LINKIT}
     except ReadFailure:
         raise _Ohitettava from None
 
@@ -459,6 +461,16 @@ def kello(arvo: str | None) -> str:
         return datetime.fromisoformat(arvo).astimezone(HELSINKI).strftime("%H.%M") if arvo else ""
     except (ValueError, TypeError, OverflowError):
         return ""
+
+
+def rajatesti_kaynnissa(toiminta: Toiminta | None, dsh_tyo: int | None) -> bool:
+    """Onko käynnissä oleva dsh-työ rajatesti? Gateway kirjaa jonoon jätetyn rajatestin tekolokiin (laji rajatesti,
+    lähde gateway, työn numero); uusin tällainen rivi kertoo saman työn. Rajatestiä ei julkaista Kehitä-sivulle, joten
+    sille ei tehdä linkkiä, ja Töihin nyt -pyyntö odottaa sen tulosta."""
+    if toiminta is None or dsh_tyo is None or not toiminta.teot:
+        return False
+    rivi = next((t for t in reversed(toiminta.teot) if t["laji"] == "rajatesti" and t["lahde"] == "gateway"), None)
+    return rivi is not None and rivi["tyo"] == dsh_tyo
 
 
 def tilarivi(toiminta: Toiminta | None, nyt: datetime) -> dict[str, Any] | None:

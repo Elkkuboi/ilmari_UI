@@ -321,7 +321,7 @@ def test_ilmari_nyt_on_valikossa_ja_puhelimen_alapalkissa():
     assert 'aria-current="page"' in asiakas().get("/hub/ilmari?demo=1").text.split('class="bottom-nav"')[1]
 
 
-def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None = None):
+def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None = None, polku: str = "/ilmari"):
     """Tuotantotila (Serve, identiteetti) testijulkaisulla: toiminta ja keskustelu tmp-hakemistoista."""
     monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: OMAT)
     monkeypatch.setattr(toiminta, "OLETUS", toiminta_hak)
@@ -336,7 +336,7 @@ def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None 
     config = parse_config({"hub": {"rp_id": RP, "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
     with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
                     client=None) as client:
-        return client.get("/ilmari", headers=SERVE)
+        return client.get(polku, headers=SERVE)
 
 
 def lomakkeet(r) -> dict[str, dict[str, str]]:
@@ -478,11 +478,14 @@ def test_tyovuoro_tila_json_luetaan(tmp_path):
     assert t.virheet == () and t.tilanne["vuoro"] == {**vuoro, "nimi": "Työvuoro"}
 
 
-def test_tekolokin_tyolinkki_vain_gatewayn_tyoriveille(tmp_path, monkeypatch):
-    teot = rivit(teko(1, laji="tyo_alkoi", tyo=11), teko(2, laji="tyo_paattyi", tyo=12), teko(3, laji="tyo_peruttu", tyo=13),
-                 teko(4, laji="rajatesti", tyo=14), teko(5, laji="rajatesti_tulos", tyo=15),
-                 teko(6, lahde="ilmari", laji="kirjaus", tyo=16), teko(7, lahde="ilmari", laji="tyo_alkoi", tyo=17),
-                 teko(8, laji="tyo_alkoi"))
+def test_tekolokin_tyolinkki_vain_tyoriveille(tmp_path, monkeypatch):
+    """Linkki Kehitä-sivulle vain riveillä, joiden työ julkaistaan siellä. tyo_alkoi kirjoitetaan kuten gateway sen
+    kirjoittaa: lähde ilmari (teksti on mallin), työn numero gatewayn. Rajatestin rivit (myös Töihin nyt -pyynnön
+    raukeaminen) ja Ilmarin kirjaukset näyttävät numeron tekstinä."""
+    teot = rivit(teko(1, lahde="ilmari", laji="tyo_alkoi", tyo=11), teko(2, laji="tyo_paattyi", tyo=12),
+                 teko(3, laji="tyo_peruttu", tyo=13), teko(4, laji="rajatesti", tyo=14),
+                 teko(5, laji="rajatesti_tulos", tyo=15), teko(6, lahde="ilmari", laji="kirjaus", tyo=16),
+                 teko(7, laji="tyovuoro_estetty", tyo=17), teko(8, laji="tyo_alkoi"))
     t = toiminta.lue_toiminta(julkaise(tmp_path / "t", teot=teot), omistajat=OMAT)
     assert {x["tyo"]: x["tyo_linkki"] for x in t.teot} == {11: True, 12: True, 13: True, 14: False, 15: False, 16: False,
                                                          17: False, None: False}
@@ -506,6 +509,38 @@ def test_tuotannossa_toihin_nyt(tmp_path, monkeypatch):
         r = tuotanto(tmp_path / str(n), monkeypatch, julkaise(tmp_path / "a"), keskustelu=malli)
         assert BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
         assert syy in r.text
+
+
+def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
+    """Gateway palaa osoitteeseen ?toihin=rajatesti, kun Töihin nyt ajaa ensin rajatestin: sivu kertoo, että vuoro
+    alkaa itsestään. Käynnissä oleva rajatesti (tekolokin uusin gatewayn rajatesti-rivi) näkyy ilman linkkiä, koska
+    sitä ei julkaista Kehitä-sivulle, eikä sivu käske odottamaan dsh-työtä. Kielletty: kehitystyö saa linkin ja
+    entisen syyn, eikä ilmoitusta näytetä ilman paluuparametria."""
+    teot = rivit(teko(1, laji="rajatesti", tyo=57, miksi="työvuoron rajatesti: Elias painoi Töihin nyt (elias@github)"))
+    for n, (dsh, polku) in enumerate(((57, "/ilmari?toihin=rajatesti"), (57, "/ilmari"), (58, "/ilmari"))):
+        (tmp_path / str(n)).mkdir()
+        r = tuotanto(tmp_path / str(n), monkeypatch, julkaise(tmp_path / f"a{n}", teot=teot),
+                     keskustelu={"dsh_tyo": dsh, "tila": "running"}, polku=polku)
+        sivu = BeautifulSoup(r.text, "html.parser")
+        teksti = " ".join(sivu.get_text().split())
+        linkit = {a["href"].split("?")[0] for a in sivu.find_all("a", href=True) if "/kehita/" in a["href"]}
+        assert ("Töihin nyt vastaanotettu: rajatesti ajetaan ensin" in teksti) is (n == 0)
+        assert sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
+        if dsh == 57:
+            assert "rajatesti (työ 57) käynnissä" in teksti and "/hub/kehita/57" not in linkit
+            assert "Rajatesti (työ 57) on käynnissä: jos painoit jo Töihin nyt, työvuoro alkaa sen jälkeen itsestään." in teksti
+            assert "Töihin nyt toimii, kun dsh-työ" not in teksti
+        else:
+            assert "/hub/kehita/58" in linkit and "rajatesti (työ" not in teksti
+            assert "Töihin nyt toimii, kun dsh-työ 58 on valmis." in teksti
+    # Osoite ei lukitse nappia: vanha ?toihin=rajatesti ilman käynnissä olevaa työtä jättää Töihin nyt käyttöön, ja
+    # tuntematon arvo ei näytä ilmoitusta.
+    for n, (polku, ilmoitus) in enumerate((("/ilmari?toihin=rajatesti", True), ("/ilmari?toihin=muu", False))):
+        (tmp_path / f"x{n}").mkdir()
+        r = tuotanto(tmp_path / f"x{n}", monkeypatch, julkaise(tmp_path / f"ax{n}"), polku=polku)
+        assert ("vastaanotettu" in r.text) is ilmoitus
+        nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button
+        assert not nappi.has_attr("disabled")
 
 
 @pytest.mark.parametrize("tila", [
