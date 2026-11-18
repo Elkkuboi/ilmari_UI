@@ -54,6 +54,7 @@ def test_jokainen_sivu_toimii_kehitys_ja_esimerkkitilassa(demo_client, polku, ot
         r = demo_client.get(polku + kysely)
         dom = soup(r)
         assert r.status_code == 200 and dom.html["lang"] == "fi" and dom.find("main", id="main") is not None
+        assert dom.html["data-vari"] == "paperi"   # oletusvärit ilman evästettä (tests/test_varit.py)
         assert dom.title.get_text() == f"{otsikko} · Ilmari"
         assert dom.find("meta", attrs={"name": "color-scheme"})["content"] == "light"
         assert dom.find("meta", attrs={"name": "theme-color"})["content"] == "#f1ead9"
@@ -177,9 +178,11 @@ def test_tyyli_viittaa_vain_paikallisiin_fontteihin():
     assert sorted(viittaukset) == sorted(f"fonts/{f}" for f in FONTIT)
     assert all((PACKAGE_DIR / "static" / v).is_file() for v in viittaukset)
     assert "@import" not in css and "http" not in css
-    # yksi tyyli: ei tummaa tilaa, ei varjoja eikä pyöristyksiä
+    # yksi tyyli: värit valitaan evästeellä (ei selaimen tummaa tilaa), ei varjoja eikä pyöristyksiä; sisäviivat
+    # (valikon alleviivaus, valitun värinäytteen kehys) ovat ainoat box-shadow-arvot
     assert "prefers-color-scheme" not in css and "border-radius: 0" in css
-    assert {v.strip() for v in re.findall(r"box-shadow:\s*([^;}]+)", css)} <= {"inset 0 -2px 0 var(--ink)", "none"}
+    assert {v.strip() for v in re.findall(r"box-shadow:\s*([^;}]+)", css)} <= {"inset 0 -2px 0 var(--ink)",
+                                                                             "inset 0 0 0 1px var(--ink)", "none"}
     assert "text-shadow" not in css and "gradient" not in css
     assert not re.search(r"border-radius:\s*[1-9]", css)
 

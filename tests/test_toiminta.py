@@ -446,7 +446,7 @@ def test_tuotannossa_asetukset_lomakkeet_gatewaylle(tmp_path, monkeypatch):
     assert not sivu.find("input", attrs={"name": "yoajo_paalla"}).has_attr("checked")  # yöajo pois päältä
     assert not sivu.find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
     assert [s["id"] for s in sivu.find_all("section", id=True)] == ["yoajo", "tavoitteet", "ohjeet", "aivot",
-                                                                      "rajatesti", "kone"]
+                                                                      "rajatesti", "kone", "ulkoasu"]
     raja = sivu.find("section", id="rajatesti")
     assert "ei läpi" in raja.get_text() and "&lt;b&gt;auki&lt;/b&gt;" in r.text
     assert raja.find("details", class_="fold").summary.get_text() == "Kaikki kohdat (2)"
@@ -467,7 +467,7 @@ def test_tuotannossa_asetukset_lukuvirheessa_ilman_lomakkeita(tmp_path, monkeypa
     sivu = BeautifulSoup(r.text, "html.parser")
     assert r.status_code == 200 and lomakkeet(r) == {} and not sivu.find("textarea") and not sivu.find("input")
     assert [s["id"] for s in sivu.find_all("section", id=True)] == ["yoajo", "tavoitteet", "ohjeet", "aivot",
-                                                                      "rajatesti", "kone"]
+                                                                      "rajatesti", "kone", "ulkoasu"]
     tyhjat = {s["id"]: [p.get_text() for p in s.select("p.empty")] for s in sivu.find_all("section", id=True)}
     assert tyhjat["tavoitteet"] == ["Tavoitteita ei voi lukea."] and tyhjat["ohjeet"] == ["Ohjeita ei voi lukea."]
     assert len(tyhjat["yoajo"]) == 1 and tyhjat["rajatesti"] == ["Rajatestin tulosta ei voi lukea."]

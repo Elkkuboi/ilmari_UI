@@ -58,6 +58,34 @@ VANHAT_OSOITTEET = {
 
 
 @dataclass(frozen=True)
+class Vari:
+    """Väriyhdistelmä: tunniste (evästeen arvo ja <html data-vari>), näkyvä nimi, kuvaus, sivun taustaväri
+    (selaimen theme-color) ja onko yhdistelmä tumma (color-scheme). Värit itse ovat app.css:n lohkoissa."""
+
+    tunniste: str
+    nimi: str
+    kuvaus: str
+    tausta: str
+    tumma: bool
+
+
+VARIT = (Vari("paperi", "Paperi", "vaalea, lämmin", "#f1ead9", False),
+         Vari("liitu", "Liitu", "vaalea, viileä", "#ecece6", False),
+         Vari("terminaali", "Terminaali", "tumma, meripihka", "#17140f", True),
+         Vari("fosfori", "Fosfori", "tumma, vihreä", "#0e1411", True))
+VARIT_TUNNISTEELLA = {v.tunniste: v for v in VARIT}
+OLETUSVARI = VARIT_TUNNISTEELLA["paperi"]
+# Sama eväste ohjaa myös gatewayn sivuja (sama alkuperä, Path=/). Gateway vain lukee sen; vain Hub asettaa sen.
+VARI_EVASTE = "ilmari_vari"
+VARI_IKA_S = 365 * 24 * 3600
+
+
+def vari(arvo: Any) -> Vari:
+    """Rekisterin väriyhdistelmä tunnisteelle; kaikelle muulle (puuttuva, tuntematon, muu tyyppi) oletus."""
+    return VARIT_TUNNISTEELLA.get(arvo, OLETUSVARI) if isinstance(arvo, str) else OLETUSVARI
+
+
+@dataclass(frozen=True)
 class Settings:
     """Tietolähteet ovat kiinteitä polkuja (moduulien OLETUS); selain ei valitse niitä."""
 
@@ -273,8 +301,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def render(request: Request, sivu: str, otsikko: str, aktiivinen: str | None, status_code: int = 200,
                **extra: Any):
         demo = esimerkki(request)
+        ulkoasu = vari(request.cookies.get(VARI_EVASTE))
         context = {
             "request": request, "demo": demo, "otsikko": otsikko, "aktiivinen": aktiivinen, "valikko": VALIKKO,
+            "vari": ulkoasu.tunniste, "ulkoasu": ulkoasu, "varit": VARIT,
             "url": osoitteet(demo), "gateway": lambda polku: gateway(polku, demo),
             "gateway_url": settings.identity.origin if settings.identity is not None else None,
             "ymparisto": "esimerkkitila" if demo else ("työasema" if settings.identity else "kehitysympäristö"),
@@ -475,6 +505,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             vapaa_ram_gb=mallit_lukija.vapaa_ram_gb() if mallit_valmis else None,
             ram_marginaali=mallit_lukija.RAM_MARGINAALI_GB,
             kone=kone if kone is not None and kone.tila == "ready" else None)
+
+    @app.get("/hub/ulkoasu/{tunniste}", include_in_schema=False)
+    async def ulkoasu_valinta(request: Request, tunniste: str):
+        """Väriyhdistelmän valinta Asetusten näytteestä: linkki (ei lomaketta, ei skriptiä) asettaa evästeen ja palaa
+        Asetuksiin. Palvelimella ei muutu mitään. Evästeen arvo tulee rekisteristä, ei pyynnöstä."""
+        valittu = VARIT_TUNNISTEELLA.get(tunniste)
+        if valittu is None:
+            return virhe(request, 404, "Sivua ei löydy", "Tarkista osoite.")
+        response = RedirectResponse(osoitteet(esimerkki(request))("/hub/asetukset") + "#ulkoasu", status_code=303)
+        response.set_cookie(VARI_EVASTE, valittu.tunniste, max_age=VARI_IKA_S, path="/", samesite="Lax", httponly=True,
+                            secure=settings.identity is not None)
+        return response
 
     # --- Dokumentit (Asetusten alla) ----------------------------------------------------------------------------
 
