@@ -47,10 +47,10 @@
   <p class="empty">{{ mallit.viesti or 'Mallirekisteriä ei voi lukea.' }}</p>
 {% else %}
 {% if mallit.profiilit %}
-  <div class="scroll"><table><thead><tr><th scope="col">Profiili</th><th scope="col">Kuvaus</th><th scope="col">RAM</th>{% if ohjaus %}<th scope="col"><span class="sr-only">Vaihda</span></th>{% endif %}</tr></thead><tbody>
+  <ul class="rows">
   {% for p in mallit.profiilit.values() %}{% set ei_mahdu = p.ram_gb and vapaa_ram_gb is not none and vapaa_ram_gb < p.ram_gb + ram_marginaali and p.nimi != nykyinen %}
-  <tr><td>{{ p.nimi }}{% if p.nimi == nykyinen %} <span class="tag ok">käytössä</span>{% endif %}</td><td>{{ p.kuvaus }}{% if ei_mahdu %}<br><small class="warn">Ei mahdu nyt: tarvitsee {{ p.ram_gb }} + {{ ram_marginaali }} Gt.</small>{% endif %}</td><td class="when">{% if p.ram_gb %}{{ p.ram_gb }} Gt{% else %}–{% endif %}</td>{% if ohjaus %}<td>{% call lomake('/mallit/profiili') %}<input type="hidden" name="profiili" value="{{ p.nimi }}"><button class="btn--quiet" type="submit"{% if p.nimi == nykyinen %} disabled{% endif %}>Vaihda</button>{% endcall %}</td>{% endif %}</tr>
-  {% endfor %}</tbody></table></div>
+  <li><div><strong>{{ p.nimi }}</strong>{% if p.nimi == nykyinen %} <span class="tag ok">käytössä</span>{% endif %}</div><div>{{ p.kuvaus }}</div>{% if ei_mahdu %}<div class="warn small">Ei mahdu nyt: tarvitsee {{ p.ram_gb }} + {{ ram_marginaali }} Gt.</div>{% endif %}<div class="form-row"><span class="muted small">{% if p.ram_gb %}RAM {{ p.ram_gb }} Gt{% else %}RAM ei tiedossa{% endif %}</span>{% if ohjaus %}{% call lomake('/mallit/profiili') %}<input type="hidden" name="profiili" value="{{ p.nimi }}"><button class="btn--quiet" type="submit"{% if p.nimi == nykyinen %} disabled{% endif %}>Vaihda</button>{% endcall %}{% endif %}</div></li>
+  {% endfor %}</ul>
   {% if not nykyinen %}<p class="muted small">Roolit on valittu erikseen; mikään profiili ei ole kokonaan käytössä.</p>{% endif %}
 {% endif %}
   <details class="fold"><summary>Roolit ja mallirekisteri</summary>

@@ -124,6 +124,9 @@ def test_aivot_nakyvat_asetuksissa_esimerkkitilassa_ja_vapaa_ram():
     aivot = BeautifulSoup(r.text, "html.parser").find("section", id="aivot")
     assert r.status_code == 200 and aivot.find("table") and "raskas" in aivot.get_text() and "kevyt" in aivot.get_text()
     assert "RAM 58 Gt" in aivot.get_text() and "strata" in aivot.get_text() and "<form" not in r.text
+    rivit = aivot.find("ul", class_="rows")            # profiilit riveinä, ei taulukkona (mahtuu puhelimeen)
+    assert rivit is not None and "raskas" in rivit.get_text() and "RAM 58 Gt" in rivit.get_text()
+    assert not [th for th in aivot.find_all("th") if th.get_text() == "Profiili"]
     fold = aivot.find("details", class_="fold")
     assert fold.summary.get_text() == "Roolit ja mallirekisteri" and "Ilmarin aivot (CEO)" in fold.get_text()
     assert vapaa_ram_gb(Path("/proc/meminfo")) is None or vapaa_ram_gb(Path("/proc/meminfo")) > 0
