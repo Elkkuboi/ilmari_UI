@@ -147,7 +147,7 @@ def test_ilman_lahdetta_ja_vanha_osoite():
     r = c.get("/hub/asetukset")
     assert r.status_code == 200 and "Mallit eivät ole saatavilla" in r.text
     r = c.get("/hub/mallit", follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset"
+    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset#aivot"
 
 
 def test_ylikirjoitus_luetaan(tmp_path):

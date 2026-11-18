@@ -178,3 +178,22 @@ pre.code { background: var(--sheet); border: 1px solid var(--rule); padding: .8r
   .kv { grid-template-columns: 1fr; gap: 0; }
   .kv dd { margin-bottom: .5rem; }
 }
+
+/* --- Lisäykset (katselmointi 18.11.): samat muuttujat, ei uusia värejä ----------------------------------- */
+.label .aside.warn { color: var(--warn); }
+td, th { overflow-wrap: break-word; }        /* body: anywhere puristaisi taulukon sarakkeet ja katkoisi sanat */
+th:last-child, td:last-child { padding-right: 0; }   /* viimeisen sarakkeen täyte ei vieritä taulukkoa puhelimella */
+.actions > input { flex: 1; min-width: 0; }
+.msg-head time { text-transform: none; }
+.log .more { margin-left: calc(14.2ch * 15 / 13); }   /* 13 px:n teksti samaan linjaan 15 px:n yhteenvedon kanssa */
+.log .day { display: none; }
+@media (max-width: 640px) {
+  .log .more { margin-left: calc(6.7ch * 14.5 / 13); }
+  .log .day { display: block; padding-top: .55rem; font-size: 12px; font-weight: 600; letter-spacing: .1em; color: var(--ink-3); }
+  /* kosketuskohteet vähintään 44 px */
+  .nav a { padding-top: .7rem; padding-bottom: .7rem; }
+  .btn--quiet, label.inline, .threads button.thread, input:not([type="checkbox"]), select { min-height: 44px; }
+  details > summary, .back { padding-top: .7rem; padding-bottom: .7rem; }
+  .rows.log > li { padding-top: 0; padding-bottom: 0; }
+  input[type="checkbox"] { width: 1.4rem; height: 1.4rem; }
+}

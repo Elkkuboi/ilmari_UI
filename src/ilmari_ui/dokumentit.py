@@ -33,7 +33,7 @@ MUOTO = "aiops-dokumentit-v1"
 META_KENTAT = frozenset({"muoto", "commit", "sha256", "koko", "maara", "julkaistu"})
 DATA_KENTAT = frozenset({"muoto", "commit", "dokumentit"})
 DOK_KENTAT = frozenset({"tunniste", "polku", "ryhma", "otsikko", "tila", "paiva", "teksti"})
-RYHMAT = (("perus", "Perusdokumentit"), ("promptit", "Ilmarin promptit"), ("adr", "Päätökset (ADR)"),
+RYHMAT = (("perus", "Perusdokumentit"), ("promptit", "Ilmarin promptit"), ("adr", "Päätökset"),
           ("valmistelu", "Valmistelu"), ("historia", "Historia"), ("audit", "Auditointi"))
 MAARA_MAX = 300
 TEKSTI_MAX = 256 * 1024

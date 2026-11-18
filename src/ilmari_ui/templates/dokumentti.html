@@ -3,7 +3,7 @@
 {% block sisalto %}
 <a class="back" href="{{ url('/hub/dokumentit') }}">Dokumentit</a>
 <article aria-labelledby="h-dok">
-  <h1 id="h-dok" class="label">{{ dokumentti.otsikko }} <span class="aside">{{ dokumentti.polku }}{% if dokumentti.paiva %} · {{ dokumentti.paiva }}{% endif %}{% if dokumentti.tila %} · {{ dokumentti.tila }}{% endif %} · {{ kokoelma.meta.commit[:7] }}</span></h1>
+  <h1 id="h-dok" class="label">{{ dokumentti.otsikko }} {% if dokumentti.paiva or dokumentti.tila %}<span class="aside">{{ dokumentti.paiva }}{% if dokumentti.paiva and dokumentti.tila %} · {% endif %}{{ dokumentti.tila }}</span>{% endif %}</h1>
   <div class="prose">{{ markdown_lohkot(lohkot) }}</div>
 </article>
 {% endblock %}

@@ -48,10 +48,10 @@ TEKOJA_NAKYVISSA = 12
 ODOTTAA_MAX = 5
 NYT_PAIVITYS = "30"
 TYOT_PAIVITYS = "15"
-# Vanhat osoitteet (ennen 18.11.2026) ohjataan uusiin; kyselyosa säilyy. Gateway palaa lomakkeiden jälkeen vielä
-# osoitteisiin /hub/ilmari (myös ?toihin=rajatesti) ja /hub/mallit.
+# Vanhat osoitteet (ennen 18.11.2026) ohjataan uusiin; kyselyosa säilyy ja ankkuri tulee sen perään. Vanha gateway
+# palaa lomakkeiden jälkeen vielä osoitteisiin /hub/ilmari (myös ?toihin=rajatesti) ja /hub/mallit (aivot).
 VANHAT_OSOITTEET = {
-    "/hub/ilmari": "/hub", "/hub/mallit": "/hub/asetukset", "/hub/jarjestelma": "/hub/asetukset",
+    "/hub/ilmari": "/hub", "/hub/mallit": "/hub/asetukset#aivot", "/hub/jarjestelma": "/hub/asetukset#kone",
     "/hub/saannot": "/hub/dokumentit", "/hub/ajot": "/hub", "/hub/ajot/{x}": "/hub", "/hub/hyvaksynnat": "/hub",
     "/hub/sovellukset": "/hub", "/hub/sovellukset/{x}": "/hub", "/hub/ideat": "/hub",
 }
@@ -164,13 +164,33 @@ def kello(value: Any) -> str:
 
 
 def lyhyt_aika(value: Any) -> str:
-    """Tänään pelkkä kellonaika, muuten päivä ja kellonaika (18.11. 22.29)."""
+    """Tänään kellonaika (klo 22.29), muuten päivä ja kellonaika (18.11. klo 22.29). Sitovat välilyönnit: aika ei
+    katkea kahdelle riville, eikä pelkkää kellonaikaa lueta päivämääräksi (20.05 ≠ 20.5.)."""
     parsed = _aika(value)
     if parsed is None:
         return ""
+    kellonaika = f"klo {parsed.strftime('%H.%M')}"
     if parsed.date() == datetime.now(HELSINKI).date():
-        return parsed.strftime("%H.%M")
-    return f"{parsed.day}.{parsed.month}. {parsed.strftime('%H.%M')}"
+        return kellonaika
+    return f"{parsed.day}.{parsed.month}. {kellonaika}"
+
+
+def koneen_ika(kone: Any) -> str:
+    """Koneen mittareiden ikä ymmärrettävästi: tuore sekunteina, vanhentunut minuutteina, tunteina tai päivänä."""
+    ika = kone.ika_s
+    if ika is None:
+        return "päivitysaika ei tiedossa"
+    if not kone.vanhentunut:
+        return f"päivitetty {ika} s sitten"
+    if ika < 3600:
+        return f"päivitetty {ika // 60} min sitten"
+    if ika < 86400:
+        return f"päivitetty {ika // 3600} h sitten"
+    return f"päivitetty {paiva(kone.paivitetty)} klo {kello(kone.paivitetty)}"
+
+
+def kohtaa(n: int) -> str:
+    return f"{n} {'kohta' if n == 1 else 'kohtaa'}"
 
 
 def osoitteet(demo: bool):
@@ -186,7 +206,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="Ilmari Hub", docs_url=None, redoc_url=None, openapi_url=None)
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
-    templates.env.globals.update(format_time=format_time, paiva=paiva, kello=kello, lyhyt_aika=lyhyt_aika)
+    templates.env.globals.update(format_time=format_time, paiva=paiva, kello=kello, lyhyt_aika=lyhyt_aika,
+                                 koneen_ika=koneen_ika, kohtaa=kohtaa, muutosrivi=kehitys.muutosrivi,
+                                 testirivi=kehitys.testirivi, ilman_aikaleimoja=kehitys.ilman_aikaleimoja)
     app.mount("/hub/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
 
     @app.middleware("http")
@@ -299,9 +321,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # --- Nyt: Hubin juuri ---------------------------------------------------------------------------------------
 
-    def odottaa_sinua(toiminta, tyot, url) -> list[dict[str, Any]]:
+    def odottaa_sinua(toiminta, tyot, lahde, url) -> list[dict[str, Any]]:
         """Asiat, joissa Eliaksella on päätettävää: työn hyväksyntä, käyttöönotto tai käsin sulkeminen, epäonnistunut
-        rajatesti ja tilan lukuvirheet. Enintään ODOTTAA_MAX riviä, tärkein ensin."""
+        rajatesti ja lukuvirheet (tila tai työt). Enintään ODOTTAA_MAX riviä, tärkein ensin."""
         rivit: list[dict[str, Any]] = []
         if toiminta is not None and toiminta.tila != "ready":
             rivit.append({"href": url("/hub"), "nro": "!", "teksti": "Ilmarin tilaa ei voi lukea", "tag": "päivitä",
@@ -311,10 +333,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if r is not None and not r["lapi"]:
                 rivit.append({"href": url("/hub/asetukset") + "#rajatesti", "nro": "!", "teksti": "Rajatesti ei mennyt läpi",
                               "tag": "ei läpi", "savy": "stop",
-                              "ala": f"{len(r['hylatyt'])} kohtaa ei läpi · {paiva(r['aika'])} {kello(r['aika'])}"})
+                              "ala": f"{kohtaa(len(r['hylatyt']))} ei läpi · {lyhyt_aika(r['aika'])}"})
             for virhe in toiminta.virheet:
                 rivit.append({"href": url("/hub"), "nro": "!", "teksti": "Osaa tilasta ei voi lukea", "tag": "päivitä",
                               "savy": "warn", "ala": virhe})
+        if lahde and tyot is None:
+            rivit.append({"href": url("/hub/kehita"), "nro": "!", "teksti": "Töitä ei voi lukea", "tag": "päivitä",
+                          "savy": "warn", "ala": ""})
         for t in tyot or ():
             tag, savy = t.tagi
             if tag not in kehitys.ODOTTAVAT:
@@ -342,7 +367,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         demo = esimerkki(request)
         toiminta, nyt = lue_toiminta(demo)
         malli = mallin_tila(lue_keskustelu(demo))
-        tyot, _ = kehitystyot(demo)
+        tyot, lahde = kehitystyot(demo)
         tilarivi = toiminta_lukija.tilarivi(toiminta, nyt)
         valmis = toiminta is not None and toiminta.tila == "ready"
         teot = (toiminta.teot or ()) if valmis else ()
@@ -353,7 +378,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raportti=toiminta.raportti if valmis else None,
             rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, dsh_tyo),
             toihin_rajatesti=request.query_params.get("toihin") == "rajatesti",
-            odottaa=odottaa_sinua(toiminta, tyot, osoitteet(demo)),
+            odottaa=odottaa_sinua(toiminta, tyot, lahde, osoitteet(demo)),
             teot=teot[:TEKOJA_NAKYVISSA], vanhat_teot=teot[TEKOJA_NAKYVISSA:],
             muualle=(("Ravintopolku", muualle(RAVINTOPOLKU_PORTTI, demo)), ("Hahmo", muualle(HAHMO_PORTTI, demo)))
             if demo or settings.identity is not None else ())
@@ -480,15 +505,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lohkot, syy = dokumentit_lukija.piirrettava(dokumentti)
         if lohkot is None:
             return virhe(request, 422, "Dokumenttia ei voi näyttää", syy or "Dokumentti on liian suuri.")
+        if lohkot and lohkot[0]["tyyppi"] == "otsikko" and lohkot[0]["taso"] == 1 and \
+                "".join(teksti for _, teksti in lohkot[0]["osat"]).strip().lower() == dokumentti["otsikko"].strip().lower():
+            lohkot = lohkot[1:]   # sama otsikko on jo sivun otsikkona
         return render(request, "dokumentti", dokumentti["otsikko"], "asetukset", kokoelma=kokoelma,
                       dokumentti=dokumentti, lohkot=lohkot)
 
     # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
 
     def ohjaus(kohde: str):
+        polku, _, ankkuri = kohde.partition("#")
+
         async def ohjaa(request: Request):
             kysely = request.url.query
-            return RedirectResponse(kohde + ("?" + kysely if kysely else ""), status_code=307)
+            return RedirectResponse(polku + ("?" + kysely if kysely else "") + ("#" + ankkuri if ankkuri else ""),
+                                    status_code=307)
         return ohjaa
 
     for vanha, kohde in VANHAT_OSOITTEET.items():

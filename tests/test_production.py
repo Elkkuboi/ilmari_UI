@@ -136,8 +136,9 @@ def test_serven_polku_ohjautuu_hubin_sivulle(client, serven_polku, otsikko):
 @pytest.mark.parametrize("serven_polku,kohde", [
     ("/ilmari", "/hub"),
     ("/ilmari?toihin=rajatesti", "/hub?toihin=rajatesti"),   # gateway palaa tänne, kun Töihin nyt ajaa rajatestin
-    ("/mallit", "/hub/asetukset"),                           # gateway palaa tänne profiilin ja roolin vaihdon jälkeen
-    ("/jarjestelma", "/hub/asetukset"),
+    ("/mallit", "/hub/asetukset#aivot"),                     # vanha gateway palaa tänne profiilin ja roolin vaihdon jälkeen
+    ("/mallit?x=1", "/hub/asetukset?x=1#aivot"),              # ankkuri kyselyn perään
+    ("/jarjestelma", "/hub/asetukset#kone"),
     ("/saannot", "/hub/dokumentit"),
     ("/ajot", "/hub"), ("/ajot/20261013-235929-yo-q6", "/hub"), ("/hyvaksynnat", "/hub"), ("/sovellukset", "/hub"),
     ("/sovellukset/hahmo", "/hub"), ("/ideat", "/hub"),

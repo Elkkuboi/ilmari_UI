@@ -13,11 +13,19 @@
   Hyväksynnät, Ideat, erilliset Mallit- ja Järjestelmä-sivut (`cards.py`, `runs.py`, `muodot.py`, `peruskirja.py`,
   `themes.py`, niiden mallit, esimerkkidata ja testit) sekä käynnistimen valitsimet `--runs-dir` ja
   `--peruskirja-dir`. Turvallinen tiedostoluku siirtyi `lukija.py`:hyn ja rajattu Markdown `dokumentit.py`:hyn.
-- Vanhat osoitteet ohjautuvat (307, kysely mukana): `/hub/ilmari` → `/hub` (myös `?toihin=rajatesti`), `/hub/mallit` ja
-  `/hub/jarjestelma` → `/hub/asetukset`, `/hub/saannot` → `/hub/dokumentit`, muut → `/hub`.
+- Vanhat osoitteet ohjautuvat (307, kysely mukana): `/hub/ilmari` → `/hub` (myös `?toihin=rajatesti`), `/hub/mallit` →
+  `/hub/asetukset#aivot`, `/hub/jarjestelma` → `/hub/asetukset#kone`, `/hub/saannot` → `/hub/dokumentit`, muut → `/hub`.
+- Katselmoinnin korjaukset: Asetukset ei näytä lomakkeita, kun Ilmarin tilaa ei voi lukea (oletuslomake olisi
+  korvannut asetukset); Odottaa sinua kertoo, jos töitä ei voi lukea; tila "Työ N kesken" eikä "Vapaa"; Päätös ja
+  käyttöönotot ilman koneen raakatekstiä, englantia ja taulukkoa; ajat "klo 20.05"; kosketuskohteet 44 px puhelimella.
 - Ennallaan: vartija, turvaotsakkeet ja CSP, `hub.toml`:n avaimet, systemd-yksikkö ja `scripts/asenna.sh`.
-- Testit: 516 passed, 35 skipped (ilman selainryhmää ja shellcheckiä).
-- Peruminen: `git -C ~/code/ilmari_UI reset --hard 7706d0a` ja `sudo ~/code/ilmari_UI/scripts/asenna.sh "$(command -v uv)"`.
+- Asennusjärjestys: aiops (gateway: reitti `/tyot` ja paluuosoitteet `/hub/asetukset#…`) ensin, sitten Hub. Vanhalla
+  gatewaylla Asetusten "Kaikki työt" veisi 404-sivulle.
+- Testit: 527 passed, 35 skipped (ilman selainryhmää ja shellcheckiä).
+- Peruminen (worktree `.claude/` lisätään paikalliseen exclude-tiedostoon, koska 7706d0a:n `.gitignore` ei tunne sitä ja
+  `asenna.sh` pysähtyisi muuten tallentamattomiin muutoksiin):
+
+      ( set -eo pipefail; cd ~/code/ilmari_UI; grep -qxF '.claude/' .git/info/exclude || echo '.claude/' >> .git/info/exclude; git reset --hard 7706d0a; sudo scripts/asenna.sh "$(command -v uv)"; echo "VALMIS" ); echo "paluukoodi $?"
 
 ## Päivitys 18.11.2026 (ilta): Töihin nyt ja viimeisin raportti (aiops Pala 1b), haara `ilmari-nyt-2`
 

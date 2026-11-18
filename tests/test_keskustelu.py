@@ -145,3 +145,4 @@ def test_tuotannossa_kaynnista_malli_vain_kun_malli_ei_ole_kaynnissa(tmp_path, m
         assert r.status_code == 200 and 'action="https://tyoasema.test/ilmari/viesti"' in r.text
         assert ('action="https://tyoasema.test/kehita/malli"' in r.text) is nakyy
         assert ('name="toiminto" value="kaynnista"' in r.text) is nakyy
+        assert r.text.count("ei ole käynnissä") == (1 if nakyy else 0)   # sama ilmoitus vain kerran

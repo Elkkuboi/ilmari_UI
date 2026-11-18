@@ -49,9 +49,9 @@ TEKSTIT = ("muutos.diff", "muutos-stat.txt", "vastaus.md", "testit.txt", "aiops-
 TILAT = {"queued": "jonossa", "awaiting_approval": "odottaa hyväksyntää", "awaiting_gpu": "odottaa GPU:ta",
          "running": "käynnissä", "succeeded": "valmis", "failed": "epäonnistui", "cancelled": "peruttu"}
 PAATOKSET = {"hylatty": "Hylätty", "hyvaksytty": "Hyväksytty"}
-YHDISTYKSET = {"yhdistetty": "Yhdistetty mainiin", "ristiriita": "Ristiriita mainin kanssa", "hylatty": "Yhdistys hylätty",
+YHDISTYKSET = {"yhdistetty": "Yhdistetty", "ristiriita": "Ristiriita päähaaran kanssa", "hylatty": "Yhdistys hylätty",
                "virhe": "Yhdistys epäonnistui"}
-KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin mainissa",
+KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin päähaarassa",
                 "vanhempi_kuin_asennettu": "Vanhempi kuin asennettu, ei alennettu",
                 "testit_epaonnistuivat": "Testit epäonnistuivat", "tyot_kaynnissa": "Töitä käynnissä, yritä myöhemmin",
                 "palautettu": "Palautettu edelliseen", "palautus_epaonnistui": "Palautus epäonnistui", "virhe": "Virhe",
@@ -465,6 +465,35 @@ def jaa_diff(teksti: str) -> list[dict[str, Any]]:
             break
         nykyinen["rivit"].append((laji, rivi))
     return tiedostot
+
+
+_SHORTSTAT = re.compile(r"(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?")
+_TESTILUKU = re.compile(r"(\d+) (passed|failed|errors?|skipped)\b")
+TESTIEN_TULOS = {"passed": "läpi", "failed": "epäonnistui", "error": "virhe", "errors": "virhettä", "skipped": "ohitettu"}
+_ISO_AIKA = re.compile(r"\s*\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)?")
+
+
+def muutosrivi(muutokset: str, diffit: list[dict[str, Any]]) -> str:
+    """Muutosten yhteenveto suomeksi (2 tiedostoa, +18 −1): tiedostokohtaisista diffeistä tai gitin englanninkielisestä
+    yhteenvedosta (2 files changed, 18 insertions(+), 1 deletion(-)). Muu teksti näytetään sellaisenaan."""
+    if diffit:
+        n, lisatty, poistettu = len(diffit), sum(d["lisatty"] for d in diffit), sum(d["poistettu"] for d in diffit)
+    elif m := _SHORTSTAT.search(muutokset or ""):
+        n, lisatty, poistettu = int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0)
+    else:
+        return (muutokset or "").strip()
+    return f"{n} {'tiedosto' if n == 1 else 'tiedostoa'}, +{lisatty} −{poistettu}"
+
+
+def testirivi(yhteenveto: str) -> str:
+    """Testiajon luvut suomeksi (2300 läpi, 2 ohitettu) pytestin tai npm:n yhteenvedosta; tuntematon muoto: tyhjä
+    (raakatuloste on Testit-osiossa)."""
+    return ", ".join(f"{luku} {TESTIEN_TULOS[sana]}" for luku, sana in _TESTILUKU.findall(yhteenveto or ""))
+
+
+def ilman_aikaleimoja(teksti: str) -> str:
+    """Koneen viesti ilman ISO-aikaleimoja (aika näkyy jo Suomen aikana)."""
+    return _ISO_AIKA.sub("", teksti or "").strip()
 
 
 def _diff_laji(rivi: str, tiedosto: dict[str, Any]) -> str:

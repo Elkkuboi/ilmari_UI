@@ -83,7 +83,7 @@ def test_kone_asetuksissa_esimerkkitilassa_ja_ilman_lahdetta():
     kone = BeautifulSoup(r.text, "html.parser").find("section", id="kone")
     assert "Koneen mittareita ei ole saatavilla." in kone.get_text() and not kone.find("dl")
     r = c.get("/hub/jarjestelma?demo=1", follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset?demo=1"
+    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset?demo=1#kone"
 
 
 def test_yksikko_liittaa_mittarihakemiston(oletuspolut):

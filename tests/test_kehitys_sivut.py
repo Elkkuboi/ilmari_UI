@@ -51,6 +51,13 @@ def test_lista_esimerkkitilassa():
     assert "<form" not in r.text and 'action="' not in r.text   # esimerkkitila: ei lomakkeita
     # Hub juureksi: yöajon ehdotukset, Claude Code -linkki ja johdanto pois
     assert "Yöajon ehdotukset" not in r.text and "claude.ai" not in r.text and "Kehitä Ilmaria" not in r.text
+    # käyttöönotot listana (ei taulukkoa, joka ei mahdu puhelimeen): tagi, versio, testit suomeksi, loki taittona
+    rivit = fold.select("ul.rows > li")
+    assert not fold.find("table") and len(rivit) == 2
+    assert " ".join(rivit[0].div.get_text(" ").split()) == "28.10. klo 14.45 otettu käyttöön ddddddd"
+    assert "testit 2300 läpi, 2 ohitettu" in rivit[0].get_text() and "2026-10-28T" not in fold.get_text()
+    assert "testit 1 epäonnistui, 2299 läpi" in rivit[1].get_text() and "failed" not in rivit[1].find("div", class_="small").get_text()
+    assert [d.summary.get_text() for d in fold.select("details.fold")] == ["Loki", "Loki"]
 
 
 def test_tyo_ja_escapetus():
@@ -58,11 +65,24 @@ def test_tyo_ja_escapetus():
     sivu = BeautifulSoup(r.text, "html.parser")
     assert r.status_code == 200 and sivu.find("a", class_="back")["href"] == "/hub/kehita?demo=1"
     assert " ".join(sivu.h1.get_text().split()) == "Työ 41 käytössä" and sivu.h1.find("span", class_="tag ok")
-    assert sivu.find("dl", class_="kv") and "2300 passed, 2 skipped" in r.text and "yhdistetty mainiin" in r.text
+    kv = {dt.get_text(): " ".join(dt.find_next_sibling("dd").get_text(" ").split()) for dt in sivu.select("dl.kv dt")}
+    # työkalujen englanninkielinen tuloste suomeksi; raakatuloste jää Testit-taittoon
+    assert kv["Muutokset"] == "1 tiedosto, +2 −0" and kv["Testit"] == "läpi 2300 läpi, 2 ohitettu"
+    assert "files changed" not in sivu.find("dl", class_="kv").get_text() and "2300 passed, 2 skipped" in r.text
+    # Päätös: jokaisesta vaiheesta tagi ja Suomen aika, ei koneen raakaviestiä, ISO-aikaa eikä mainia
+    paatos = [" ".join(p.get_text(" ").split()) for p in osio(sivu, "h-paatos").find_all("p", recursive=False)]
+    assert paatos == ["hyväksytty 28.10. klo 14.30", "yhdistetty 28.10. klo 14.31",
+                      "otettu käyttöön 28.10. klo 14.45 · edellinen ccccccc"]   # hakasulkeet tulevat tyylistä
+    assert "main" not in osio(sivu, "h-paatos").get_text() and "2026-10-28T" not in r.text
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text and "<script>alert" not in r.text
     assert "&lt;b&gt;ei html&lt;/b&gt;" in r.text
     taitot = [d.summary.get_text() for d in sivu.select("details.fold")]
-    assert taitot == ["Muutokset (1 tiedostoa)", "Testit", "Loki"]
+    assert taitot == ["Muutokset (1 tiedosto)", "Testit", "Loki"]
+    # tiedostokohtainen diff riittää: koko muutos ei toistu, ja taitot ovat samassa pinossa
+    assert "Koko muutos" not in r.text and "Koko diff" not in r.text
+    assert {d.parent.name for d in sivu.select("details.fold")} == {"div"}
+    r98 = asiakas().get("/hub/kehita/98?demo=1")
+    assert "Koko muutos" not in r98.text and BeautifulSoup(r98.text, "html.parser").find("button", string="Hylkää")
     diff = sivu.find("pre", class_="diff")
     assert diff.find("span", class_="add") and diff.find("span", class_="hunk")
     assert 'href="#"' in r.text and "Palauta edelliseen puhelimella" in r.text   # esimerkkitila: linkit eivät vie mihinkään
@@ -92,8 +112,11 @@ def test_ilmarin_oma_tyo_listassa_ja_sivulla():
     numerot = lambda o: [a["href"].split("?")[0].rsplit("/", 1)[1] for a in o.select("a.row")]  # noqa: E731
     assert numerot(eliaksen) == ["42", "41", "40"] and numerot(ilmarin) == ["98", "43"]
     r = c.get("/hub/kehita/43?demo=1")
-    assert r.status_code == 200 and "Ilmarin oma työ" in r.text and "Ilmarin oma työtila" in r.text
-    assert "päätöstä ei tarvita" in r.text and "Raaka näkymä" not in r.text and "Hyväksy" not in r.text
+    assert r.status_code == 200 and "Ilmarin oma työ" in r.text
+    assert not osio(BeautifulSoup(r.text, "html.parser"), "h-paatos")   # työtila: ei päätettävää, ei osiota
+    assert "Raaka näkymä" not in r.text and "Hyväksy" not in r.text
+    r = c.get("/hub/kehita/42?demo=1")                                 # kesken: ei vielä päätettävää
+    assert r.status_code == 200 and not osio(BeautifulSoup(r.text, "html.parser"), "h-paatos")
 
 
 def test_tuotannossa_toivelomake_gatewaylle(tmp_path):

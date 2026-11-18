@@ -16,18 +16,19 @@ from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 import pytest
 
-from ilmari_ui.app import PACKAGE_DIR, Settings, create_app, format_time
+from ilmari_ui.app import PACKAGE_DIR, Settings, create_app, format_time, koneen_ika, lyhyt_aika
 from ilmari_ui.config import parse_config
 
 # (osoite, otsikko, aktiivinen valikkolinkki)
 SIVUT = (("/hub", "Nyt", "Nyt"), ("/hub/keskustelu", "Keskustelu", "Keskustelu"), ("/hub/kehita", "Työt", "Työt"),
          ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"))
 VALIKKO = [("Nyt", "/hub"), ("Keskustelu", "/hub/keskustelu"), ("Työt", "/hub/kehita"), ("Asetukset", "/hub/asetukset")]
-VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": "/hub/asetukset", "/hub/jarjestelma": "/hub/asetukset",
+# (kohde, ankkuri): kysely säilyy ja ankkuri tulee sen perään (vanha gateway palaa /hub/mallit-osoitteeseen)
+VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": ("/hub/asetukset", "#aivot"), "/hub/jarjestelma": ("/hub/asetukset", "#kone"),
           "/hub/saannot": "/hub/dokumentit", "/hub/ajot": "/hub", "/hub/ajot/20261013-001914-yo-demo": "/hub",
           "/hub/hyvaksynnat": "/hub", "/hub/sovellukset": "/hub", "/hub/sovellukset/ravintopolku": "/hub",
           "/hub/ideat": "/hub"}
-KIELLETYT_SANAT = ("gateway", "julkaisu", "julkais", "dsh", "adr", "kontti", "politiikka")
+KIELLETYT_SANAT = ("gateway", "julkaisu", "julkais", "dsh", "adr", "kontti", "politiikka", "main")
 FONTIT = ("IBMPlexMono-Regular.woff2", "IBMPlexMono-Italic.woff2", "IBMPlexMono-Medium.woff2", "IBMPlexMono-SemiBold.woff2")
 
 
@@ -84,10 +85,11 @@ def test_esimerkkitila_kulkee_sisaisissa_linkeissa(demo_client):
 
 @pytest.mark.parametrize("vanha,uusi", VANHAT.items())
 def test_vanhat_osoitteet_ohjataan_kysely_mukana(demo_client, vanha, uusi):
+    uusi, ankkuri = uusi if isinstance(uusi, tuple) else (uusi, "")
     r = demo_client.get(vanha, follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == uusi and "set-cookie" not in r.headers
+    assert r.status_code == 307 and r.headers["location"] == uusi + ankkuri and "set-cookie" not in r.headers
     r = demo_client.get(vanha + "?demo=1&toihin=rajatesti", follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == uusi + "?demo=1&toihin=rajatesti"
+    assert r.status_code == 307 and r.headers["location"] == uusi + "?demo=1&toihin=rajatesti" + ankkuri
     assert demo_client.get(vanha + "?demo=1").status_code == 200   # seurattuna sivu toimii
 
 
@@ -131,8 +133,16 @@ def test_kayttoliittyman_teksteissa_ei_jargonia(demo_client, tmp_path):
     with tuotanto_asiakas(tmp_path) as tuotanto:
         vastaukset = [demo_client.get(p) for p, _, _ in SIVUT] + [demo_client.get("/hub/ei-ole")]
         vastaukset += [tuotanto.get(p.removeprefix("/hub") or "/", headers=serve) for p, _, _ in SIVUT]
+        # esimerkkitilan sivut (myös työt, dokumentti ja haku): data (tulosteet, dokumentit, koodi) ei ole
+        # käyttöliittymän tekstiä, joten se jätetään pois
+        for p in [p for p, _, _ in SIVUT] + ["/hub/kehita/98", "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/43",
+                                             "/hub/kehita/40", "/hub/dokumentit/arkkitehtuuri", "/hub/dokumentit?q=ilmari"]:
+            vastaukset.append(demo_client.get(p + ("&" if "?" in p else "?") + "demo=1"))
     for r in vastaukset:
-        teksti = soup(r).get_text(" ").lower()
+        dom = soup(r)
+        for data in dom.select(".pre, .sheet, .prose, pre, code, a[href*='/hub/dokumentit/']"):
+            data.decompose()
+        teksti = dom.get_text(" ").lower()
         teksti = teksti.replace("adresseja", "")
         for sana in KIELLETYT_SANAT:
             assert not re.search(rf"\b{sana}", teksti), (r.url, sana)
@@ -309,3 +319,31 @@ def test_virhesivu_on_samaa_tyylia(demo_client):
 ])
 def test_display_timestamps_use_helsinki_and_reject_ambiguous_times(value, expected):
     assert format_time(value) == expected
+
+
+def test_lyhyt_aika_ei_nayta_paivamaaralta():
+    """Tämän päivän aika on "klo 20.05" (ei luettavissa päiväksi 20.5.), muu "18.11. klo 21.14"; sitovat välilyönnit
+    pitävät ajan yhdellä rivillä."""
+    from datetime import datetime, timedelta
+    from ilmari_ui.app import HELSINKI
+    nyt = datetime.now(HELSINKI).replace(hour=20, minute=5, second=0, microsecond=0)
+    assert lyhyt_aika(nyt.isoformat()) == "klo\u00a020.05"
+    eilen = nyt - timedelta(days=1)
+    assert lyhyt_aika(eilen.isoformat()) == f"{eilen.day}.{eilen.month}.\u00a0klo\u00a020.05"
+    assert lyhyt_aika("2026-11-18T21:14:00") == "" and lyhyt_aika(None) == ""   # ilman vyöhykettä ei arvata
+
+
+def test_koneen_ika_ymmarrettavasti():
+    from types import SimpleNamespace as K
+    assert koneen_ika(K(ika_s=20, vanhentunut=False, paivitetty="")) == "päivitetty 20 s sitten"
+    assert koneen_ika(K(ika_s=None, vanhentunut=True, paivitetty="")) == "päivitysaika ei tiedossa"
+    assert koneen_ika(K(ika_s=1500, vanhentunut=True, paivitetty="")) == "päivitetty 25 min sitten"
+    assert koneen_ika(K(ika_s=7300, vanhentunut=True, paivitetty="")) == "päivitetty 2 h sitten"
+    vanha = K(ika_s=27937 * 60, vanhentunut=True, paivitetty="2026-10-30T10:00:00+00:00")
+    assert koneen_ika(vanha) == "päivitetty 30.10.\u00a0klo\u00a012.00"
+
+
+def test_vanhentunut_konetieto_varoittaa_ja_himmenee():
+    """Vanhentuneen konetiedon reunateksti on varoitusvärinen: tyylin pitää voittaa .label .aside -väri."""
+    css = (PACKAGE_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".label .aside.warn { color: var(--warn); }" in css

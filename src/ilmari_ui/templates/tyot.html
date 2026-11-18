@@ -31,7 +31,12 @@
 {% endif %}
 {% if historia and historia.tila == 'ready' and historia.kirjaukset %}
 <details class="fold"><summary>Käyttöönotot ({{ historia.kirjaukset|length }})</summary>
-  <div class="scroll"><table><thead><tr><th scope="col">Aika</th><th scope="col">Versio</th><th scope="col">Tulos</th><th scope="col">Viesti</th></tr></thead><tbody>{% for k in historia.kirjaukset %}<tr><td class="when">{{ lyhyt_aika(k.aika) or k.aika[:16] }}</td><td><code>{{ k.commit[:7] }}</code></td><td><span class="tag {{ 'ok' if k.tulos == 'asennettu' else 'stop' }}">{{ k.tulos_teksti|lower }}</span></td><td>{{ k.viesti }}{% if k.testit %}<br><small class="muted">{{ k.testit }}</small>{% endif %}{% if k.loki %}<details><summary class="small muted">Loki</summary><pre class="code">{{ k.loki }}</pre></details>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  <ul class="rows">{% for k in historia.kirjaukset %}{% set onnistui = k.tulos == 'asennettu' %}{% set testit = testirivi(k.testit) %}
+    <li><div><span class="when">{{ lyhyt_aika(k.aika) or k.aika[:16] }}</span> <span class="tag {{ 'ok' if onnistui else 'stop' }}">{{ k.tulos_teksti|lower }}</span> <code>{{ k.commit[:7] }}</code></div>
+    {%- set viesti = ilman_aikaleimoja(k.viesti) if k.tulos not in ('asennettu', 'testit_epaonnistuivat', 'palautettu') else '' %}
+    {%- if testit or viesti %}<div class="small muted">{% if testit %}testit {{ testit }}{% endif %}{% if testit and viesti %} · {% endif %}{{ viesti }}</div>{% endif %}
+    {%- if k.loki %}<details class="fold"><summary>Loki</summary><pre class="code">{{ k.loki }}</pre></details>{% endif %}</li>{% endfor %}
+  </ul>
 </details>
 {% endif %}
 {% endblock %}

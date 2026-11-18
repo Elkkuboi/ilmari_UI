@@ -2,7 +2,7 @@
 {% block sisalto %}
 <a class="back" href="{{ url('/hub/asetukset') }}">Asetukset</a>
 <section aria-labelledby="h-dok">
-  <h1 id="h-dok" class="label">Dokumentit{% if kokoelma and kokoelma.tila == 'ready' %} <span class="aside">asennettu versio {{ kokoelma.meta.commit[:7] }} · {{ kokoelma.meta.maara }} kpl</span>{% endif %}</h1>
+  <h1 id="h-dok" class="label">Dokumentit{% if kokoelma and kokoelma.tila == 'ready' %} <span class="aside">{{ kokoelma.meta.maara }}&nbsp;kpl</span>{% endif %}</h1>
 {% if kokoelma is none %}
   <p class="empty">Dokumentit eivät ole saatavilla tässä ympäristössä.</p>
 {% elif kokoelma.tila != 'ready' %}
@@ -13,7 +13,7 @@
 </section>
 {% if kysely %}
 <section aria-labelledby="h-haku">
-  <h2 id="h-haku" class="label">Haku: {{ kysely }} <span class="aside">{{ osumat|length }} {{ 'osuma' if osumat|length == 1 else 'osumaa' }}</span></h2>
+  <h2 id="h-haku" class="label">Haku <span class="aside">”{{ kysely }}”{% if osumat %} · {{ osumat|length }}&nbsp;{{ 'osuma' if osumat|length == 1 else 'osumaa' }}{% endif %}</span></h2>
   {% if osumat %}<ul class="rows">{% for o in osumat %}<li><a href="{{ url('/hub/dokumentit/' ~ o.tunniste) }}">{{ o.otsikko }}</a> <small class="muted">{{ o.osumia }} {{ 'osuma' if o.osumia == 1 else 'osumaa' }}</small><br><small class="muted">{{ o.ote }}</small></li>{% endfor %}</ul>{% else %}<p class="empty">Ei osumia.</p>{% endif %}
 </section>
 {% endif %}

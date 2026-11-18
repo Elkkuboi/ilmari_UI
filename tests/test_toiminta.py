@@ -350,6 +350,8 @@ def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None 
         (k / "viestit.json").write_text(json.dumps({"muoto": "aiops-keskustelu-v1", "paivitetty": "2026-11-19T01:00:00+00:00",
                                                     "viimeisin": 0, "malli": keskustelu, "viestit": []}))
     monkeypatch.setattr("ilmari_ui.keskustelu.OLETUS", k)
+    if not Path(kehitys.OLETUS).exists():
+        Path(kehitys.OLETUS).mkdir(parents=True)   # töiden hakemisto on olemassa (tyhjä), ellei testi aseta omaa
     config = parse_config({"hub": {"rp_id": RP, "julkaisut": str(tmp_path / "ajot"), "kayttajat": {"elias@github": "elias"}}})
     with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
         return client.get(polku, headers=SERVE)
@@ -381,7 +383,7 @@ def test_tuotannossa_nyt_lomakkeet_gatewaylle(tmp_path, monkeypatch):
     # odottaa sinua: epäonnistunut rajatesti vie Asetuksiin
     odottaa = sivu.find("section", attrs={"aria-labelledby": "h-odottaa"})
     assert [a["href"] for a in odottaa.select("a.row")] == ["/hub/asetukset#rajatesti"]
-    assert "Rajatesti ei mennyt läpi" in odottaa.get_text() and "1 kohtaa ei läpi" in odottaa.get_text()
+    assert "Rajatesti ei mennyt läpi" in odottaa.get_text() and "1 kohta ei läpi" in odottaa.get_text()
     assert not sivu.find_all("script") and "&lt;b&gt;x&lt;/b&gt;" in r.text
     # Muualle: Ravintopolku ja Hahmo omissa porteissaan samalla nimellä
     muualle = sivu.find("section", attrs={"aria-labelledby": "h-muualle"})
@@ -454,6 +456,66 @@ def test_tuotannossa_asetukset_lomakkeet_gatewaylle(tmp_path, monkeypatch):
                     "Puhelimen passkey": f"https://{RP}/passkey"}
 
 
+@pytest.mark.parametrize("hakemisto", ["ei", "suhteellinen"])
+def test_tuotannossa_asetukset_lukuvirheessa_ilman_lomakkeita(tmp_path, monkeypatch, hakemisto):
+    """Kielletty suunta: kun Ilmarin tilaa ei voi lukea (puuttuu, väärä omistaja, aikaraja), Asetuksissa ei ole yöajon,
+    tavoitteiden, ohjeiden eikä rajatestin lomaketta: oletusarvoinen lomake (yöajo päällä 02.00, tyhjät tavoitteet)
+    korvaisi tallennettaessa oikeat asetukset. Seis ja Jatka toimivat yhä Nyt-sivulla. (Sallittu suunta:
+    test_tuotannossa_asetukset_lomakkeet_gatewaylle.)"""
+    hak = tmp_path / "ei" if hakemisto == "ei" else Path("suhteellinen/polku")
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/asetukset")
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert r.status_code == 200 and lomakkeet(r) == {} and not sivu.find("textarea") and not sivu.find("input")
+    assert [s["id"] for s in sivu.find_all("section", id=True)] == ["yoajo", "tavoitteet", "ohjeet", "aivot",
+                                                                      "rajatesti", "kone"]
+    tyhjat = {s["id"]: [p.get_text() for p in s.select("p.empty")] for s in sivu.find_all("section", id=True)}
+    assert tyhjat["tavoitteet"] == ["Tavoitteita ei voi lukea."] and tyhjat["ohjeet"] == ["Ohjeita ei voi lukea."]
+    assert len(tyhjat["yoajo"]) == 1 and tyhjat["rajatesti"] == ["Rajatestin tulosta ei voi lukea."]
+    assert "Ei pysyviä ohjeita." not in r.text and "Aja rajatesti nyt" not in r.text
+    nyt = tuotanto(tmp_path, monkeypatch, hak)
+    assert set(lomakkeet(nyt)) == {"/ilmari/seis", "/ilmari/jatka"}
+
+
+def test_tuotannossa_odottaa_sinua_kertoo_jos_toita_ei_voi_lukea(tmp_path, monkeypatch):
+    """Sallittu: luettava (tyhjä) työhakemisto ei lisää riviä. Kielletty: lukematon työhakemisto ei jää hiljaa
+    pois, vaan Odottaa sinua kertoo siitä ja vie Työt-sivulle."""
+    kunnossa = {**TILA, "rajatesti": {**TILA["rajatesti"], "lapi": True, "kohdat": []}}
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a", tila=kunnossa))
+    assert "Odottaa sinua" not in r.text
+    tiedosto = tmp_path / "ei-hakemisto"
+    tiedosto.write_text("x")
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", tiedosto)
+    (tmp_path / "b").mkdir()
+    r = tuotanto(tmp_path / "b", monkeypatch, julkaise(tmp_path / "a2", tila=kunnossa))
+    odottaa = BeautifulSoup(r.text, "html.parser").find("section", attrs={"aria-labelledby": "h-odottaa"})
+    assert [(a["href"], " ".join(a.get_text(" ").split())) for a in odottaa.select("a.row")] == \
+        [("/hub/kehita", "! Töitä ei voi lukea päivitä")]
+
+
+def test_tuotannossa_tila_kertoo_kesken_olevan_tyon(tmp_path, monkeypatch):
+    """Vapaa-tilassa käynnissä oleva työ näkyy pääsanana linkkinä ja vilkkuvana pisteenä, ei vihreänä "Vapaa"."""
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"), keskustelu={"dsh_tyo": 44, "tila": "running"})
+    sivu = BeautifulSoup(r.text, "html.parser")
+    tila = sivu.find("p", class_="state-word")
+    assert " ".join(tila.get_text().split()) == "Työ 44 kesken" and tila.a["href"] == "/hub/kehita/44"
+    assert tila.find("span", class_="dot dot--live") and not sivu.find("span", class_="dot--ok")
+    assert " ".join(sivu.find("p", class_="state-text").get_text().split()) == "Malli on käynnissä. Yöajo pois päältä."
+    (tmp_path / "x").mkdir()
+    r = tuotanto(tmp_path / "x", monkeypatch, julkaise(tmp_path / "b"), keskustelu={"tila": "running"})
+    tila = BeautifulSoup(r.text, "html.parser").find("p", class_="state-word")
+    assert tila.get_text(strip=True) == "Vapaa" and tila.find("span", class_="dot dot--ok")
+
+
+def test_teot_ilman_raakoja_tunnisteita_ja_paiva_vaihtuu():
+    """Avatussa tekorivissä ei koodin tunnistetta (tyovuoro alkoi, yoajo paattyi); puhelimella päivä näkyy, kun se
+    vaihtuu (rivin p.day, piilossa leveällä näytöllä, jossa päivä on joka rivillä)."""
+    sivu = BeautifulSoup(asiakas().get("/hub?demo=1").text, "html.parser")
+    lisat = " ".join(d.get_text(" ") for d in sivu.select(".log .more"))
+    for raaka in ("tyovuoro", "yoajo", "tyo alkoi", "kirjaus", "_"):
+        assert raaka not in lisat
+    assert [p.get_text() for p in sivu.select(".log p.day")] == ["19.11.", "18.11."]
+
+
 def test_tuotannossa_rajatesti_pois_kaytosta_kun_tyo_kesken(tmp_path, monkeypatch):
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"), keskustelu={"dsh_tyo": 44, "tila": "running"},
                  polku="/asetukset")
@@ -466,7 +528,7 @@ def test_asetukset_esimerkkitilassa_ja_ilman_lahdetta():
     sivu = BeautifulSoup(r.text, "html.parser")
     assert r.status_code == 200 and "<form" not in r.text and "Refresh" not in r.headers
     assert sivu.find("textarea", attrs={"name": "rivit"}).get_text().startswith("Ravintopolun kuvareitti valmiiksi")
-    assert "&lt;b&gt;ei html&lt;/b&gt;" in r.text and "Poista ohje, jota et tunnista." in r.text
+    assert "&lt;b&gt;ei html&lt;/b&gt;" in r.text and "Poista ohje, jota et tunnista." not in r.text   # ei selityksiä
     r = asiakas().get("/hub/asetukset")
     assert r.status_code == 200 and "Asetukset eivät ole saatavilla" in r.text and 'id="tavoitteet"' not in r.text
 
@@ -617,12 +679,15 @@ def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
         assert ("Rajatesti ajetaan ensin (noin minuutti). Työvuoro alkaa sen jälkeen itsestään." in teksti) is (n == 0)
         assert sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
         assert r.headers.get("Refresh") == "30"   # työ käynnissä: sivu päivittyy, kunnes vuoro alkaa
+        tila = sivu.find("p", class_="state-word")
+        assert tila.find("span", class_="dot dot--live") and "Vapaa" not in tila.get_text()   # ei "Vapaa" työn aikana
         if dsh == 57:
-            assert "rajatesti käynnissä" in teksti and "/hub/kehita/57" not in linkit
+            assert tila.get_text(strip=True) == "Rajatesti käynnissä" and "/hub/kehita/57" not in linkit
             assert ("Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään." in teksti) is (n == 1)
             assert "Töihin nyt toimii, kun työ" not in teksti
         else:
-            assert "/hub/kehita/58" in linkit and "rajatesti käynnissä" not in teksti
+            assert "/hub/kehita/58" in linkit and "rajatesti käynnissä" not in teksti.lower()
+            assert " ".join(tila.get_text().split()) == "Työ 58 kesken" and tila.a["href"] == "/hub/kehita/58"
             assert "Töihin nyt toimii, kun työ 58 on valmis." in teksti
     # Osoite ei lukitse nappia: vanha ?toihin=rajatesti ilman käynnissä olevaa työtä jättää Töihin nyt käyttöön, ja
     # tuntematon arvo ei näytä ilmoitusta. (Vanhan osoitteen /hub/ilmari ohjaus: test_production.)

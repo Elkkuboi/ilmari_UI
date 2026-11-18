@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% from 'macros.html' import lomake, piste with context %}
 {% macro tekorivit(lista) -%}
-<ol class="rows log">{% for t in lista %}<li><details><summary><span><span class="date">{{ paiva(t.aika) }} </span><time datetime="{{ t.aika }}">{{ kello(t.aika) }}</time></span><span>{{ t.mita }}</span></summary><div class="more"><span class="who">{{ t.tekija }}</span> · {{ t.laji|replace('_', ' ') }}{% if t.miksi %} · Miksi: {{ t.miksi }}{% endif %}{% if t.peru %} · Peruminen: {{ t.peru }}{% endif %}{% if t.tyo %} · {% if t.tyo_linkki %}<a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% else %}työ {{ t.tyo }}{% endif %}{% endif %}</div></details></li>{% endfor %}</ol>
+<ol class="rows log">{% for t in lista %}<li>{% if loop.first or paiva(loop.previtem.aika) != paiva(t.aika) %}<p class="day" aria-hidden="true">{{ paiva(t.aika) }}</p>{% endif %}<details><summary><span><span class="date">{{ paiva(t.aika) }} </span><time datetime="{{ t.aika }}">{{ kello(t.aika) }}</time></span><span>{{ t.mita }}</span></summary><div class="more"><span class="who">{{ t.tekija }}</span>{% if t.miksi %} · Miksi: {{ t.miksi }}{% endif %}{% if t.peru %} · Peruminen: {{ t.peru }}{% endif %}{% if t.tyo %} · {% if t.tyo_linkki %}<a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% else %}työ {{ t.tyo }}{% endif %}{% endif %}</div></details></li>{% endfor %}</ol>
 {%- endmacro %}
 {% block sisalto %}
 {% set m = malli %}
@@ -11,10 +11,12 @@
   <p class="empty">Ilmarin tila ei ole saatavilla tässä ympäristössä.</p>
 {% else %}
   {% set varattu = m and (m.dsh_tyo or m.yoajo) %}
+  {#- Vapaa, mutta työ on kesken: pääsana kertoo työn, ei "Vapaa" #}
+  {% set tyo_kesken = m and m.dsh_tyo and tilarivi.savy == 'success' %}
   <div class="state">
-    <div><p class="state-word">{{ piste(tilarivi.savy, tilarivi.savy == 'accent') }}{{ tilarivi.teksti }}</p>
+    <div><p class="state-word">{{ piste(tilarivi.savy, tilarivi.savy == 'accent' or tyo_kesken) }}{% if tyo_kesken and rajatesti_kaynnissa %}Rajatesti käynnissä{% elif tyo_kesken %}<span><a href="{{ url('/hub/kehita/' ~ m.dsh_tyo) }}">Työ {{ m.dsh_tyo }}</a> kesken</span>{% else %}{{ tilarivi.teksti }}{% endif %}</p>
     <p class="state-text">{{ tilarivi.selitys }}
-      {%- if tilarivi.seis is sameas false and m %} {{ 'Malli on käynnissä' if m.tila == 'running' else 'Malli ei ole käynnissä' }}{% if m.dsh_tyo and rajatesti_kaynnissa %}, rajatesti käynnissä{% elif m.dsh_tyo %}, työ <a href="{{ url('/hub/kehita/' ~ m.dsh_tyo) }}">{{ m.dsh_tyo }}</a> kesken{% else %}, ei työtä kesken{% endif %}.{% endif %}
+      {%- if tilarivi.seis is sameas false and m %} {{ 'Malli on käynnissä' if m.tila == 'running' else 'Malli ei ole käynnissä' }}{% if tyo_kesken %}{% elif m.dsh_tyo and rajatesti_kaynnissa %}, rajatesti käynnissä{% elif m.dsh_tyo %}, työ <a href="{{ url('/hub/kehita/' ~ m.dsh_tyo) }}">{{ m.dsh_tyo }}</a> kesken{% else %}, ei työtä kesken{% endif %}.{% endif %}
       {%- if tilarivi.savy == 'success' and asetukset %} {{ ('Yöajo alkaa klo ' ~ asetukset.kello|replace(':', '.') ~ '.') if asetukset.paalla else 'Yöajo pois päältä.' }}{% endif %}</p></div>
 {% if gateway_url or demo %}
     <div class="actions">
