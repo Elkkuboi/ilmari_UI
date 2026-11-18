@@ -1,5 +1,24 @@
 # ilmari_UI: tämän repositorion tilanne 18.11.2026
 
+## Päivitys 18.11.2026 (yö): Hub juureksi, karsinta ja uusi tyyli, haara `hub-juuri`
+
+- Hub on Ilmarin juuri. Valikossa neljä linkkiä: **Nyt** `/hub` (tila, Töihin nyt, Seis, Jatka, Odottaa sinua,
+  viimeisin raportti, teot, Muualle: Ravintopolku `:8443` ja Hahmo `:8444`), **Keskustelu**, **Työt** `/hub/kehita`
+  (toive, sinun toiveesi, Ilmarin omat työt, käyttöönotot; työn sivulla kaikki toimet ennallaan) ja **Asetukset**
+  (yöajo `#yoajo`, tavoitteet `#tavoitteet`, ohjeet `#ohjeet`, aivot `#aivot`, rajatesti `#rajatesti`, kone `#kone`,
+  dokumentit). Lomakkeet, kentät ja gateway-linkit ovat täsmälleen ennallaan (vertailtu vanhaan HTML:ään).
+- Uusi tyyli: vaalea paperi, tumma muste, IBM Plex Mono (OFL, `static/fonts/`), ei teemoja, kuvakkeita, kortteja,
+  sivupalkkia eikä alapalkkia. Uudet kuvakkeet ja manifesti (nimi Ilmari, värit `#f1ead9`).
+- Poistettu: teemat, vanha etusivu ja sovelluskortit, Hahmon tilasivu, ajot ja raportit, yöajon ehdotukset, Säännöt,
+  Hyväksynnät, Ideat, erilliset Mallit- ja Järjestelmä-sivut (`cards.py`, `runs.py`, `muodot.py`, `peruskirja.py`,
+  `themes.py`, niiden mallit, esimerkkidata ja testit) sekä käynnistimen valitsimet `--runs-dir` ja
+  `--peruskirja-dir`. Turvallinen tiedostoluku siirtyi `lukija.py`:hyn ja rajattu Markdown `dokumentit.py`:hyn.
+- Vanhat osoitteet ohjautuvat (307, kysely mukana): `/hub/ilmari` → `/hub` (myös `?toihin=rajatesti`), `/hub/mallit` ja
+  `/hub/jarjestelma` → `/hub/asetukset`, `/hub/saannot` → `/hub/dokumentit`, muut → `/hub`.
+- Ennallaan: vartija, turvaotsakkeet ja CSP, `hub.toml`:n avaimet, systemd-yksikkö ja `scripts/asenna.sh`.
+- Testit: 516 passed, 35 skipped (ilman selainryhmää ja shellcheckiä).
+- Peruminen: `git -C ~/code/ilmari_UI reset --hard 7706d0a` ja `sudo ~/code/ilmari_UI/scripts/asenna.sh "$(command -v uv)"`.
+
 ## Päivitys 18.11.2026 (ilta): Töihin nyt ja viimeisin raportti (aiops Pala 1b), haara `ilmari-nyt-2`
 
 - Ilmari nyt -sivun Tila-paneelissa on nappi **Töihin nyt** (lomake `POST {gateway}/ilmari/vuoro`, `paluu=hub`). Se
