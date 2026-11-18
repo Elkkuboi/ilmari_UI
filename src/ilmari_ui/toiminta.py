@@ -220,7 +220,7 @@ def tarkista_tila(data: Any) -> tuple[dict[str, Any], list[str]]:
     if type(data["seis"]) is not bool:
         _virhe("Seis-kytkin ei ole totuusarvo.")
     tilanne = {"seis": data["seis"], "seis_aika": _aika(data["seis_aika"], tyhja=True),
-               "seis_kuka": None if data["seis_kuka"] is None else _teksti(data["seis_kuka"], 40),
+               "seis_kuka": None if data["seis_kuka"] is None else _teksti(data["seis_kuka"], 64),
                "yoajo_viimeisin": _paiva(data["yoajo_viimeisin"]), "vuoro": None, "vuoro_virhe": False,
                "rajatesti": None, "rajatesti_virhe": False}
     virheet = []
