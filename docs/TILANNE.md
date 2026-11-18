@@ -1,4 +1,15 @@
-# ilmari_UI: tämän repositorion tilanne 18.11.2026
+# ilmari_UI: tämän repositorion tilanne 19.11.2026
+
+## Päivitys 19.11.2026: vaihdettavat värit, haara `hub-juuri`
+
+- Asetuksissa uusi osio Ulkoasu `#ulkoasu`: neljä värinäytettä, Paperi (oletus, vaalea lämmin), Liitu (vaalea viileä),
+  Terminaali (tumma meripihka) ja Fosfori (tumma vihreä). Näyte on linkki `/hub/ulkoasu/{väri}`, joka asettaa evästeen
+  `ilmari_vari` (vuosi, Path=/, HttpOnly, SameSite=Lax, tuotannossa Secure) ja palaa Asetuksiin. Ei skriptiä, ei
+  POST-reittiä, palvelimella ei muutu mitään; tuntematon väri on 404 ilman evästettä.
+- Värit ovat vain `app.css`:n neljässä lohkossa; muut säännöt käyttävät muuttujia (testi tarkistaa, myös kontrastin).
+- Testit: 596 passed, 35 skipped.
+- Peruminen: värien commitit pois haarasta (`git revert`), muu uudistus säilyy. Vanha eväste ei haittaa: ilman värejä
+  sitä ei lueta.
 
 ## Päivitys 18.11.2026 (yö): Hub juureksi, karsinta ja uusi tyyli, haara `hub-juuri`
 
