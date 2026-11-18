@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block sisalto %}
+<a class="back" href="{{ url('/hub/asetukset') }}">Asetukset</a>
+<section aria-labelledby="h-dok">
+  <h1 id="h-dok" class="label">Dokumentit{% if kokoelma and kokoelma.tila == 'ready' %} <span class="aside">{{ kokoelma.meta.maara }}&nbsp;kpl</span>{% endif %}</h1>
+{% if kokoelma is none %}
+  <p class="empty">Dokumentit eivät ole saatavilla tässä ympäristössä.</p>
+{% elif kokoelma.tila != 'ready' %}
+  <p class="empty">{{ kokoelma.viesti }}</p>
+{% else %}
+  <form method="get" action="/hub/dokumentit" role="search"><label for="docs-q">Hae dokumenteista</label><div class="actions"><input id="docs-q" name="q" type="search" maxlength="100" value="{{ kysely }}">{% if demo %}<input type="hidden" name="demo" value="1">{% endif %}<button class="btn--quiet" type="submit">Hae</button></div></form>
+{% endif %}
+</section>
+{% if kysely %}
+<section aria-labelledby="h-haku">
+  <h2 id="h-haku" class="label">Haku <span class="aside">”{{ kysely }}”{% if osumat %} · {{ osumat|length }}&nbsp;{{ 'osuma' if osumat|length == 1 else 'osumaa' }}{% endif %}</span></h2>
+  {% if osumat %}<ul class="rows">{% for o in osumat %}<li><a href="{{ url('/hub/dokumentit/' ~ o.tunniste) }}">{{ o.otsikko }}</a> <small class="muted">{{ o.osumia }} {{ 'osuma' if o.osumia == 1 else 'osumaa' }}</small><br><small class="muted">{{ o.ote }}</small></li>{% endfor %}</ul>{% else %}<p class="empty">Ei osumia.</p>{% endif %}
+</section>
+{% endif %}
+{% for avain, otsikko, rivit in ryhmat %}
+<section aria-labelledby="docs-{{ avain }}">
+  <h2 id="docs-{{ avain }}" class="label">{{ otsikko }}</h2>
+  <ul class="rows">{% for d in rivit %}<li><a href="{{ url('/hub/dokumentit/' ~ d.tunniste) }}">{{ d.otsikko }}</a>{% if d.paiva or d.tila %} <small class="muted">{{ d.paiva }}{% if d.paiva and d.tila %} · {% endif %}{{ d.tila }}</small>{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endfor %}
+{% endblock %}

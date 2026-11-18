@@ -1,8 +1,8 @@
 """Hubin käynnistin: vain omistajan Unix-soketti, ei TCP-vaihtoehtoa.
 
-Kehitystila: ilman --config-valitsinta (Host ilmari.local, valinnainen --demo, --runs-dir ja --peruskirja-dir).
-Tuotantotila: --config /etc/ilmari-hub/hub.toml (aiops ADR-0013). Julkaisujuuri ja sallitut Tailscale-tunnukset tulevat
-konfiguraatiosta, eikä esimerkkitilaa tai --runs-dir-valitsinta hyväksytä.
+Kehitystila: ilman --config-valitsinta (Host ilmari.local, valinnainen --demo). Tuotantotila: --config
+/etc/ilmari-hub/hub.toml (aiops ADR-0013). Sallitut Tailscale-tunnukset tulevat konfiguraatiosta, eikä esimerkkitilaa
+hyväksytä. Tietolähteet ovat kiinteitä polkuja (/srv/aiops/ilmari/...), eivät valitsimia.
 """
 
 import argparse
@@ -22,22 +22,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Ilmari Hubin paikallinen lukukäyttöliittymä (Unix-soketti).")
     parser.add_argument("--socket", type=Path, default=Path(".runtime/hub.sock"))
     parser.add_argument("--demo", action="store_true", help="Salli eristetty esimerkkidata kyselyllä demo=1.")
-    parser.add_argument("--runs-dir", type=Path, help="Erikseen hyväksytty julkaisuhakemisto; ei raakatuloksia.")
-    parser.add_argument("--peruskirja-dir", type=Path, help="Kehitystila: julkaistun peruskirjan hakemisto (saannot.md ja meta.json).")
     parser.add_argument("--config", type=Path, help="Tuotantokonfiguraatio (esim. /etc/ilmari-hub/hub.toml, ADR-0013).")
     args = parser.parse_args()
     hub_config = None
     if args.config is not None:
-        if args.demo or args.runs_dir is not None or args.peruskirja_dir is not None:
-            parser.error("Tuotantotilassa (--config) ei käytetä valitsimia --demo, --runs-dir eikä --peruskirja-dir.")
+        if args.demo:
+            parser.error("Tuotantotilassa (--config) ei käytetä valitsinta --demo.")
         try:
             hub_config = load_config(args.config)
         except ConfigError as error:
             parser.error(str(error))
-        args.runs_dir = hub_config.runs_dir
-    for root in (args.runs_dir, args.peruskirja_dir):
-        if root is not None and (not root.is_absolute() or root == Path("/") or ".." in root.parts):
-            parser.error("Julkaisujuuren pitää olla yksilöity absoluuttinen hakemistopolku ilman '..'-osia.")
     address = args.socket.absolute()
     if len(str(address).encode()) > 100:
         parser.error("Soketin polku on liian pitkä.")
@@ -74,7 +68,7 @@ def main() -> None:
                 cleanup_socket()
 
         try:
-            application = create_app(Settings(runs_dir=args.runs_dir, rules_dir=args.peruskirja_dir, demo_enabled=args.demo, identity=hub_config))
+            application = create_app(Settings(demo_enabled=args.demo, identity=hub_config))
             application.router.lifespan_context = lifespan
             config = uvicorn.Config(application, log_level="info", proxy_headers=False, server_header=False, access_log=False)
             uvicorn.Server(config).run(sockets=[server])

@@ -75,3 +75,9 @@ def test_no_writable_paths_privileged_groups_or_demo():
     assert "ReadWritePaths" not in s and "BindPaths" not in s
     assert not ({"aiops", "docker", "root", "sudo", "adm"} & set(" ".join(s["SupplementaryGroups"]).split()))
     assert "--demo" not in s["ExecStart"][0] and "--runs-dir" not in s["ExecStart"][0]
+
+
+def test_jokainen_lahde_on_liitetty_palveluun(oletuspolut):
+    """Hub lukee vain kiinteitä polkuja; jokaisen pitää näkyä palvelun nimiavaruudessa (BindReadOnlyPaths)."""
+    liitetyt = {p.lstrip("-") for p in settings()["BindReadOnlyPaths"]}
+    assert {str(p) for p in oletuspolut.values()} <= liitetyt

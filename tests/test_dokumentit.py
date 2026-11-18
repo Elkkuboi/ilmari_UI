@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ilmari_ui.dokumentit import ESIMERKKI, etsi, hae, lue_dokumentit, ryhmittain
+from ilmari_ui.dokumentit import ESIMERKKI, etsi, hae, jasenna, lue_dokumentit, osat, piirrettava, ryhmittain
 
 UID = os.getuid()
 COMMIT = "b" * 40
@@ -92,3 +92,89 @@ def test_haku(tmp_path):
 def test_esimerkkiaineisto_kelpaa():
     k = lue_dokumentit(ESIMERKKI, omistaja=None)
     assert k.tila == "ready" and len(k.dokumentit) == 3
+
+
+# --- Rajattu Markdown (siirretty peruskirjan lukijasta 18.11.2026): käsin kirjoitetut odotetut rakenteet --------------
+
+MD = """# Ilmarin säännöt (peruskirja)
+
+- Tila: luonnos.
+
+## Taso 1: Ehdottomat
+
+### Laki (ei muutettavissa)
+
+- **L1 — Ei todellisia ihmisiä.** Ei edes
+  suostumuksella.
+- **L2 — Ei alaikäisiä.** `ikäluokitin` aina.
+
+---
+
+| Sääntö | Nyt |
+| --- | --- |
+| S3 | `gpt-6.1-sol` |
+"""
+
+
+def test_jasennin_rakenne():
+    assert jasenna(MD) == (
+        {"tyyppi": "otsikko", "taso": 1, "osat": (("teksti", "Ilmarin säännöt (peruskirja)"),)},
+        {"tyyppi": "lista", "jarjestetty": False, "alku": 1, "kohdat": (
+            {"osat": (("teksti", "Tila: luonnos."),), "sisennys": 0},)},
+        {"tyyppi": "otsikko", "taso": 2, "osat": (("teksti", "Taso 1: Ehdottomat"),)},
+        {"tyyppi": "otsikko", "taso": 3, "osat": (("teksti", "Laki (ei muutettavissa)"),)},
+        {"tyyppi": "lista", "jarjestetty": False, "alku": 1, "kohdat": (
+            {"osat": (("lihava", "L1 — Ei todellisia ihmisiä."), ("teksti", " Ei edes suostumuksella.")), "sisennys": 0},
+            {"osat": (("lihava", "L2 — Ei alaikäisiä."), ("teksti", " "), ("koodi", "ikäluokitin"),
+                      ("teksti", " aina.")), "sisennys": 0},
+        )},
+        {"tyyppi": "viiva"},
+        {"tyyppi": "taulukko", "otsikot": ((("teksti", "Sääntö"),), (("teksti", "Nyt"),)),
+         "rivit": (((("teksti", "S3"),), (("koodi", "gpt-6.1-sol"),)),)},
+    )
+
+
+def test_jasennin_kappale_lainaus_koodi_ja_numeroitu():
+    teksti = ("Eka rivi\ntoka rivi.\n\n> lainattu\n> jatkuu\n\n```\n<b>koodia</b>\n  sisennys\n```\n\n"
+              "3. kolmas\n4. neljäs\n   jatko\n\n5. viides\n")
+    assert jasenna(teksti) == (
+        {"tyyppi": "kappale", "osat": (("teksti", "Eka rivi toka rivi."),)},
+        {"tyyppi": "lainaus", "osat": (("teksti", "lainattu jatkuu"),)},
+        {"tyyppi": "koodi", "teksti": "<b>koodia</b>\n  sisennys"},
+        {"tyyppi": "lista", "jarjestetty": True, "alku": 3, "kohdat": (
+            {"osat": (("teksti", "kolmas"),), "sisennys": 0},
+            {"osat": (("teksti", "neljäs jatko"),), "sisennys": 0},
+            {"osat": (("teksti", "viides"),), "sisennys": 0},
+        )},
+    )
+
+
+def test_jasennin_sisakkainen_kohta_ja_vuosiluku_kappaleessa():
+    assert jasenna("- yla\n  - ala\n- toinen\n") == ({"tyyppi": "lista", "jarjestetty": False, "alku": 1, "kohdat": (
+        {"osat": (("teksti", "yla"),), "sisennys": 0}, {"osat": (("teksti", "ala"),), "sisennys": 1},
+        {"osat": (("teksti", "toinen"),), "sisennys": 0})},)
+    assert jasenna("Päätös tehtiin\n2026. vuonna.\n") == (
+        {"tyyppi": "kappale", "osat": (("teksti", "Päätös tehtiin 2026. vuonna."),)},)
+
+
+@pytest.mark.parametrize("teksti,odotettu", [
+    ("**kesken", (("teksti", "**kesken"),)),
+    ("`kesken", (("teksti", "`kesken"),)),
+    ("****", (("teksti", "****"),)),
+    ("a **b** c `d` e", (("teksti", "a "), ("lihava", "b"), ("teksti", " c "), ("koodi", "d"), ("teksti", " e"))),
+    ("[linkki](https://example.org)", (("teksti", "[linkki](https://example.org)"),)),
+    ("<script>x</script>", (("teksti", "<script>x</script>"),)),
+])
+def test_tekstinsisaiset_osat(teksti, odotettu):
+    assert osat(teksti) == odotettu
+
+
+def test_repon_ulkopuolinen_crlf_ja_tyhja():
+    assert jasenna("# a\r\n\r\nb\r\n") == ({"tyyppi": "otsikko", "taso": 1, "osat": (("teksti", "a"),)},
+                                          {"tyyppi": "kappale", "osat": (("teksti", "b"),)})
+    assert jasenna("") == ()
+
+
+def test_liian_monta_lohkoa_ei_piirry():
+    lohkot, virhe = piirrettava({"teksti": "x\n\n" * 4001})
+    assert lohkot is None and "liikaa lohkoja" in virhe

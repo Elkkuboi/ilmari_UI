@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
+{% block sisalto %}
+{% set ohjaus = gateway_url or demo %}
+{#- Lomakkeet vain, kun Ilmarin tila on luettu: lukuvirheessä oletusarvoinen lomake korvaisi oikeat asetukset. #}
+<section id="yoajo" aria-labelledby="h-yo">
+  <h1 id="h-yo" class="label">Yöajo</h1>
+{% if toiminta is none %}
+  <p class="empty">Asetukset eivät ole saatavilla tässä ympäristössä.</p>
+{% elif not valmis %}
+  <p class="empty">{{ toiminta.viesti or 'Asetuksia ei voi lukea.' }}</p>
+{% else %}
+  {% set a = asetukset %}
+  {% if a is none %}<p class="empty">Asetuksia ei voi lukea; tallennus korvaa ne.</p>{% endif %}
+  {% call lomake('/ilmari/asetukset', 'actions') %}<label class="inline"><input type="checkbox" name="yoajo_paalla" value="1"{% if a is none or a.paalla %} checked{% endif %}> Yöajo päällä</label><label class="inline" for="yoajo-kello">Alkaa klo <input id="yoajo-kello" type="time" name="yoajo_kello" value="{{ a.kello if a else '02:00' }}" step="60" required></label><button type="submit">Tallenna</button>{% endcall %}
+  <p class="muted small">Kesto enintään 3 h. Alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten.{% if tilanne and tilanne.yoajo_viimeisin %} Edellinen {{ tilanne.yoajo_viimeisin[8:10]|int }}.{{ tilanne.yoajo_viimeisin[5:7]|int }}.{% endif %}</p>
+{% endif %}
+</section>
+{% if toiminta is not none %}
+<section id="tavoitteet" aria-labelledby="h-tav">
+  <h2 id="h-tav" class="label">Tavoitteet{% if tavoitteet and tavoitteet.aika %} <span class="aside">päivitetty {{ lyhyt_aika(tavoitteet.aika) }}</span>{% endif %}</h2>
+{% if not valmis %}
+  <p class="empty">Tavoitteita ei voi lukea.</p>
+{% else %}
+  {% if tavoitteet is none %}<p class="empty">Tavoitteita ei voi lukea; tallennus korvaa ne.</p>{% endif %}
+  {% set rivit_n = (tavoitteet.rivit|length) if tavoitteet else 0 %}
+  {% call lomake('/ilmari/tavoitteet') %}<label for="rivit">Yksi riville, tärkein ensin</label><textarea id="rivit" name="rivit" rows="{{ [4, [12, rivit_n * 2 + 1]|min]|max }}" maxlength="4100">{{ tavoitteet.rivit|join('\n') if tavoitteet else '' }}</textarea>
+  <div class="form-row"><span class="muted small">Ilmari tekee näistä tehtävälistan.</span><button type="submit">Tallenna</button></div>{% endcall %}
+{% endif %}
+</section>
+<section id="ohjeet" aria-labelledby="h-ohjeet">
+  <h2 id="h-ohjeet" class="label">Pysyvät ohjeet</h2>
+{% if not valmis or ohjeet is none %}
+  <p class="empty">Ohjeita ei voi lukea.</p>
+{% elif ohjeet %}
+  <ul class="rows">{% for o in ohjeet %}<li><div class="pre">{{ o.teksti }}</div><div class="form-row"><span class="muted small">{{ lyhyt_aika(o.aika) }} · nro&nbsp;{{ o.id }}</span>{% call lomake('/ilmari/ohje/' ~ o.id ~ '/poista') %}<button class="btn--quiet" type="submit">Poista</button>{% endcall %}</div></li>{% endfor %}</ul>
+{% else %}
+  <p class="empty">Ei pysyviä ohjeita.</p>
+{% endif %}
+</section>
+{% endif %}
+<section id="aivot" aria-labelledby="h-aivot">
+  <h2 id="h-aivot" class="label">Aivot{% if vapaa_ram_gb is not none %} <span class="aside">vapaa RAM {{ vapaa_ram_gb }} Gt</span>{% endif %}</h2>
+{% if mallit is none %}
+  <p class="empty">Mallit eivät ole saatavilla tässä ympäristössä.</p>
+{% elif mallit.tila != 'ready' %}
+  <p class="empty">{{ mallit.viesti or 'Mallirekisteriä ei voi lukea.' }}</p>
+{% else %}
+{% if mallit.profiilit %}
+  <div class="scroll"><table><thead><tr><th scope="col">Profiili</th><th scope="col">Kuvaus</th><th scope="col">RAM</th>{% if ohjaus %}<th scope="col"><span class="sr-only">Vaihda</span></th>{% endif %}</tr></thead><tbody>
+  {% for p in mallit.profiilit.values() %}{% set ei_mahdu = p.ram_gb and vapaa_ram_gb is not none and vapaa_ram_gb < p.ram_gb + ram_marginaali and p.nimi != nykyinen %}
+  <tr><td>{{ p.nimi }}{% if p.nimi == nykyinen %} <span class="tag ok">käytössä</span>{% endif %}</td><td>{{ p.kuvaus }}{% if ei_mahdu %}<br><small class="warn">Ei mahdu nyt: tarvitsee {{ p.ram_gb }} + {{ ram_marginaali }} Gt.</small>{% endif %}</td><td class="when">{% if p.ram_gb %}{{ p.ram_gb }} Gt{% else %}–{% endif %}</td>{% if ohjaus %}<td>{% call lomake('/mallit/profiili') %}<input type="hidden" name="profiili" value="{{ p.nimi }}"><button class="btn--quiet" type="submit"{% if p.nimi == nykyinen %} disabled{% endif %}>Vaihda</button>{% endcall %}</td>{% endif %}</tr>
+  {% endfor %}</tbody></table></div>
+  {% if not nykyinen %}<p class="muted small">Roolit on valittu erikseen; mikään profiili ei ole kokonaan käytössä.</p>{% endif %}
+{% endif %}
+  <details class="fold"><summary>Roolit ja mallirekisteri</summary>
+    <div class="stack">
+    <div class="scroll"><table><thead><tr><th scope="col">Rooli</th><th scope="col">Malli</th></tr></thead><tbody>
+    {% for r in mallit.roolirivit(ylikirjoitus) %}<tr><td>{{ r.otsikko }}{% if r.valittu %}<br><small class="muted">valittu; oletus {{ r.oletus or '–' }}</small>{% endif %}</td><td>{% if ohjaus %}{% call lomake('/mallit/rooli') %}<input type="hidden" name="rooli" value="{{ r.rooli }}"><span class="actions"><label class="sr-only" for="rooli-{{ r.rooli }}">Malli roolille {{ r.otsikko }}</label><select id="rooli-{{ r.rooli }}" name="malli">{% for m in r.vaihtoehdot %}<option value="{{ m }}"{% if m == r.malli %} selected{% endif %}>{{ m }}</option>{% endfor %}<option value=""{% if not r.malli %} selected{% endif %}>ei mallia</option><option value="oletus">rekisterin oletus</option></select><button class="btn--quiet" type="submit">Tallenna</button></span>{% endcall %}{% if r.malli and r.malli not in r.vaihtoehdot %}<small class="muted">nyt {{ r.malli }}</small>{% endif %}{% elif r.malli %}{{ r.malli }}{% else %}<span class="muted">ei mallia</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <ul class="rows">{% for m in mallit.mallit %}<li><strong>{{ m.nimi }}</strong> {{ m.kuvaus }}<br><small class="muted">{{ m.sijainti_teksti }} · {{ m.tyyppi_teksti }} · konteksti {{ m.konteksti_max }}{% if m.moottori %} · {{ m.moottori }}{% endif %}{% if m.kuvat %} · kuvat{% endif %}{% if m.vram_gb %} · VRAM {{ m.vram_gb }} Gt{% endif %}{% if m.ram_gb %} · RAM {{ m.ram_gb }} Gt{% endif %}{% if m.koko_gb %} · {{ m.koko_gb }} Gt{% endif %}{% if m.kuva %} · {{ m.kuva }}{% endif %}{% if m.tarjoaja %} · {{ m.tarjoaja }} ({{ m.hinnasto }}){% endif %}{% if m.roolit %} · roolit {{ m.roolit|join(', ') }}{% endif %}</small></li>{% endfor %}</ul>
+    </div>
+  </details>
+{% endif %}
+</section>
+{% if toiminta is not none %}
+<section id="rajatesti" aria-labelledby="h-raja">
+  <h2 id="h-raja" class="label">Rajatesti</h2>
+{% if tilanne is none or tilanne.rajatesti_virhe %}
+  <p class="empty">Rajatestin tulosta ei voi lukea.</p>
+{% elif tilanne.rajatesti is none %}
+  <p class="empty">Rajatestiä ei ole vielä ajettu.</p>
+{% else %}{% set r = tilanne.rajatesti %}
+  <p><span class="tag {{ 'ok' if r.lapi else 'stop' }}">{{ 'läpi' if r.lapi else 'ei läpi' }}</span> {{ lyhyt_aika(r.aika) }} · {{ kohtaa(r.kohdat|length) }}{% if r.hylatyt %}, {{ r.hylatyt|length }} ei läpi{% endif %} · työ {{ r.tyo }}</p>
+  {% if r.hylatyt %}<ul class="rows">{% for k in r.hylatyt %}<li><code class="stop">{{ k.nimi }}</code> ({{ k.odotus_teksti }}){% if k.havainto %}<br><small class="muted">{{ k.havainto }}</small>{% endif %}</li>{% endfor %}</ul>{% endif %}
+{% endif %}
+{% if ohjaus and valmis %}
+  <div class="actions">{% call lomake('/ilmari/rajatesti') %}<button type="submit"{% if malli and malli.dsh_tyo %} disabled{% endif %}>Aja rajatesti nyt</button>{% endcall %}</div>
+  {% if malli and malli.dsh_tyo %}<p class="muted small">Rajatestin voi ajaa, kun työ {{ malli.dsh_tyo }} on valmis.</p>{% endif %}
+{% endif %}
+{% if tilanne and tilanne.rajatesti and tilanne.rajatesti.kohdat %}
+  <details class="fold"><summary>Kaikki kohdat ({{ tilanne.rajatesti.kohdat|length }})</summary>
+    <ul class="rows">{% for k in tilanne.rajatesti.kohdat %}<li><code>{{ k.nimi }}</code> <span class="tag {{ 'ok' if k.lapi else 'stop' }}">{{ 'läpi' if k.lapi else 'ei läpi' }}</span> <small class="muted">{{ k.odotus_teksti }}</small>{% if k.havainto %}<br><small class="muted">{{ k.havainto }}</small>{% endif %}</li>{% endfor %}</ul>
+  </details>
+{% endif %}
+</section>
+{% endif %}
+<section id="kone" aria-labelledby="h-kone">
+  <h2 id="h-kone" class="label">Kone{% if kone %} <span class="aside{% if kone.vanhentunut %} warn{% endif %}">{{ koneen_ika(kone) }}</span>{% endif %}</h2>
+{% if kone %}
+  <dl class="kv{% if kone.vanhentunut %} muted{% endif %}">
+    <dt>CPU</dt><dd>{% if kone.cpu.kaytto is not none %}{{ kone.cpu.kaytto|round|int }} %{% else %}–{% endif %}{% if kone.cpu.kuorma %} · kuorma {{ kone.cpu.kuorma|join(' ') }}{% endif %}{% if kone.cpu.ytimet %} · {{ kone.cpu.ytimet }} ydintä{% endif %}</dd>
+    <dt>RAM</dt><dd>{% if kone.muisti %}{{ kone.muisti.kaytossa_gb }} / {{ kone.muisti.yhteensa_gb }} Gt{% else %}–{% endif %}</dd>
+    <dt>GPU</dt><dd>{% if kone.gpu %}{% if kone.gpu.vram_kaytossa_gb is not none %}{{ kone.gpu.vram_kaytossa_gb }} / {{ kone.gpu.vram_yhteensa_gb }} Gt{% else %}–{% endif %}{% if kone.gpu.kayttoaste is not none %} · {{ kone.gpu.kayttoaste|int }} %{% endif %}{% if kone.gpu.lampotila_c is not none %} · {{ kone.gpu.lampotila_c|int }} °C{% endif %}{% if kone.gpu.nimi %} · {{ kone.gpu.nimi }}{% endif %}{% else %}–{% endif %}</dd>
+    <dt>Työt</dt><dd>{% for t in kone.tyot %}{{ t.id }} {{ t.nimi or t.tyyppi }}{% if t.malli %} ({{ t.malli }}){% endif %} · {{ t.tila_teksti }}{% if not loop.last %}<br>{% endif %}{% else %}ei töitä käynnissä{% endfor %}</dd>
+  </dl>
+{% else %}
+  <p class="empty">Koneen mittareita ei ole saatavilla.</p>
+{% endif %}
+</section>
+<section aria-labelledby="h-muut">
+  <h2 id="h-muut" class="label">Muut</h2>
+  <ul class="rows"><li><a href="{{ url('/hub/dokumentit') }}">Dokumentit ja säännöt</a></li><li><a href="{{ gateway('/tyot') }}">Kaikki työt (raaka lista)</a></li><li><a href="{{ gateway('/passkey') }}">Puhelimen passkey</a></li></ul>
+</section>
+{% endblock %}

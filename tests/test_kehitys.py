@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from ilmari_ui.kehitys import (ESIMERKKI, ESIMERKKI_KAYTTOONOTOT, RAJAT, lue_kayttoonotot, lue_kehitystyo,
-                               lue_kehitystyot)
+from ilmari_ui.kehitys import (ESIMERKKI, ESIMERKKI_KAYTTOONOTOT, RAJAT, ilman_aikaleimoja, lue_kayttoonotot,
+                               lue_kehitystyo, lue_kehitystyot, muutosrivi)
+from ilmari_ui.kehitys import testirivi as kaanna_testit   # ei test-alkuista nimeä: pytest keräisi sen
 
 UID = os.getuid()
 OMAT = frozenset({UID})
@@ -44,7 +45,7 @@ def test_tyo_luetaan_ja_vaihe_paatellaan(tmp_path):
     t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
     assert t.meta["toive"] == "Lisää rivi" and t.meta["tulos"]["testit"] == {"paluukoodi": 0, "yhteenveto": "2300 passed"}
     assert t.paatos["teksti"] == "Hyväksytty" and t.yhdistys["commit"] == "d" * 40 and t.kayttoonotto is None
-    assert t.vaihe == ("Yhdistetty mainiin", "success") and t.tekstit == {"muutos.diff": "+rivi\n"} and t.virheet == ()
+    assert t.vaihe == ("Yhdistetty", "success") and t.tekstit == {"muutos.diff": "+rivi\n"} and t.virheet == ()
     tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
     assert [x.tyo for x in tyot] == [41] and tyot[0].tekstit == {}
 
@@ -59,7 +60,7 @@ def test_tyo_luetaan_ja_vaihe_paatellaan(tmp_path):
     ({"paatos": {"paatos": "hyvaksytty", "aika": "x", "kuka": "elias"}}, ("Hyväksytty, odottaa yhdistystä", "accent")),
     ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "p"}, "yhdistys": {"tila": "yhdistetty"}},
      ("Käyttöönotto pyydetty", "accent")),
-    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}}, ("Ristiriita mainin kanssa", "danger")),
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}}, ("Ristiriita päähaaran kanssa", "danger")),
     ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "yhdistetty"}, "kayttoonotto": {"tulos": "asennettu"}},
      ("Otettu käyttöön", "success")),
     ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "yhdistetty"}, "kayttoonotto": {"tulos": "palautettu"}},
@@ -82,7 +83,7 @@ def test_vieraat_kentat_ja_tyypit_siivotaan(tmp_path):
     assert t.meta["tulos"]["paluukoodi"] is None and t.meta["tulos"]["commiteja"] is None
     assert t.meta["tulos"]["testit"] == {"paluukoodi": 0, "yhteenveto": ""} and t.meta["tulos"]["tiedostot"] == []
     assert t.meta["tiedostot"] == ["muutos.diff"] and "ylimaarainen" not in t.meta
-    assert t.paatos is None and t.yhdistys == {"tila": "yhdistetty", "teksti": "Yhdistetty mainiin", "commit": "",
+    assert t.paatos is None and t.yhdistys == {"tila": "yhdistetty", "teksti": "Yhdistetty", "commit": "",
                                                 "viesti": "", "aika": "", "paluukoodi": None, "edellinen": ""}
 
 
@@ -168,8 +169,11 @@ def test_ristiriitainen_historia_ei_nay(tmp_path, muutos):
 
 def test_esimerkkiaineisto_kelpaa():
     tyot = lue_kehitystyot(ESIMERKKI)
-    assert [t.tyo for t in tyot] == [43, 42, 41, 40] and all(t.virheet == () for t in tyot)  # 43: Ilmarin oma (18.11.)
+    assert [t.tyo for t in tyot] == [98, 43, 42, 41, 40] and all(t.virheet == () for t in tyot)  # 43: Ilmarin oma (18.11.)
     assert lue_kehitystyo(ESIMERKKI, 41).vaihe == ("Otettu käyttöön", "success")
+    # Hubin juuri (18.11.): esimerkissä yksi Ilmarin työ odottaa Eliaksen hyväksyntää ("Odottaa sinua")
+    assert [(t.tyo, t.tagi) for t in tyot] == [(98, ("hyväksy", "warn")), (43, ("valmis", "ok")), (42, ("käynnissä", "")),
+                                               (41, ("käytössä", "ok")), (40, ("hylätty", ""))]
     assert lue_kayttoonotot(ESIMERKKI_KAYTTOONOTOT, omistaja=None).tila == "ready"
 
 
@@ -239,7 +243,7 @@ def test_ristiriitaan_jaaneen_tyon_sulku(tmp_path):
     p = {"paatos": "hyvaksytty", "aika": "x", "kuka": "elias", "commit": PAA}
     julkaise(tmp_path, paatos=p, yhdistys={"tila": "ristiriita", "commit": "", "viesti": "ei yhdisty"})
     t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
-    assert t.vaihe == ("Ristiriita mainin kanssa", "danger") and t.toimet["sulje"] is True
+    assert t.vaihe == ("Ristiriita päähaaran kanssa", "danger") and t.toimet["sulje"] is True
     assert t.toimet["hylkaa"] is False and t.toimet["kayttoonotto"] is False
     julkaise(tmp_path / "b", paatos=p, yhdistys={"tila": "ristiriita", "commit": "", "viesti": "ei yhdisty"},
              sulku={"aika": "2026-11-03T00:30:00+00:00", "kuka": "elias", "viesti": "yhdistetty käsin PR #8 <b>\nx"})
@@ -346,3 +350,55 @@ def test_selaus_on_rajattu(tmp_path, monkeypatch):
     monkeypatch.setattr(kehitys, "time", types.SimpleNamespace(monotonic=lambda: oikea() + next(lisa)))
     tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
     assert [t.tyo for t in tyot] == list(range(61, 11, -1)) and all(t.virheet == () for t in tyot)
+
+
+# --- Hub juureksi (18.11.2026): lyhyt tila listan riville ja "Odottaa sinua" --------------------------------------------
+
+@pytest.mark.parametrize("lisat,odotettu", [
+    ({}, ("hyväksy", "warn")),                                                         # valmis haara, ei päätöstä
+    ({"paatos": {"paatos": "hyvaksytty"}}, ("hyväksytty", "")),                        # yhdistys kesken
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "yhdistetty"}}, ("ota käyttöön", "warn")),
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}}, ("sulje käsin", "stop")),
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}, "sulku": {"viesti": "PR #8"}},
+     ("suljettu käsin", "")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"}},
+     ("käyttöönotto kesken", "")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"},
+      "kayttoonotto": {"tulos": "asennettu", "edellinen": "e" * 40}}, ("käytössä", "ok")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"},
+      "kayttoonotto": {"tulos": "testit_epaonnistuivat"}}, ("käyttöönotto epäonnistui", "stop")),
+    ({"paatos": {"paatos": "hylatty"}}, ("hylätty", "")),
+])
+def test_tagi_ja_odottavat(tmp_path, lisat, odotettu):
+    julkaise(tmp_path, **lisat)
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.tagi == odotettu
+    from ilmari_ui.kehitys import ODOTTAVAT
+    assert (t.tagi[0] in ODOTTAVAT) is (odotettu[0] in ("hyväksy", "ota käyttöön", "sulje käsin"))
+
+
+def test_tagi_keskeneraiselle_ja_tyotilalle(tmp_path):
+    julkaise(tmp_path / "a", m=meta(tila="running"))
+    assert lue_kehitystyo(tmp_path / "a", 41, omistajat=OMAT).tagi == ("käynnissä", "")
+    julkaise(tmp_path / "b", m=meta(tila="failed"))
+    assert lue_kehitystyo(tmp_path / "b", 41, omistajat=OMAT).tagi == ("epäonnistui", "stop")
+    # kielletty suunta: Ilmarin työtilan (oma) valmis työ ei odota Eliasta
+    julkaise(tmp_path / "c", m=meta(jattaja="aiops-ceo", lahde="oma"))
+    assert lue_kehitystyo(tmp_path / "c", 41, omistajat=OMAT).tagi == ("valmis", "ok")
+
+
+def test_yhteenvedot_suomeksi():
+    """Gitin ja testiajon englanninkielinen yhteenveto näytetään suomeksi; tuntematon muoto ei keksi lukuja."""
+    assert muutosrivi(" 2 files changed, 18 insertions(+), 1 deletion(-)", []) == "2 tiedostoa, +18 −1"
+    assert muutosrivi(" 1 file changed, 2 insertions(+)", []) == "1 tiedosto, +2 −0"
+    assert muutosrivi("1 file changed, 3 deletions(-)", []) == "1 tiedosto, +0 −3"
+    assert muutosrivi("1 tiedosto, 12 lisäystä", []) == "1 tiedosto, 12 lisäystä"     # muu teksti sellaisenaan
+    assert muutosrivi("", []) == ""
+    diffit = [{"lisatty": 5, "poistettu": 1}, {"lisatty": 0, "poistettu": 2}]
+    assert muutosrivi("9 files changed", diffit) == "2 tiedostoa, +5 −3"               # diffit ovat ensisijaisia
+    assert kaanna_testit("2300 passed, 2 skipped in 88.0s") == "2300 läpi, 2 ohitettu"
+    assert kaanna_testit("1 failed, 2299 passed, 3 errors in 9s") == "1 epäonnistui, 2299 läpi, 3 virhettä"
+    assert kaanna_testit("Tests: 41 passed, 41 total") == "41 läpi"
+    assert kaanna_testit("kaikki hyvin") == "" and kaanna_testit("") == ""
+    assert ilman_aikaleimoja("asennettu dddddddd 2026-10-28T12:45:00+00:00") == "asennettu dddddddd"
+    assert ilman_aikaleimoja("virhe 2026-10-28T12:45:00.123Z: levy täynnä") == "virhe: levy täynnä"

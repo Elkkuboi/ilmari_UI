@@ -1,0 +1,24 @@
+diff --git a/src/kuvareitti.ts b/src/kuvareitti.ts
+index 1111111..2222222 100644
+--- a/src/kuvareitti.ts
++++ b/src/kuvareitti.ts
+@@ -12,7 +12,9 @@ export async function lataaKuva(tiedosto: File) {
+   const muoto = tunnistaMuoto(tiedosto);
+-  if (!muoto) throw new Error("Tuntematon kuva");
++  if (!muoto) throw new Error("Tuntematon kuvamuoto");
++  if (tiedosto.size > KUVA_MAX_TAVUA)
++    throw new Error(`Kuva on liian suuri (enintään ${KUVA_MAX_MT} Mt).`);
+   return lahetaKuva(tiedosto, muoto);
+ }
+diff --git a/src/kuvareitti.test.ts b/src/kuvareitti.test.ts
+index 3333333..4444444 100644
+--- a/src/kuvareitti.test.ts
++++ b/src/kuvareitti.test.ts
+@@ -30,3 +30,10 @@ describe("lataaKuva", () => {
+   it("hylkää tuntemattoman muodon", async () => {
+     await expect(lataaKuva(teksti())).rejects.toThrow("Tuntematon kuvamuoto");
+   });
++  it("hylkää liian suuren kuvan", async () => {
++    await expect(lataaKuva(kuva(KUVA_MAX_TAVUA + 1))).rejects.toThrow("liian suuri");
++  });
+ });

@@ -47,7 +47,7 @@ def test_vanha_julkaisu_ja_puuttuvat_osat(tmp_path):
     assert j.gpu["kayttoaste"] is None and j.gpu["vram_prosentti"] == 50 and j.gpu["nimi"] == "<script>alert(1)</script>"
     assert j.tyot == ({"id": 9, "tyyppi": "", "nimi": "x", "malli": "", "tila": "running", "tila_teksti": "käynnissä",
                        "jattaja": "", "luotu": ""},)
-    r = asiakas().get("/hub/jarjestelma?demo=1")
+    r = asiakas().get("/hub/asetukset?demo=1")
     assert "&lt;script&gt;" not in r.text or "<script>alert" not in r.text
 
 
@@ -63,25 +63,31 @@ def test_vaara_muoto_puuttuva_ja_omistaja(tmp_path):
     (juuri / "tila.json").write_text((jarjestelma.ESIMERKKI / "tila.json").read_text())
     assert jarjestelma.lue_jarjestelma(juuri, now=NYT).tila == "ready"
     j = jarjestelma.lue_jarjestelma(juuri, omistajat=frozenset({os.getuid() + 1}), now=NYT)
-    assert j.tila == "error" and "dispatcher" in (j.viesti or "")
+    assert j.tila == "error" and "omistaja" in (j.viesti or "")
     assert jarjestelma.lue_jarjestelma(juuri, omistajat=frozenset({os.getuid()}), now=NYT).tila == "ready"
     assert 0 in jarjestelma.sallitut_omistajat()
 
 
-def test_sivu_esimerkkitilassa_ja_ilman_lahdetta():
+def test_kone_asetuksissa_esimerkkitilassa_ja_ilman_lahdetta():
+    """Hub juureksi (18.11.2026): koneen mittarit ovat Asetukset-sivun osio Kone (#kone); vanha osoite ohjautuu sinne."""
+    from bs4 import BeautifulSoup
     c = asiakas()
-    r = c.get("/hub/jarjestelma?demo=1")
-    assert r.status_code == 200 and "Kone nyt." in r.text and "Mitattu" in r.text
-    assert "38 <span>%</span>" in r.text and "59.3 <span>/ 65.5 Gt</span>" in r.text and "31.2 <span>/ 31.8 Gt</span>" in r.text
-    assert "Käyttöaste 99 %" in r.text and "58 °C" in r.text and "2 <span>kpl</span>" in r.text
-    assert "52 ilmari-malli (flashnext-iq3s) · käynnissä" in r.text and "Päivitetty 20 s sitten" in r.text
-    assert "Yhdistetty" in r.text and "<script" not in r.text
-    r = c.get("/hub/jarjestelma")
-    assert r.status_code == 200 and "Todennettu tila ensin." in r.text and "Ei mittauslähdettä" in r.text
-    assert "lähde puuttuu" in r.text and "Ei yhdistetty" in r.text
+    r = c.get("/hub/asetukset?demo=1")
+    kone = BeautifulSoup(r.text, "html.parser").find("section", id="kone")
+    teksti = " ".join(kone.get_text(" ").split())
+    assert r.status_code == 200 and "päivitetty 20 s sitten" in teksti
+    assert "CPU 38 % · kuorma 10.85 4.16 3.13 · 32 ydintä" in teksti and "RAM 59.3 / 65.5 Gt" in teksti
+    assert "GPU 31.2 / 31.8 Gt · 99 % · 58 °C · NVIDIA GeForce RTX 5090" in teksti
+    assert "52 ilmari-malli (flashnext-iq3s) · käynnissä" in teksti and kone.find("dl", class_="kv")
+    r = c.get("/hub/asetukset")
+    kone = BeautifulSoup(r.text, "html.parser").find("section", id="kone")
+    assert "Koneen mittareita ei ole saatavilla." in kone.get_text() and not kone.find("dl")
+    r = c.get("/hub/jarjestelma?demo=1", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset?demo=1#kone"
 
 
-def test_yksikko_liittaa_mittarihakemiston():
+def test_yksikko_liittaa_mittarihakemiston(oletuspolut):
     yksikko = (JUURI / "config" / "systemd" / "ilmari-hub.service").read_text(encoding="utf-8")
     assert "BindReadOnlyPaths=-/srv/aiops/ilmari/jarjestelma" in yksikko
-    assert jarjestelma.OLETUS == Path("/srv/aiops/ilmari/jarjestelma") and jarjestelma.DISPATCHER_KAYTTAJA == "aiops-run"
+    assert oletuspolut["jarjestelma.OLETUS"] == Path("/srv/aiops/ilmari/jarjestelma")
+    assert jarjestelma.DISPATCHER_KAYTTAJA == "aiops-run"

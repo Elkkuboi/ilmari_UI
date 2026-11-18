@@ -269,59 +269,78 @@ def test_tilarivi():
     assert toiminta.tilarivi(toiminta.Toiminta("ready", tilanne=None), NYT)["teksti"] == "Tila ei tiedossa"
     perus = {"seis": False, "seis_aika": None, "seis_kuka": None, "vuoro": None}
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne=perus), NYT)
-    assert (rivi["teksti"], rivi["savy"], rivi["seis"]) == ("Käynnissä", "success", False)
+    assert (rivi["teksti"], rivi["savy"], rivi["seis"], rivi["kaynnissa"]) == ("Vapaa", "success", False, False)
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne={**perus, "seis": True, "seis_aika": "2026-11-18T22:15:00+00:00",
                                                                   "seis_kuka": "elias"}), NYT)
     assert (rivi["teksti"], rivi["savy"], rivi["seis"]) == ("Seis", "danger", True) and "klo 00.15 (elias)" in rivi["selitys"]
     vuoro = {"laji": "yoajo", "nimi": "Yöajo", "saie": 12, "istunto": 3, "alkoi": "2026-11-19T02:00:00+02:00",
              "paattyy": "2026-11-19T04:55:00+02:00"}
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne={**perus, "vuoro": vuoro}), NYT)
-    assert rivi["teksti"] == "Yöajo käynnissä klo 04.55 asti" and rivi["seis"] is False
+    assert rivi["teksti"] == "Yöajo klo 04.55 asti" and rivi["seis"] is False and rivi["kaynnissa"] is True
+    assert rivi["selitys"] == "Ilmari tekee yön työt säikeeseen 12."
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne={**perus, "vuoro": vuoro}), datetime(2026, 11, 19, 3, 0, tzinfo=UTC))
-    assert rivi["teksti"] == "Yöajon aika ylittyi" and rivi["savy"] == "warning"
+    assert rivi["teksti"] == "Yöajon aika ylittyi" and rivi["savy"] == "warning" and rivi["kaynnissa"] is True
+    # käyttöliittymän teksteissä ei jargonia (Hub juureksi 18.11.2026)
+    for tilanne in (perus, {**perus, "seis": True}, {**perus, "vuoro": vuoro}):
+        r = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne=tilanne), NYT)
+        assert not any(sana in (r["teksti"] + r["selitys"]).lower() for sana in ("gateway", "julkais", "dsh", "kontti"))
+    assert "gateway" not in toiminta.tilarivi(toiminta.Toiminta("error", "x"), NYT)["selitys"].lower()
 
 
-# --- Sivu -------------------------------------------------------------------------------------------------------------
+# --- Sivut: Nyt (/hub, juuri) ja Asetukset (Hub juureksi 18.11.2026) -------------------------------------------------
 
 def asiakas() -> TestClient:
     return TestClient(create_app(Settings(demo_enabled=True)), base_url="http://ilmari.local", client=None)
 
 
-def test_sivu_esimerkkitilassa_ilman_lomakkeita():
-    r = asiakas().get("/hub/ilmari?demo=1")
-    assert r.status_code == 200 and "Ilmari nyt." in r.text and "Esimerkkitila" in r.text
-    assert "Työvuoro käynnissä klo 17.05 asti" in r.text and "työvuoron työt säikeeseen 13" in r.text
-    assert "Rajatesti" in r.text and "Läpi" in r.text and "/ilmari/vuoro" not in r.text
-    assert 'action="' not in r.text and "Refresh" not in r.headers
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text and "<script>alert" not in r.text
-    assert "&lt;b&gt;ei html&lt;/b&gt;" in r.text and "<b>ei html" not in r.text
-    assert r.text.index("Loin tehtavat.md") < r.text.index("Lisää kuvareitille")  # uusin ensin
-    assert "Peruminen:" in r.text and "Ravintopolun kuvareitti valmiiksi" in r.text
-    # Pala 1b: yön raportti Tila-paneelin jälkeen, koodattuna; rajatestin työ ei ole linkki (työtä ei julkaista)
-    sivu = BeautifulSoup(r.text, "html.parser")
-    raportti = sivu.find("section", attrs={"aria-labelledby": "ilmari-raportti"})
-    assert raportti is not None and "Viimeisin raportti" in raportti.h2.get_text()
-    assert r.text.index('id="ilmari-tila"') < r.text.index('id="ilmari-raportti"') < r.text.index('id="ilmari-yoajo"')
-    teksti = raportti.find("div", class_="safe-text")
-    assert teksti.get_text().startswith("Aamuraportti 19.11.\n\nTehty\n") and not teksti.find_all(True)
-    assert "&lt;script&gt;alert(1)&lt;/script&gt; näkyy tekstinä" in r.text and "Yöajo · " in raportti.get_text()
-    assert "Koko keskustelu: Keskustelu → kansio Yöajot" in " ".join(raportti.get_text().split())
-    assert 'href="/hub/kehita/43?' in r.text and 'href="/hub/kehita/101' not in r.text and "työ 101" in r.text
-
-
-def test_sivu_ilman_lahdetta():
-    r = asiakas().get("/hub/ilmari")
-    assert r.status_code == 200 and "lähdettä ei ole määritetty" in r.text and "<form" not in r.text
-
-
-def test_ilmari_nyt_on_valikossa_ja_puhelimen_alapalkissa():
+def test_nyt_esimerkkitilassa_ilman_lomakkeita():
     r = asiakas().get("/hub?demo=1")
-    alapalkki = r.text.split('class="bottom-nav"')[1].split("</nav>")[0]
-    assert 'href="/hub/ilmari' in alapalkki and "Ilmari nyt" in alapalkki and 'href="/hub/kehita' in alapalkki
-    assert 'aria-current="page"' in asiakas().get("/hub/ilmari?demo=1").text.split('class="bottom-nav"')[1]
+    sivu = BeautifulSoup(r.text, "html.parser")
+    teksti = " ".join(sivu.get_text(" ").split())
+    assert r.status_code == 200 and "Esimerkkitila" in r.text and "<form" not in r.text and 'action="' not in r.text
+    tila = sivu.find("p", class_="state-word")
+    assert " ".join(tila.get_text().split()) == "Työvuoro klo 17.05 asti" and tila.find("span", class_="dot dot--live")
+    assert "Ilmari tekee työvuoron työt säikeeseen 13. Malli on käynnissä, ei työtä kesken." in teksti
+    assert r.headers.get("Refresh") == "30"                      # vuoro käynnissä: sivu päivittyy itsestään
+    assert [b.get_text() for b in sivu.select(".state .actions button")] == ["Seis"]   # vuoron aikana ei Töihin nyt
+    # odottaa sinua: esimerkin työ 98 odottaa hyväksyntää
+    odottaa = sivu.find("section", attrs={"aria-labelledby": "h-odottaa"})
+    assert [a["href"] for a in odottaa.select("a.row")] == ["/hub/kehita/98?demo=1"] and "hyväksy" in odottaa.get_text()
+    # raportti tekstinä, nimi ja aika otsikon reunassa
+    raportti = sivu.find("section", attrs={"aria-labelledby": "h-raportti"})
+    assert raportti.find("span", class_="aside").get_text() == "Yöajo 19.11. klo 04.40"
+    laatikko = raportti.find("div", class_="sheet pre")
+    assert laatikko.get_text().startswith("Aamuraportti 19.11.\n\nTehty\n") and not laatikko.find_all(True)
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; näkyy tekstinä" in r.text and "<script>alert" not in r.text
+    # teot: uusin ensin, jokainen avattava rivi; työlinkki vain julkaistuille töille
+    teot = sivu.find("section", attrs={"aria-labelledby": "h-teot"})
+    rivit = teot.select("ol.rows.log > li > details")
+    assert len(rivit) == 9 and not teot.find("details", class_="fold")
+    assert "Työvuoro alkoi" in rivit[0].summary.get_text() and rivit[0].find("time").get_text() == "15.40"
+    assert 'href="/hub/kehita/43?demo=1"' in r.text and 'href="/hub/kehita/101' not in r.text and "työ 101" in r.text
+    assert "Peruminen:" in r.text and "kone" in teot.get_text() and "gateway" not in teot.find("span", class_="who").get_text()
+    # muualle: esimerkkitilassa linkit eivät vie mihinkään
+    muualle = sivu.find("section", attrs={"aria-labelledby": "h-muualle"})
+    assert [(a.get_text(), a["href"]) for a in muualle.find_all("a")] == [("Ravintopolku ↗", "#"), ("Hahmo ↗", "#")]
+    assert r.text.index('id="h-tila"') < r.text.index('id="h-odottaa"') < r.text.index('id="h-raportti"') \
+        < r.text.index('id="h-teot"') < r.text.index('id="h-muualle"')
 
 
-def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None = None, polku: str = "/ilmari"):
+def test_nyt_ilman_lahdetta():
+    r = asiakas().get("/hub")
+    assert r.status_code == 200 and "Ilmarin tila ei ole saatavilla" in r.text and "<form" not in r.text
+    assert "Odottaa sinua" not in r.text and "Muualle" not in r.text and "Refresh" not in r.headers
+
+
+def test_vanha_ilmari_nyt_ohjautuu_juureen_kysely_mukana():
+    c = asiakas()
+    for vanha, uusi in (("/hub/ilmari", "/hub"), ("/hub/ilmari?toihin=rajatesti", "/hub?toihin=rajatesti"),
+                        ("/hub/ilmari?demo=1", "/hub?demo=1")):
+        r = c.get(vanha, follow_redirects=False)
+        assert r.status_code == 307 and r.headers["location"] == uusi
+
+
+def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None = None, polku: str = "/"):
     """Tuotantotila (Serve, identiteetti) testijulkaisulla: toiminta ja keskustelu tmp-hakemistoista."""
     monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: OMAT)
     monkeypatch.setattr(toiminta, "OLETUS", toiminta_hak)
@@ -331,11 +350,10 @@ def tuotanto(tmp_path, monkeypatch, toiminta_hak: Path, keskustelu: dict | None 
         (k / "viestit.json").write_text(json.dumps({"muoto": "aiops-keskustelu-v1", "paivitetty": "2026-11-19T01:00:00+00:00",
                                                     "viimeisin": 0, "malli": keskustelu, "viestit": []}))
     monkeypatch.setattr("ilmari_ui.keskustelu.OLETUS", k)
-    root = tmp_path / "ajot"
-    root.mkdir(exist_ok=True)
-    config = parse_config({"hub": {"rp_id": RP, "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
-    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
-                    client=None) as client:
+    if not Path(kehitys.OLETUS).exists():
+        Path(kehitys.OLETUS).mkdir(parents=True)   # töiden hakemisto on olemassa (tyhjä), ellei testi aseta omaa
+    config = parse_config({"hub": {"rp_id": RP, "julkaisut": str(tmp_path / "ajot"), "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
         return client.get(polku, headers=SERVE)
 
 
@@ -350,34 +368,169 @@ def lomakkeet(r) -> dict[str, dict[str, str]]:
     return tulos
 
 
-def test_tuotannossa_lomakkeet_gatewaylle(tmp_path, monkeypatch):
+def test_tuotannossa_nyt_lomakkeet_gatewaylle(tmp_path, monkeypatch):
+    """Nyt-sivulla vain tilan ohjaus: Töihin nyt ja Seis (Jatka vain Seis-tilassa). Muut lomakkeet ovat Asetuksissa."""
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "toiminta"))
     assert r.status_code == 200 and "Refresh" not in r.headers and "form-action 'self'" in r.headers["content-security-policy"]
     f = lomakkeet(r)
-    assert set(f) == {"/ilmari/seis", "/ilmari/asetukset", "/ilmari/tavoitteet", "/ilmari/ohje/3/poista",
-                      "/ilmari/ohje/9/poista", "/ilmari/rajatesti", "/ilmari/vuoro"}  # ei Jatkaa, kun ei seis-tilassa
-    assert all(kentat["paluu"] == "hub" for kentat in f.values()) and f["/ilmari/vuoro"] == {"paluu": "hub"}
-    assert f["/ilmari/asetukset"] == {"yoajo_paalla": "1", "yoajo_kello": "03:30", "paluu": "hub"}
-    assert f["/ilmari/tavoitteet"]["rivit"] == "Kuvareitti valmiiksi\nAamuraportti <i>7</i>"
+    assert f == {"/ilmari/vuoro": {"paluu": "hub"}, "/ilmari/seis": {"paluu": "hub"}}
     sivu = BeautifulSoup(r.text, "html.parser")
-    assert not sivu.find("input", attrs={"name": "yoajo_paalla"}).has_attr("checked")  # yöajo pois päältä
-    assert not sivu.find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
-    assert "Ei läpi" in r.text and "&lt;b&gt;auki&lt;/b&gt;" in r.text and "Käynnissä" in r.text
-    assert not sivu.find_all("script") and "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
+    assert [b.get_text() for b in sivu.select(".state .actions button")] == ["Töihin nyt", "Seis"]
+    assert "btn--primary" in sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button["class"]
+    assert "btn--stop" in sivu.find("form", action=f"https://{RP}/ilmari/seis").button["class"]
+    tila = " ".join(sivu.find("div", class_="state").get_text(" ").split())
+    assert tila.startswith("Vapaa") and "Yöajo pois päältä." in tila and sivu.find("span", class_="dot dot--ok")
+    # odottaa sinua: epäonnistunut rajatesti vie Asetuksiin
+    odottaa = sivu.find("section", attrs={"aria-labelledby": "h-odottaa"})
+    assert [a["href"] for a in odottaa.select("a.row")] == ["/hub/asetukset#rajatesti"]
+    assert "Rajatesti ei mennyt läpi" in odottaa.get_text() and "1 kohta ei läpi" in odottaa.get_text()
+    assert not sivu.find_all("script") and "&lt;b&gt;x&lt;/b&gt;" in r.text
+    # Muualle: Ravintopolku ja Hahmo omissa porteissaan samalla nimellä
+    muualle = sivu.find("section", attrs={"aria-labelledby": "h-muualle"})
+    assert [a["href"] for a in muualle.find_all("a")] == [f"https://{RP}:8443/", f"https://{RP}:8444/"]
 
 
 def test_tuotannossa_seis_jatka_ja_tuntematon_tila(tmp_path, monkeypatch):
     seis = {**TILA, "seis": True, "seis_aika": "2026-11-19T01:00:00+00:00", "seis_kuka": "elias"}
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a", tila=seis), keskustelu={"dsh_tyo": 44, "tila": "running"})
     f = lomakkeet(r)
-    assert "/ilmari/jatka" in f and "/ilmari/seis" not in f and "Pysäytetty klo 03.00 (elias)" in r.text
-    assert BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
-    assert "dsh-työ 44" in r.text
-    # julkaisematon tai rikkinäinen tila: Seis ja Jatka molemmat tarjolla, gateway päättää
+    assert set(f) == {"/ilmari/jatka"} and "Pysäytetty klo 03.00 (elias)" in r.text
+    assert "btn--primary" in BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/jatka").button["class"]
+    assert BeautifulSoup(r.text, "html.parser").find("span", class_="dot dot--stop")
+    # julkaisematon tai rikkinäinen tila: Seis ja Jatka molemmat tarjolla, gateway päättää; virhe odottaa Eliasta
     for hak in (tmp_path / "ei", julkaise(tmp_path / "b", tila=b"{rikki")):
         r = tuotanto(tmp_path, monkeypatch, hak)
         f = lomakkeet(r)
-        assert {"/ilmari/seis", "/ilmari/jatka"} <= set(f) and "Tila ei tiedossa" in r.text
+        assert set(f) == {"/ilmari/seis", "/ilmari/jatka"} and "Tila ei tiedossa" in r.text
+        odottaa = BeautifulSoup(r.text, "html.parser").find("section", attrs={"aria-labelledby": "h-odottaa"})
+        assert odottaa is not None and ("Ilmarin tilaa ei voi lukea" in odottaa.get_text()
+                                        or "Osaa tilasta ei voi lukea" in odottaa.get_text())
+
+
+def test_tuotannossa_odottaa_sinua_vain_tarvittaessa_ja_enintaan_viisi(tmp_path, monkeypatch):
+    """Sallittu: hyväksyttävä työ näkyy (linkki työn sivulle). Kielletty: kun mitään ei odota, osiota ei ole; yli viisi
+    riviä katkaistaan."""
+    kunnossa = {**TILA, "rajatesti": {**TILA["rajatesti"], "lapi": True, "kohdat": []}}
+    (tmp_path / "x").mkdir()
+    r = tuotanto(tmp_path / "x", monkeypatch, julkaise(tmp_path / "ok", tila=kunnossa))
+    assert "Odottaa sinua" not in r.text
+    juuri = tmp_path / "kehitys"
+    for tyo in range(1, 8):
+        (juuri / str(tyo)).mkdir(parents=True)
+        (juuri / str(tyo) / "meta.json").write_text(json.dumps({
+            "tyo": tyo, "toive": f"Toive {tyo}\nlisää", "luotu": "2026-11-18T12:00:00+00:00", "jattaja": "elias",
+            "lahde": "aiops", "tila": "succeeded", "tiedostot": [],
+            "tulos": {"paluukoodi": 0, "haara": f"ilmari/{tyo}", "commiteja": 1, "testit": {"paluukoodi": 0}}}))
+    (juuri / "8").mkdir()
+    (juuri / "8" / "meta.json").write_text(json.dumps({"tyo": 8, "toive": "Kesken", "tila": "running", "tiedostot": []}))
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    (tmp_path / "y").mkdir()
+    r = tuotanto(tmp_path / "y", monkeypatch, julkaise(tmp_path / "ok2", tila=kunnossa))
+    odottaa = BeautifulSoup(r.text, "html.parser").find("section", attrs={"aria-labelledby": "h-odottaa"})
+    assert [a["href"] for a in odottaa.select("a.row")] == [f"/hub/kehita/{n}" for n in (7, 6, 5, 4, 3)]
+    assert "Toive 7" in odottaa.get_text() and "lisää" not in odottaa.get_text() and "Sinun toiveesi" in odottaa.get_text()
+    assert "Kesken" not in odottaa.get_text() and r.headers.get("Refresh") == "30"   # työ 8 käynnissä: päivittyy
+
+
+def test_tuotannossa_asetukset_lomakkeet_gatewaylle(tmp_path, monkeypatch):
+    """Yöajo, tavoitteet, pysyvät ohjeet ja rajatesti Asetuksissa samoilla lomakkeilla ja kentillä kuin ennen."""
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "toiminta"), polku="/asetukset")
+    assert r.status_code == 200 and "Refresh" not in r.headers   # ei automaattista päivitystä: tyhjentäisi lomakkeet
+    f = lomakkeet(r)
+    assert set(f) == {"/ilmari/asetukset", "/ilmari/tavoitteet", "/ilmari/ohje/3/poista", "/ilmari/ohje/9/poista",
+                      "/ilmari/rajatesti"}
+    assert all(kentat["paluu"] == "hub" for kentat in f.values())
+    assert f["/ilmari/asetukset"] == {"yoajo_paalla": "1", "yoajo_kello": "03:30", "paluu": "hub"}
+    assert f["/ilmari/tavoitteet"]["rivit"] == "Kuvareitti valmiiksi\nAamuraportti <i>7</i>"
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert not sivu.find("input", attrs={"name": "yoajo_paalla"}).has_attr("checked")  # yöajo pois päältä
+    assert not sivu.find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
+    assert [s["id"] for s in sivu.find_all("section", id=True)] == ["yoajo", "tavoitteet", "ohjeet", "aivot",
+                                                                      "rajatesti", "kone"]
+    raja = sivu.find("section", id="rajatesti")
+    assert "ei läpi" in raja.get_text() and "&lt;b&gt;auki&lt;/b&gt;" in r.text
+    assert raja.find("details", class_="fold").summary.get_text() == "Kaikki kohdat (2)"
+    assert not sivu.find_all("script") and "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
+    muut = {a.get_text(): a["href"] for a in sivu.find("section", attrs={"aria-labelledby": "h-muut"}).find_all("a")}
+    assert muut == {"Dokumentit ja säännöt": "/hub/dokumentit", "Kaikki työt (raaka lista)": f"https://{RP}/tyot",
+                    "Puhelimen passkey": f"https://{RP}/passkey"}
+
+
+@pytest.mark.parametrize("hakemisto", ["ei", "suhteellinen"])
+def test_tuotannossa_asetukset_lukuvirheessa_ilman_lomakkeita(tmp_path, monkeypatch, hakemisto):
+    """Kielletty suunta: kun Ilmarin tilaa ei voi lukea (puuttuu, väärä omistaja, aikaraja), Asetuksissa ei ole yöajon,
+    tavoitteiden, ohjeiden eikä rajatestin lomaketta: oletusarvoinen lomake (yöajo päällä 02.00, tyhjät tavoitteet)
+    korvaisi tallennettaessa oikeat asetukset. Seis ja Jatka toimivat yhä Nyt-sivulla. (Sallittu suunta:
+    test_tuotannossa_asetukset_lomakkeet_gatewaylle.)"""
+    hak = tmp_path / "ei" if hakemisto == "ei" else Path("suhteellinen/polku")
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/asetukset")
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert r.status_code == 200 and lomakkeet(r) == {} and not sivu.find("textarea") and not sivu.find("input")
+    assert [s["id"] for s in sivu.find_all("section", id=True)] == ["yoajo", "tavoitteet", "ohjeet", "aivot",
+                                                                      "rajatesti", "kone"]
+    tyhjat = {s["id"]: [p.get_text() for p in s.select("p.empty")] for s in sivu.find_all("section", id=True)}
+    assert tyhjat["tavoitteet"] == ["Tavoitteita ei voi lukea."] and tyhjat["ohjeet"] == ["Ohjeita ei voi lukea."]
+    assert len(tyhjat["yoajo"]) == 1 and tyhjat["rajatesti"] == ["Rajatestin tulosta ei voi lukea."]
+    assert "Ei pysyviä ohjeita." not in r.text and "Aja rajatesti nyt" not in r.text
+    nyt = tuotanto(tmp_path, monkeypatch, hak)
+    assert set(lomakkeet(nyt)) == {"/ilmari/seis", "/ilmari/jatka"}
+
+
+def test_tuotannossa_odottaa_sinua_kertoo_jos_toita_ei_voi_lukea(tmp_path, monkeypatch):
+    """Sallittu: luettava (tyhjä) työhakemisto ei lisää riviä. Kielletty: lukematon työhakemisto ei jää hiljaa
+    pois, vaan Odottaa sinua kertoo siitä ja vie Työt-sivulle."""
+    kunnossa = {**TILA, "rajatesti": {**TILA["rajatesti"], "lapi": True, "kohdat": []}}
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a", tila=kunnossa))
+    assert "Odottaa sinua" not in r.text
+    tiedosto = tmp_path / "ei-hakemisto"
+    tiedosto.write_text("x")
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", tiedosto)
+    (tmp_path / "b").mkdir()
+    r = tuotanto(tmp_path / "b", monkeypatch, julkaise(tmp_path / "a2", tila=kunnossa))
+    odottaa = BeautifulSoup(r.text, "html.parser").find("section", attrs={"aria-labelledby": "h-odottaa"})
+    assert [(a["href"], " ".join(a.get_text(" ").split())) for a in odottaa.select("a.row")] == \
+        [("/hub/kehita", "! Töitä ei voi lukea päivitä")]
+
+
+def test_tuotannossa_tila_kertoo_kesken_olevan_tyon(tmp_path, monkeypatch):
+    """Vapaa-tilassa käynnissä oleva työ näkyy pääsanana linkkinä ja vilkkuvana pisteenä, ei vihreänä "Vapaa"."""
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"), keskustelu={"dsh_tyo": 44, "tila": "running"})
+    sivu = BeautifulSoup(r.text, "html.parser")
+    tila = sivu.find("p", class_="state-word")
+    assert " ".join(tila.get_text().split()) == "Työ 44 kesken" and tila.a["href"] == "/hub/kehita/44"
+    assert tila.find("span", class_="dot dot--live") and not sivu.find("span", class_="dot--ok")
+    assert " ".join(sivu.find("p", class_="state-text").get_text().split()) == "Malli on käynnissä. Yöajo pois päältä."
+    (tmp_path / "x").mkdir()
+    r = tuotanto(tmp_path / "x", monkeypatch, julkaise(tmp_path / "b"), keskustelu={"tila": "running"})
+    tila = BeautifulSoup(r.text, "html.parser").find("p", class_="state-word")
+    assert tila.get_text(strip=True) == "Vapaa" and tila.find("span", class_="dot dot--ok")
+
+
+def test_teot_ilman_raakoja_tunnisteita_ja_paiva_vaihtuu():
+    """Avatussa tekorivissä ei koodin tunnistetta (tyovuoro alkoi, yoajo paattyi); puhelimella päivä näkyy, kun se
+    vaihtuu (rivin p.day, piilossa leveällä näytöllä, jossa päivä on joka rivillä)."""
+    sivu = BeautifulSoup(asiakas().get("/hub?demo=1").text, "html.parser")
+    lisat = " ".join(d.get_text(" ") for d in sivu.select(".log .more"))
+    for raaka in ("tyovuoro", "yoajo", "tyo alkoi", "kirjaus", "_"):
+        assert raaka not in lisat
+    assert [p.get_text() for p in sivu.select(".log p.day")] == ["19.11.", "18.11."]
+
+
+def test_tuotannossa_rajatesti_pois_kaytosta_kun_tyo_kesken(tmp_path, monkeypatch):
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"), keskustelu={"dsh_tyo": 44, "tila": "running"},
+                 polku="/asetukset")
+    assert BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
+    assert "Rajatestin voi ajaa, kun työ 44 on valmis." in r.text
+
+
+def test_asetukset_esimerkkitilassa_ja_ilman_lahdetta():
+    r = asiakas().get("/hub/asetukset?demo=1")
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert r.status_code == 200 and "<form" not in r.text and "Refresh" not in r.headers
+    assert sivu.find("textarea", attrs={"name": "rivit"}).get_text().startswith("Ravintopolun kuvareitti valmiiksi")
+    assert "&lt;b&gt;ei html&lt;/b&gt;" in r.text and "Poista ohje, jota et tunnista." not in r.text   # ei selityksiä
+    r = asiakas().get("/hub/asetukset")
+    assert r.status_code == 200 and "Asetukset eivät ole saatavilla" in r.text and 'id="tavoitteet"' not in r.text
 
 
 # --- Pala 1b (18.11.2026): työvuoro, Töihin nyt, viimeisin raportti ja tekolokin työlinkit ---------------------------
@@ -455,11 +608,11 @@ def test_raportti_linkkina_ei_kelpaa(tmp_path):
 def test_tilarivi_tyovuoro_ja_toihin_nyt():
     perus = {"seis": False, "seis_aika": None, "seis_kuka": None, "vuoro": None, "vuoro_virhe": False}
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne=perus), NYT)
-    assert rivi["toihin"] is True and rivi["teksti"] == "Käynnissä"   # sallittu: ei seis, ei vuoroa
+    assert rivi["toihin"] is True and rivi["teksti"] == "Vapaa"   # sallittu: ei seis, ei vuoroa
     vuoro = {"laji": "tyovuoro", "nimi": "Työvuoro", "saie": 14, "istunto": 5, "alkoi": "2026-11-19T02:40:00+02:00",
              "paattyy": "2026-11-19T04:05:00+02:00"}
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne={**perus, "vuoro": vuoro}), NYT)
-    assert rivi["teksti"] == "Työvuoro käynnissä klo 04.05 asti" and "työvuoron työt säikeeseen 14" in rivi["selitys"]
+    assert rivi["teksti"] == "Työvuoro klo 04.05 asti" and "työvuoron työt säikeeseen 14" in rivi["selitys"]
     assert rivi["toihin"] is False and rivi["seis"] is False
     rivi = toiminta.tilarivi(toiminta.Toiminta("ready", tilanne={**perus, "vuoro": vuoro}), datetime(2026, 11, 19, 2, 6, tzinfo=UTC))
     assert rivi["teksti"] == "Työvuoron aika ylittyi" and rivi["toihin"] is False
@@ -497,13 +650,12 @@ def test_tekolokin_tyolinkki_vain_tyoriveille(tmp_path, monkeypatch):
 
 
 def test_tuotannossa_toihin_nyt(tmp_path, monkeypatch):
-    """Sallittu: lomake gatewaylle (paluu=hub), kun Ilmari ei ole seis-tilassa eikä vuoroa ole. dsh-työ tai vanha yöajo
-    näyttää napin harmaana syyn kanssa (gateway kieltäytyy joka tapauksessa)."""
+    """Sallittu: lomake gatewaylle (paluu=hub), kun Ilmari ei ole seis-tilassa eikä vuoroa ole. Käynnissä oleva työ tai
+    yöajo näyttää napin harmaana ja yhden rivin syyn (gateway kieltäytyy joka tapauksessa)."""
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"))
     nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button
-    assert "Töihin nyt" in nappi.get_text() and not nappi.has_attr("disabled")
-    assert "Ilmari tekee saman kierroksen kuin yöllä (rästit, itsearviointi, tutkimus, raportti), enintään 90 min." in r.text
-    for n, (malli, syy) in enumerate((({"dsh_tyo": 44, "tila": "running"}, "Töihin nyt toimii, kun dsh-työ 44 on valmis."),
+    assert "Töihin nyt" in nappi.get_text() and not nappi.has_attr("disabled") and "Töihin nyt toimii" not in r.text
+    for n, (malli, syy) in enumerate((({"dsh_tyo": 44, "tila": "running"}, "Töihin nyt toimii, kun työ 44 on valmis."),
                                       ({"yoajo": True, "tila": "running"}, "Töihin nyt toimii, kun yöajo on päättynyt."))):
         (tmp_path / str(n)).mkdir()
         r = tuotanto(tmp_path / str(n), monkeypatch, julkaise(tmp_path / "a"), keskustelu=malli)
@@ -512,35 +664,45 @@ def test_tuotannossa_toihin_nyt(tmp_path, monkeypatch):
 
 
 def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
-    """Gateway palaa osoitteeseen ?toihin=rajatesti, kun Töihin nyt ajaa ensin rajatestin: sivu kertoo, että vuoro
-    alkaa itsestään. Käynnissä oleva rajatesti (tekolokin uusin gatewayn rajatesti-rivi) näkyy ilman linkkiä, koska
-    sitä ei julkaista Kehitä-sivulle, eikä sivu käske odottamaan dsh-työtä. Kielletty: kehitystyö saa linkin ja
-    entisen syyn, eikä ilmoitusta näytetä ilman paluuparametria."""
+    """Gateway palaa osoitteeseen ?toihin=rajatesti (vanha /hub/ilmari ohjautuu juureen kysely mukana), kun Töihin nyt
+    ajaa ensin rajatestin: sivu kertoo yhdellä rivillä, että vuoro alkaa itsestään. Käynnissä oleva rajatesti (tekolokin
+    uusin gatewayn rajatesti-rivi) näkyy ilman linkkiä, koska sitä ei julkaista Työt-sivulle. Kielletty: kehitystyö saa
+    linkin ja oman syyn, eikä ilmoitusta näytetä ilman paluuparametria."""
     teot = rivit(teko(1, laji="rajatesti", tyo=57, miksi="työvuoron rajatesti: Elias painoi Töihin nyt (elias@github)"))
-    for n, (dsh, polku) in enumerate(((57, "/ilmari?toihin=rajatesti"), (57, "/ilmari"), (58, "/ilmari"))):
+    for n, (dsh, polku) in enumerate(((57, "/?toihin=rajatesti"), (57, "/"), (58, "/"))):
         (tmp_path / str(n)).mkdir()
         r = tuotanto(tmp_path / str(n), monkeypatch, julkaise(tmp_path / f"a{n}", teot=teot),
                      keskustelu={"dsh_tyo": dsh, "tila": "running"}, polku=polku)
         sivu = BeautifulSoup(r.text, "html.parser")
         teksti = " ".join(sivu.get_text().split())
         linkit = {a["href"].split("?")[0] for a in sivu.find_all("a", href=True) if "/kehita/" in a["href"]}
-        assert ("Töihin nyt vastaanotettu: rajatesti ajetaan ensin" in teksti) is (n == 0)
+        assert ("Rajatesti ajetaan ensin (noin minuutti). Työvuoro alkaa sen jälkeen itsestään." in teksti) is (n == 0)
         assert sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
+        assert r.headers.get("Refresh") == "30"   # työ käynnissä: sivu päivittyy, kunnes vuoro alkaa
+        tila = sivu.find("p", class_="state-word")
+        assert tila.find("span", class_="dot dot--live") and "Vapaa" not in tila.get_text()   # ei "Vapaa" työn aikana
         if dsh == 57:
-            assert "rajatesti (työ 57) käynnissä" in teksti and "/hub/kehita/57" not in linkit
-            assert "Rajatesti (työ 57) on käynnissä: jos painoit jo Töihin nyt, työvuoro alkaa sen jälkeen itsestään." in teksti
-            assert "Töihin nyt toimii, kun dsh-työ" not in teksti
+            assert tila.get_text(strip=True) == "Rajatesti käynnissä" and "/hub/kehita/57" not in linkit
+            assert ("Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään." in teksti) is (n == 1)
+            assert "Töihin nyt toimii, kun työ" not in teksti
         else:
-            assert "/hub/kehita/58" in linkit and "rajatesti (työ" not in teksti
-            assert "Töihin nyt toimii, kun dsh-työ 58 on valmis." in teksti
+            assert "/hub/kehita/58" in linkit and "rajatesti käynnissä" not in teksti.lower()
+            assert " ".join(tila.get_text().split()) == "Työ 58 kesken" and tila.a["href"] == "/hub/kehita/58"
+            assert "Töihin nyt toimii, kun työ 58 on valmis." in teksti
     # Osoite ei lukitse nappia: vanha ?toihin=rajatesti ilman käynnissä olevaa työtä jättää Töihin nyt käyttöön, ja
-    # tuntematon arvo ei näytä ilmoitusta.
-    for n, (polku, ilmoitus) in enumerate((("/ilmari?toihin=rajatesti", True), ("/ilmari?toihin=muu", False))):
+    # tuntematon arvo ei näytä ilmoitusta. (Vanhan osoitteen /hub/ilmari ohjaus: test_production.)
+    for n, (polku, ilmoitus) in enumerate((("/?toihin=rajatesti", True), ("/?toihin=muu", False))):
         (tmp_path / f"x{n}").mkdir()
         r = tuotanto(tmp_path / f"x{n}", monkeypatch, julkaise(tmp_path / f"ax{n}"), polku=polku)
-        assert ("vastaanotettu" in r.text) is ilmoitus
+        assert ("Rajatesti ajetaan ensin" in r.text) is ilmoitus
         nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button
         assert not nappi.has_attr("disabled")
+    # vuoron alettua ilmoitusta ei enää näytetä, vaikka osoitteessa on yhä ?toihin=rajatesti
+    vuoro = {**TILA, "vuoro": {"laji": "tyovuoro", "saie": 14, "istunto": 5, "alkoi": "2026-11-19T15:40:00+02:00",
+                               "paattyy": "2099-01-01T00:00:00+02:00"}}
+    (tmp_path / "v").mkdir()
+    r = tuotanto(tmp_path / "v", monkeypatch, julkaise(tmp_path / "av", tila=vuoro), polku="/?toihin=rajatesti")
+    assert "Rajatesti ajetaan ensin" not in r.text and "Työvuoro klo" in r.text and r.headers.get("Refresh") == "30"
 
 
 @pytest.mark.parametrize("tila", [
@@ -561,14 +723,27 @@ def test_tuotannossa_ei_toihin_nyt(tmp_path, monkeypatch, tila):
 
 def test_tuotannossa_raportti_paneeli(tmp_path, monkeypatch):
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "ei"))
-    assert "Viimeisin raportti" not in r.text  # puuttuva tiedosto: ei paneelia
+    assert "Viimeisin raportti" not in r.text  # puuttuva tiedosto: ei osiota
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "rikki", raportti={**RAPORTTI, "laji": "x"}))
-    assert "Viimeisin raportti" in r.text and "Raporttia ei voi lukea." in r.text and "/ilmari/seis" in lomakkeet(r)
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert "Viimeisin raportti" not in r.text and "/ilmari/seis" in lomakkeet(r)   # rikkinäinen: virhe odottaa Eliasta
+    assert "raportti.json" in sivu.find("section", attrs={"aria-labelledby": "h-odottaa"}).get_text()
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "ok", raportti={**RAPORTTI, "laji": "tyovuoro", "teksti":
                                                                             "Tein <script>alert(1)</script>\n<b>x</b>"}))
     sivu = BeautifulSoup(r.text, "html.parser")
-    paneeli = sivu.find("section", attrs={"aria-labelledby": "ilmari-raportti"})
-    assert "Työvuoro · " in paneeli.get_text() and "säie 12" in paneeli.get_text()
-    assert paneeli.find("div", class_="safe-text").get_text() == "Tein <script>alert(1)</script>\n<b>x</b>"
-    assert not sivu.find_all("script") and not paneeli.find_all("b")
+    osio = sivu.find("section", attrs={"aria-labelledby": "h-raportti"})
+    assert osio.find("span", class_="aside").get_text() == "Työvuoro 19.11. klo 04.40"
+    assert osio.find("div", class_="sheet pre").get_text() == "Tein <script>alert(1)</script>\n<b>x</b>"
+    assert not sivu.find_all("script") and not osio.find_all("b")
     assert "Tein &lt;script&gt;alert(1)&lt;/script&gt;\n&lt;b&gt;x&lt;/b&gt;" in r.text
+
+
+def test_tuotannossa_vanhemmat_teot_taitettuina(tmp_path, monkeypatch):
+    """12 uusinta tekoa näkyvissä, loput taiton "Vanhemmat teot (N)" alla."""
+    r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "t", teot=rivit(*(teko(n) for n in range(1, 31)))))
+    osio = BeautifulSoup(r.text, "html.parser").find("section", attrs={"aria-labelledby": "h-teot"})
+    nakyvat = osio.find("ol", class_="log", recursive=False)
+    assert [li.summary.find_all("span")[-1].get_text() for li in nakyvat.find_all("li", recursive=False)] == \
+        [f"teko {n}" for n in range(30, 18, -1)]
+    taitto = osio.find("details", class_="fold")
+    assert taitto.summary.get_text() == "Vanhemmat teot (18)" and len(taitto.select("ol.log > li")) == 18

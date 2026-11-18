@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .dokumentit import _json, _kelpaa
-from .peruskirja import _COMMIT, ReadFailure, RunReader, _lue
+from .lukija import _COMMIT, Hakemisto, ReadFailure, _lue
 
 OLETUS = Path("/srv/aiops/ilmari/mallit")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "mallit"
@@ -37,7 +37,7 @@ PROFIILI_KENTAT = frozenset({"kuvaus", "roolit", "ram_gb"})
 PROFIILIEN_ROOLIT = ("ceo", "tyontekija", "kirjoittaja", "kuva_tulkki")
 RAM_MARGINAALI_GB = 2
 MEMINFO = Path("/proc/meminfo")
-ROOLIT = (("ceo", "Ilmarin aivot (CEO)"), ("tyontekija", "Työntekijä (dsh)"), ("kirjoittaja", "Kirjoittaja"),
+ROOLIT = (("ceo", "Ilmarin aivot (CEO)"), ("tyontekija", "Työntekijä (koodityöt)"), ("kirjoittaja", "Kirjoittaja"),
           ("tarkastaja", "Tarkastaja"), ("kallis_paattely", "Kallis päättely"), ("kuva_tulkki", "Kuvantulkinta (Hubin valinta)"),
           ("kuva_tulkki_pilvi", "Kuvantulkinta pilvessä"), ("kuva_tulkki_paikallinen", "Kuvantulkinta paikallisesti"),
           ("kuva", "Kuva"), ("aani", "Ääni"), ("yoajo", "Yöajo"))
@@ -50,10 +50,10 @@ MAARA_MAX = 50
 _NIMI = re.compile(r"[a-z0-9][a-z0-9.-]{0,39}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 VIESTIT = {
-    "wrong_owner": "Mallirekisterin julkaisua ei ole tehnyt asennus (omistaja ei ole root).",
-    "too_large": "Julkaistu rekisteri ylittää lukurajan.",
-    "changed": "Julkaisu muuttui lukemisen aikana. Yritä uudelleen.",
-    "unsafe_file": "Julkaisun tiedostotyyppi tai linkitys ei ole sallittu.",
+    "wrong_owner": "Mallirekisteri ei ole asennuksen tekemä (omistaja ei ole root).",
+    "too_large": "Rekisteri ylittää lukurajan.",
+    "changed": "Rekisteri muuttui lukemisen aikana. Yritä uudelleen.",
+    "unsafe_file": "Tiedostotyyppi tai linkitys ei ole sallittu.",
     "timeout": "Rekisterin lukuaikaraja ylittyi.",
 }
 
@@ -98,19 +98,19 @@ def _tarkista_meta(meta: Any, data: bytes) -> None:
     if not isinstance(meta, dict) or set(meta) != META_KENTAT or meta["muoto"] != MUOTO:
         _virhe("meta.json:n kentät eivät vastaa muotoa.")
     if type(meta["commit"]) is not str or _COMMIT.fullmatch(meta["commit"]) is None:
-        _virhe("Julkaisun commit ei ole täysi tiiviste.")
+        _virhe("Commit ei ole täysi tiiviste.")
     if type(meta["sha256"]) is not str or _SHA256.fullmatch(meta["sha256"]) is None:
-        _virhe("Julkaisun tiiviste ei ole SHA-256.")
+        _virhe("Tiiviste ei ole SHA-256.")
     if type(meta["koko"]) is not int or type(meta["maara"]) is not int:
-        _virhe("Julkaisun koko tai määrä ei ole kokonaisluku.")
+        _virhe("Koko tai määrä ei ole kokonaisluku.")
     try:
         aika = datetime.fromisoformat(meta["julkaistu"]) if type(meta["julkaistu"]) is str else None
     except ValueError:
         aika = None
     if aika is None or aika.tzinfo is None:
-        _virhe("Julkaisuaika ei ole aikavyöhykkeellinen ISO-aika.")
+        _virhe("Aika ei ole aikavyöhykkeellinen ISO-aika.")
     if meta["koko"] != len(data) or meta["sha256"] != hashlib.sha256(data).hexdigest():
-        _virhe("Julkaisu on kesken tai ristiriitainen (tiiviste ei täsmää).")
+        _virhe("Tiedosto on kesken tai ristiriitainen (tiiviste ei täsmää).")
 
 
 def vapaa_ram_gb(polku: Path = MEMINFO) -> float | None:
@@ -154,7 +154,7 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[st
         _virhe("mallit.json ei vastaa meta.json:ia.")
     lista, roolit = sisalto["mallit"], sisalto["roolit"]
     if type(lista) is not list or not 0 < len(lista) <= MAARA_MAX or len(lista) != meta["maara"]:
-        _virhe("Mallien määrä ei vastaa julkaisua.")
+        _virhe("Mallien määrä ei vastaa meta.json:ia.")
     tunnetut = {r for r, _ in ROOLIT}
     nahty: set[str] = set()
     mallit: list[dict[str, Any]] = []
@@ -195,12 +195,12 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[tuple[dict[st
 def lue_mallit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: float = 2.0) -> Mallit:
     """Lukee julkaistun mallirekisterin. omistaja=None vain kehitys- ja esimerkkitilassa."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return Mallit("error", "Mallirekisterin polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             if omistaja is not None and os.fstat(hd).st_uid != omistaja:
                 raise ReadFailure("wrong_owner", VIESTIT["wrong_owner"])
             data = _lue(hd, DATA, omistaja, deadline, RAJA_DATA)
@@ -211,7 +211,7 @@ def lue_mallit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: f
         return Mallit("ready", None, meta, mallit, roolit, profiilit)
     except ReadFailure as error:
         if error.code == "not_found":
-            return Mallit("not_published", "Mallirekisteriä ei ole julkaistu. aiopsin asennus (deploy.sh) julkaisee sen.")
+            return Mallit("not_published", "Mallirekisteriä ei ole vielä asennettu.")
         return Mallit("error", VIESTIT.get(error.code, error.message))
 
 
@@ -220,12 +220,12 @@ def lue_ylikirjoitus(root: str | Path, *, omistajat: frozenset[int] | None = Non
     """Eliaksen roolivalinnat (gateway kirjoittaa roolit.toml:n). None, jos tiedostoa ei ole tai se ei kelpaa."""
     import tomllib
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return None
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             tiedot = os.stat(YLIKIRJOITUS, dir_fd=hd, follow_symlinks=False)
             if omistajat is not None and tiedot.st_uid not in omistajat:
                 return None

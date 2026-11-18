@@ -1,5 +1,32 @@
 # ilmari_UI: tämän repositorion tilanne 18.11.2026
 
+## Päivitys 18.11.2026 (yö): Hub juureksi, karsinta ja uusi tyyli, haara `hub-juuri`
+
+- Hub on Ilmarin juuri. Valikossa neljä linkkiä: **Nyt** `/hub` (tila, Töihin nyt, Seis, Jatka, Odottaa sinua,
+  viimeisin raportti, teot, Muualle: Ravintopolku `:8443` ja Hahmo `:8444`), **Keskustelu**, **Työt** `/hub/kehita`
+  (toive, sinun toiveesi, Ilmarin omat työt, käyttöönotot; työn sivulla kaikki toimet ennallaan) ja **Asetukset**
+  (yöajo `#yoajo`, tavoitteet `#tavoitteet`, ohjeet `#ohjeet`, aivot `#aivot`, rajatesti `#rajatesti`, kone `#kone`,
+  dokumentit). Lomakkeet, kentät ja gateway-linkit ovat täsmälleen ennallaan (vertailtu vanhaan HTML:ään).
+- Uusi tyyli: vaalea paperi, tumma muste, IBM Plex Mono (OFL, `static/fonts/`), ei teemoja, kuvakkeita, kortteja,
+  sivupalkkia eikä alapalkkia. Uudet kuvakkeet ja manifesti (nimi Ilmari, värit `#f1ead9`).
+- Poistettu: teemat, vanha etusivu ja sovelluskortit, Hahmon tilasivu, ajot ja raportit, yöajon ehdotukset, Säännöt,
+  Hyväksynnät, Ideat, erilliset Mallit- ja Järjestelmä-sivut (`cards.py`, `runs.py`, `muodot.py`, `peruskirja.py`,
+  `themes.py`, niiden mallit, esimerkkidata ja testit) sekä käynnistimen valitsimet `--runs-dir` ja
+  `--peruskirja-dir`. Turvallinen tiedostoluku siirtyi `lukija.py`:hyn ja rajattu Markdown `dokumentit.py`:hyn.
+- Vanhat osoitteet ohjautuvat (307, kysely mukana): `/hub/ilmari` → `/hub` (myös `?toihin=rajatesti`), `/hub/mallit` →
+  `/hub/asetukset#aivot`, `/hub/jarjestelma` → `/hub/asetukset#kone`, `/hub/saannot` → `/hub/dokumentit`, muut → `/hub`.
+- Katselmoinnin korjaukset: Asetukset ei näytä lomakkeita, kun Ilmarin tilaa ei voi lukea (oletuslomake olisi
+  korvannut asetukset); Odottaa sinua kertoo, jos töitä ei voi lukea; tila "Työ N kesken" eikä "Vapaa"; Päätös ja
+  käyttöönotot ilman koneen raakatekstiä, englantia ja taulukkoa; ajat "klo 20.05"; kosketuskohteet 44 px puhelimella.
+- Ennallaan: vartija, turvaotsakkeet ja CSP, `hub.toml`:n avaimet, systemd-yksikkö ja `scripts/asenna.sh`.
+- Asennusjärjestys: aiops (gateway: reitti `/tyot` ja paluuosoitteet `/hub/asetukset#…`) ensin, sitten Hub. Vanhalla
+  gatewaylla Asetusten "Kaikki työt" veisi 404-sivulle.
+- Testit: 527 passed, 35 skipped (ilman selainryhmää ja shellcheckiä).
+- Peruminen (worktree `.claude/` lisätään paikalliseen exclude-tiedostoon, koska 7706d0a:n `.gitignore` ei tunne sitä ja
+  `asenna.sh` pysähtyisi muuten tallentamattomiin muutoksiin):
+
+      ( set -eo pipefail; cd ~/code/ilmari_UI; grep -qxF '.claude/' .git/info/exclude || echo '.claude/' >> .git/info/exclude; git reset --hard 7706d0a; sudo scripts/asenna.sh "$(command -v uv)"; echo "VALMIS" ); echo "paluukoodi $?"
+
 ## Päivitys 18.11.2026 (ilta): Töihin nyt ja viimeisin raportti (aiops Pala 1b), haara `ilmari-nyt-2`
 
 - Ilmari nyt -sivun Tila-paneelissa on nappi **Töihin nyt** (lomake `POST {gateway}/ilmari/vuoro`, `paluu=hub`). Se

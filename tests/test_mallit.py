@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from ilmari_ui.app import Settings, create_app
@@ -116,11 +117,15 @@ def test_kelvoton_lisakentta_estaa_julkaisun(tmp_path, muutos):
     assert lue_mallit(julkaise(tmp_path / "m", [malli(**muutos)]), omistaja=UID).tila == "error"
 
 
-def test_aivot_nakyvat_esimerkkitilassa_ja_vapaa_ram():
+def test_aivot_nakyvat_asetuksissa_esimerkkitilassa_ja_vapaa_ram():
+    """Hub juureksi (18.11.2026): mallit ovat Asetukset-sivun osio Aivot (#aivot), roolit ja rekisteri taiton alla."""
     from ilmari_ui.mallit import vapaa_ram_gb
-    r = asiakas().get("/hub/mallit?demo=1")
-    assert r.status_code == 200 and "Aivot" in r.text and "<code>raskas</code>" in r.text and "käytössä" in r.text
-    assert "RAM 58 Gt" in r.text and "strata" in r.text and 'action="' not in r.text   # esimerkkitila: ei lomaketta
+    r = asiakas().get("/hub/asetukset?demo=1")
+    aivot = BeautifulSoup(r.text, "html.parser").find("section", id="aivot")
+    assert r.status_code == 200 and aivot.find("table") and "raskas" in aivot.get_text() and "kevyt" in aivot.get_text()
+    assert "RAM 58 Gt" in aivot.get_text() and "strata" in aivot.get_text() and "<form" not in r.text
+    fold = aivot.find("details", class_="fold")
+    assert fold.summary.get_text() == "Roolit ja mallirekisteri" and "Ilmarin aivot (CEO)" in fold.get_text()
     assert vapaa_ram_gb(Path("/proc/meminfo")) is None or vapaa_ram_gb(Path("/proc/meminfo")) > 0
     assert vapaa_ram_gb(Path("/ei/ole")) is None
 
@@ -130,21 +135,22 @@ def asiakas() -> TestClient:
 
 
 def test_sivu_esimerkkitilassa_ja_escapetus():
-    r = asiakas().get("/hub/mallit?demo=1")
-    assert r.status_code == 200 and "Ilmarin aivot (CEO)" in r.text and "<code>hauhau-q6</code>" in r.text
+    r = asiakas().get("/hub/asetukset?demo=1")
+    assert r.status_code == 200 and "Ilmarin aivot (CEO)" in r.text and "hauhau-q6" in r.text
     assert "&lt;b&gt;esimerkki&lt;/b&gt;" in r.text and "<b>esimerkki</b>" not in r.text
     assert "ei mallia" in r.text and "Esimerkkitila" in r.text and "gpt-6.1-sol/standard" in r.text
+    assert "valittu; oletus" in r.text and 'action="' not in r.text   # esimerkkitila: ei lomakkeita
 
 
-def test_ilman_lahdetta_ja_valikko():
+def test_ilman_lahdetta_ja_vanha_osoite():
     c = asiakas()
-    r = c.get("/hub/mallit")
-    assert r.status_code == 200 and "lähdettä ei ole määritetty" in r.text
-    assert 'href="/hub/mallit' in c.get("/hub?demo=1").text
+    r = c.get("/hub/asetukset")
+    assert r.status_code == 200 and "Mallit eivät ole saatavilla" in r.text
+    r = c.get("/hub/mallit", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/hub/asetukset#aivot"
 
 
-def test_ylikirjoitus_luetaan_ja_lomake_tuotannossa(tmp_path):
-    from ilmari_ui.config import parse_config
+def test_ylikirjoitus_luetaan(tmp_path):
     from ilmari_ui.mallit import lue_ylikirjoitus
     hak = tmp_path / "roolit"
     hak.mkdir()
@@ -154,16 +160,29 @@ def test_ylikirjoitus_luetaan_ja_lomake_tuotannossa(tmp_path):
     assert lue_ylikirjoitus(tmp_path / "ei") is None
     (hak / "roolit.toml").write_text("ei tomlia = = =", encoding="utf-8")
     assert lue_ylikirjoitus(hak) is None
-    root = tmp_path / "ajot"
-    root.mkdir()
-    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
-    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
-                    client=None) as client:
-        r = client.get("/mallit", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github",
-                                           "x-forwarded-proto": "https", "x-forwarded-for": "100.67.5.28"})
-    assert r.status_code == 200 and "Mallit" in r.text  # testikoneella rekisteriä ei välttämättä voi lukea
 
 
-def test_esimerkkitilassa_valinta_nakyy_ilman_lomaketta():
-    r = asiakas().get("/hub/mallit?demo=1")
-    assert r.status_code == 200 and "(valittu; oletus" in r.text and 'action="' not in r.text
+def test_tuotannossa_profiili_ja_roolilomakkeet(tmp_path, monkeypatch):
+    """Sallittu: profiilin ja roolin vaihto ovat lomakkeita gatewaylle (paluu=hub), nykyinen profiili ei ole
+    valittavissa. Kielletty: ilman luettavaa rekisteriä ei lomakkeita (asennus omistaa rekisterin: testissä oma uid)."""
+    from ilmari_ui import mallit as mallit_moduuli
+    from ilmari_ui.config import parse_config
+    alkuperainen = mallit_moduuli.lue_mallit
+    monkeypatch.setattr(mallit_moduuli, "lue_mallit", lambda polku, omistaja=0, **kw: alkuperainen(polku, omistaja=UID, **kw))
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    otsakkeet = {"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"}
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
+        ilman = client.get("/asetukset", headers=otsakkeet)
+        monkeypatch.setattr(mallit_moduuli, "OLETUS", julkaise_profiilit(tmp_path / "m", {"raskas": RASKAS, "kevyt": KEVYT}))
+        r = client.get("/asetukset", headers=otsakkeet)
+    assert ilman.status_code == 200 and "/mallit/" not in ilman.text and "Mallirekisteriä ei ole vielä asennettu." in ilman.text
+    sivu = BeautifulSoup(r.text, "html.parser")
+    profiilit = sivu.find_all("form", action="https://tyoasema.test/mallit/profiili")
+    assert {f.find("input", attrs={"name": "profiili"})["value"]: f.button.has_attr("disabled") for f in profiilit} == \
+        {"raskas": False, "kevyt": True}
+    assert all(f.find("input", attrs={"name": "paluu"})["value"] == "hub" and f["method"] == "post" for f in profiilit)
+    roolit = sivu.find_all("form", action="https://tyoasema.test/mallit/rooli")
+    assert len(roolit) == 11 and {f.find("input", attrs={"name": "rooli"})["value"] for f in roolit} >= set(KAIKKI)
+    assert all(f.find("select", attrs={"name": "malli"}) and f.find("input", attrs={"name": "paluu"})["value"] == "hub"
+               for f in roolit)

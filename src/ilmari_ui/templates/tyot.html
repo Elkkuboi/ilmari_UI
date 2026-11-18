@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
+{% macro tyorivit(lista) -%}
+<div class="rows">{% for t in lista %}{% set tagi, savy = t.tagi %}<a class="row" href="{{ url('/hub/kehita/' ~ t.tyo) }}"><span>{{ t.tyo }}</span><span>{{ t.meta.toive.split('\n')[0][:120] or 'Toive puuttuu' }}</span><span class="row-state tag {{ savy }}">{{ tagi }}</span><span class="row-sub">{{ t.meta.lahde or 'aiops' }}{% if t.meta.jatka %} · jatkaa työtä {{ t.meta.jatka }}{% endif %}{% if t.meta.tulos and t.meta.tulos.testit %} · testit {{ 'läpi' if t.meta.tulos.testit.paluukoodi == 0 else 'epäonnistuivat' }}{% endif %} · {{ lyhyt_aika(t.meta.paivitetty or t.meta.luotu) }}{% if t.meta.tila == 'running' and t.meta.eteneminen %}<br>Nyt: {{ t.meta.eteneminen[-1] }}{% endif %}{% if t.virheet %}<br>{{ t.virheet|join('; ') }}{% endif %}</span></a>{% endfor %}</div>
+{%- endmacro %}
+{% block sisalto %}
+{% if gateway_url or demo %}
+<section aria-labelledby="h-uusi">
+  <h1 id="h-uusi" class="label">Uusi toive</h1>
+  {% set kesken = malli and malli.dsh_tyo %}
+  {% call lomake('/kehita') %}<label for="toive">Mitä haluat muuttaa?</label><textarea id="toive" name="toive" rows="4" maxlength="4000" required placeholder="Esim. Lisää päiväkirjaan aterioiden poisto.">{{ toive }}</textarea>
+  <div class="form-row"><label class="inline" for="lahde">Kohde <select id="lahde" name="lahde">{% for nimi, kuvaus in lahteet %}<option value="{{ nimi }}">{{ kuvaus }}</option>{% endfor %}</select></label><button class="btn--primary" type="submit"{% if kesken %} disabled{% endif %}>Jätä toive</button></div>
+  {% if kesken %}<p class="muted small">Työ {{ malli.dsh_tyo }} on kesken; yksi työ kerrallaan.</p>{% endif %}{% endcall %}
+</section>
+{% else %}
+<h1 class="sr-only">Työt</h1>
+{% endif %}
+{% if not lahde %}
+<p class="empty">Töitä ei ole saatavilla tässä ympäristössä.</p>
+{% elif not tyot_luettu %}
+<p class="empty">Töitä ei voi lukea.</p>
+{% else %}
+<section aria-labelledby="h-omat">
+  <h2 id="h-omat" class="label">Sinun toiveesi</h2>
+  {% if eliaksen %}{{ tyorivit(eliaksen) }}{% else %}<p class="empty">Ei toiveita vielä.</p>{% endif %}
+</section>
+<section aria-labelledby="h-ilmarin">
+  <h2 id="h-ilmarin" class="label">Ilmarin omat työt</h2>
+  {% if ilmarin %}{{ tyorivit(ilmarin) }}{% else %}<p class="empty">Ilmari ei ole vielä aloittanut omia töitä.</p>{% endif %}
+</section>
+{% endif %}
+{% if historia and historia.tila == 'ready' and historia.kirjaukset %}
+<details class="fold"><summary>Käyttöönotot ({{ historia.kirjaukset|length }})</summary>
+  <ul class="rows">{% for k in historia.kirjaukset %}{% set onnistui = k.tulos == 'asennettu' %}{% set testit = testirivi(k.testit) %}
+    <li><div><span class="when">{{ lyhyt_aika(k.aika) or k.aika[:16] }}</span> <span class="tag {{ 'ok' if onnistui else 'stop' }}">{{ k.tulos_teksti|lower }}</span> <code>{{ k.commit[:7] }}</code></div>
+    {%- set viesti = ilman_aikaleimoja(k.viesti) if k.tulos not in ('asennettu', 'testit_epaonnistuivat', 'palautettu') else '' %}
+    {%- if testit or viesti %}<div class="small muted">{% if testit %}testit {{ testit }}{% endif %}{% if testit and viesti %} · {% endif %}{{ viesti }}</div>{% endif %}
+    {%- if k.loki %}<details class="fold"><summary>Loki</summary><pre class="code">{{ k.loki }}</pre></details>{% endif %}</li>{% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endblock %}

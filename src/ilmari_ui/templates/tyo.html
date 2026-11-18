@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
+{% macro vaihe(tagi, savy, aika, lisa='') -%}
+<p><span class="tag {{ savy }}">{{ tagi }}</span> {{ lyhyt_aika(aika) }}{% if lisa %} · {{ lisa }}{% endif %}</p>
+{%- endmacro %}
+{% block sisalto %}
+{% set tagi, savy = t.tagi %}
+{% set vaihe_teksti, _ = t.vaihe %}
+<a class="back" href="{{ url('/hub/kehita') }}">Työt</a>
+<section aria-labelledby="h-tyo">
+  <h1 id="h-tyo" class="page-title">Työ {{ t.tyo }} <span class="tag {{ savy }}">{{ tagi }}</span></h1>
+  <p class="pre">{{ meta.toive or 'Toive puuttuu' }}</p>
+  <dl class="kv">
+    <dt>Kohde</dt><dd>{{ meta.lahde or 'aiops' }} · {{ 'Ilmarin oma työ' if t.ilmarin else 'sinun toiveesi' }}{% if meta.jatka %} · jatkaa työtä <a href="{{ url('/hub/kehita/' ~ meta.jatka) }}">{{ meta.jatka }}</a>{% endif %}</dd>
+    <dt>Tila</dt><dd>{{ vaihe_teksti }}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}{% if t.kesken %} · päivittyy itsestään{% endif %}</dd>
+    {% if tulos %}<dt>Haara</dt><dd><code>{{ tulos.haara or '–' }}</code>{% if tulos.commiteja is not none %} · {{ tulos.commiteja }} {{ 'commit' if tulos.commiteja == 1 else 'committia' }}{% endif %}{% if tulos.paa %} · kärki <code>{{ tulos.paa[:7] }}</code>{% endif %}</dd>
+    <dt>Muutokset</dt><dd>{{ muutosrivi(tulos.muutokset, diffit) or 'ei muutoksia' }}</dd>
+    <dt>Testit</dt><dd>{% if tulos.testit %}<span class="tag {{ 'ok' if tulos.testit.paluukoodi == 0 else 'stop' }}">{{ 'läpi' if tulos.testit.paluukoodi == 0 else 'epäonnistuivat' }}</span> {{ testirivi(tulos.testit.yhteenveto) }}{% else %}ei ajettu{% endif %}</dd>{% endif %}
+    <dt>Aloitettu</dt><dd>{{ lyhyt_aika(meta.luotu) or '–' }}{% if meta.jattaja and not t.ilmarin %} · {{ meta.jattaja }}{% endif %}</dd>
+  </dl>
+  {% if t.virheet %}<p class="note note--warn">{{ t.virheet|join('; ') }}</p>{% endif %}
+</section>
+{% if meta.tila == 'running' and meta.eteneminen %}
+<section aria-labelledby="h-nyt">
+  <h2 id="h-nyt" class="label">Nyt</h2>
+  <div class="sheet pre">{{ meta.eteneminen|join('\n') }}</div>
+</section>
+{% elif meta.tila in ('queued', 'awaiting_gpu') %}
+<p class="muted">{{ meta.tila_teksti|capitalize }}: työ alkaa, kun Ilmarin malli on käynnissä.</p>
+{% endif %}
+{% if tulos and (tulos.vastaus or tulos.virhe) %}
+<section aria-labelledby="h-tulos">
+  <h2 id="h-tulos" class="label">Tulos</h2>
+  {% if tulos.virhe %}<p class="note note--stop">Virhe: {{ tulos.virhe }}</p>{% endif %}
+  {% if tulos.vastaus %}<div class="sheet pre">{{ tulos.vastaus }}</div>{% endif %}
+</section>
+{% endif %}
+{#- Päätös vain, kun päätettävää tai tehtyä on: työtilan työ ja kesken oleva työ eivät tarvitse osiota. #}
+{% if t.yhdistettava and (t.paatos or t.sulku or t.yhdistys or t.kayttoonotto or t.palautus or toimet.values()|select|list) %}
+{% set p = t.paatos %}
+<section aria-labelledby="h-paatos">
+  <h2 id="h-paatos" class="label">Päätös</h2>
+  {% if p %}{{ vaihe(p.teksti|lower, 'ok' if p.paatos == 'hyvaksytty' else '', p.aika) }}{% endif %}
+  {% if t.sulku %}{{ vaihe('suljettu käsin', '', t.sulku.aika, t.sulku.viesti) }}{% endif %}
+  {% if t.yhdistys %}{% set ok = t.yhdistys.tila == 'yhdistetty' %}{{ vaihe(t.yhdistys.teksti|lower, 'ok' if ok else 'stop', t.yhdistys.aika, '' if ok else ilman_aikaleimoja(t.yhdistys.viesti)) }}
+  {% elif p and p.paatos == 'hyvaksytty' %}<p class="muted small">Yhdistys on kesken.</p>{% endif %}
+  {% if t.kayttoonotto %}{% set ok = t.kayttoonotto.tulos == 'asennettu' %}<p><span class="tag {{ 'ok' if ok else 'stop' }}">{{ t.kayttoonotto.teksti|lower }}</span> {{ lyhyt_aika(t.kayttoonotto.aika) }}{% if ok and t.kayttoonotto.edellinen %} · edellinen <code>{{ t.kayttoonotto.edellinen[:7] }}</code>{% elif not ok and t.kayttoonotto.viesti %} · {{ ilman_aikaleimoja(t.kayttoonotto.viesti) }}{% endif %}</p>
+  {% elif p and p.kayttoonotto_pyynto %}<p class="muted small">Käyttöönotto pyydetty {{ lyhyt_aika(p.kayttoonotto_aika) }}: testit, asennus ja terveystarkistus kesken.</p>{% endif %}
+  {% if t.palautus %}{% set ok = t.palautus.tulos == 'asennettu' %}{{ vaihe('palautettu' if ok else 'palautus: ' ~ t.palautus.teksti|lower, 'ok' if ok else 'stop', t.palautus.aika, '' if ok else ilman_aikaleimoja(t.palautus.viesti)) }}
+  {% elif p and p.palautus_pyynto %}<p class="muted small">Palautus pyydetty {{ lyhyt_aika(p.palautus_aika) }}: kesken.</p>{% endif %}
+{% if gateway_url or demo %}
+  {% if toimet.hyvaksy or toimet.kayttoonotto or toimet.palauta or toimet.hylkaa %}
+  <div class="actions">
+    {%- if toimet.hyvaksy %}<a class="btn btn--primary" href="{{ gateway('/kehitys/' ~ t.tyo ~ '/hyvaksy?paluu=hub') }}">Hyväksy puhelimella</a>{% endif %}
+    {%- if toimet.kayttoonotto %}<a class="btn btn--primary" href="{{ gateway('/kehitys/' ~ t.tyo ~ '/kayttoonotto?paluu=hub') }}">Ota käyttöön puhelimella</a>{% endif %}
+    {%- if toimet.palauta %}<a class="btn" href="{{ gateway('/kehitys/' ~ t.tyo ~ '/palauta?paluu=hub') }}">Palauta edelliseen puhelimella</a>{% endif %}
+    {%- if toimet.hylkaa %}{% call lomake('/kehitys/' ~ t.tyo ~ '/hylkaa') %}<input type="hidden" name="toiminto" value="hylkaa"><button type="submit">Hylkää</button>{% endcall %}{% endif -%}
+  </div>
+  {% endif %}
+  {% if toimet.sulje %}
+  {% call lomake('/kehitys/' ~ t.tyo ~ '/sulje') %}<label for="sulku-viesti">Sulje käsin: miten työ hoidettiin?</label><div class="actions"><input id="sulku-viesti" name="viesti" maxlength="200" required placeholder="esim. yhdistetty käsin PR #8"><button class="btn--quiet" type="submit">Sulje</button></div>{% endcall %}
+  {% endif %}
+  {% if toimet.muutos %}
+  <details class="fold"><summary>Pyydä muutosta</summary>
+    {% call lomake('/kehita') %}<label for="muutos">Mitä pitäisi tehdä toisin?</label><textarea id="muutos" name="toive" rows="4" maxlength="4000" required placeholder="Ilmari jatkaa haarasta {{ tulos.haara if tulos else '' }}"></textarea><input type="hidden" name="jatka" value="{{ t.tyo }}">
+    <div class="form-row"><span class="muted small">Kohde pysyy samana.</span><button class="btn--primary" type="submit">Pyydä muutosta</button></div>{% endcall %}
+  </details>
+  {% endif %}
+{% endif %}
+</section>
+{% endif %}
+{% set lokit = [('vastaus.md', 'Ilmarin vastaus'), ('aiops-dsh.log', 'Työn loki'), ('dsh-stderr.log', 'Virhetuloste')]|selectattr(0, 'in', t.tekstit)|list %}
+{% set koko_diff = not diffit or diffit|selectattr('leikattu')|list %}
+<div class="stack">
+{% if diffit or 'muutos-stat.txt' in t.tekstit %}
+<details class="fold"><summary>Muutokset ({{ diffit|length }} {{ 'tiedosto' if diffit|length == 1 else 'tiedostoa' }})</summary>
+  <div class="stack">
+  {% for d in diffit %}
+    <p><code>{{ d.tiedosto }}</code> <span class="ok">+{{ d.lisatty }}</span> <span class="stop">−{{ d.poistettu }}</span>{% if d.binaari %} <small class="muted">binääri</small>{% endif %}</p>
+    <pre class="code diff">{% for laji, rivi in d.rivit %}<span class="{{ laji }}">{{ rivi }}</span>
+{% endfor %}{% if d.leikattu %}<span class="hunk">[… loppu leikattu …]</span>{% endif %}</pre>
+  {% endfor %}
+  {% if koko_diff %}{% for nimi, otsikko in [('muutos-stat.txt', 'Muutostilasto'), ('muutos.diff', 'Koko muutos')] %}{% if nimi in t.tekstit %}
+    <details class="fold"><summary>{{ otsikko }}</summary><pre class="code">{{ t.tekstit[nimi] }}</pre></details>
+  {% endif %}{% endfor %}{% endif %}
+  </div>
+</details>
+{% endif %}
+{% if 'testit.txt' in t.tekstit %}
+<details class="fold"><summary>Testit</summary><pre class="code">{{ t.tekstit['testit.txt'] }}</pre></details>
+{% endif %}
+{% if lokit %}
+<details class="fold"><summary>Loki</summary>
+  <div class="stack">{% for nimi, otsikko in lokit %}<p class="small muted">{{ otsikko }}</p><pre class="code">{{ t.tekstit[nimi] }}</pre>{% endfor %}</div>
+</details>
+{% endif %}
+{% if t.yhdistettava %}<p class="small"><a href="{{ gateway('/kehitys/' ~ t.tyo) }}">Raaka näkymä ↗</a></p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{
+ "tyo": 98,
+ "toive": "Lisää kuvareitille virheviesti, kun kuva on liian suuri",
+ "jatka": null,
+ "luotu": "2026-11-18T19:40:02+00:00",
+ "jattaja": "aiops-ceo",
+ "lahde": "ravintopolku",
+ "tila": "succeeded",
+ "tila_teksti": "valmis",
+ "syy": "dsh päättyi (paluukoodi 0)",
+ "kesto": "12 min",
+ "paivitetty": "2026-11-18T19:52:30+00:00",
+ "valmis": true,
+ "tulos": {
+  "paluukoodi": 0,
+  "haara": "ilmari/98",
+  "perus": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "paa": "9898989898989898989898989898989898989898",
+  "commiteja": 1,
+  "tiedostot": [
+   "src/kuvareitti.ts",
+   "src/kuvareitti.test.ts"
+  ],
+  "muutokset": " 2 files changed, 18 insertions(+), 1 deletion(-)",
+  "vastaus": "Lisäsin kokorajan tarkistuksen ja selkeän virheviestin. Testit läpi.",
+  "virhe": "",
+  "testit": {
+   "paluukoodi": 0,
+   "yhteenveto": "41 passed in 3.2s"
+  }
+ },
+ "tiedostot": [
+  "muutos.diff",
+  "testit.txt"
+ ]
+}

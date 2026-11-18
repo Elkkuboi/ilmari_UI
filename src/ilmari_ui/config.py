@@ -8,6 +8,9 @@
     [hub.kayttajat]
     "tunnus@github" = "elias"                  # Tailscale-tunnus (LoginName) = nimi
 
+Avaimia julkaisut ja peruskirja ei enää käytetä (Hub juureksi 18.11.2026: ajot ja sääntösivu poistettiin), mutta ne
+hyväksytään ja tarkistetaan kuten ennen, koska tuotannon tiedosto on rootin eikä Hub voi muuttaa sitä.
+
 Tiedosto luetaan tiukasti kuten aiops.toml: tuntematon avain on virhe, ja puuttuva tai kelvoton tiedosto estää
 käynnistyksen. Tiedosto on root:ilmari-hub 0640, joten Hub voi lukea sen mutta ei muuttaa. Hub ei voi lukea
 tiedostoa /etc/aiops/aiops.toml, joten tunnuslista on sen [gateway.kayttajat]-taulun kopio (ADR-0013).

@@ -1,8 +1,8 @@
 # Ilmari Hub
 
-Suomenkielinen, responsiivinen Ilmari UI. Python 3.12, FastAPI, Jinja2 ja paikallinen CSS. Arctic Command on oletus; lisäksi Slate Electric, Nordic Paper ja Aurora Lab. Ei JavaScriptiä, CDN:ää, tietokantaa tai mallikutsuja.
+Suomenkielinen, responsiivinen Ilmari UI. Python 3.12, FastAPI, Jinja2 ja paikallinen CSS. Yksi tyyli: vaalea paperi, tumma muste ja tasalevyinen IBM Plex Mono (OFL, `static/fonts/`). Ei teemoja, JavaScriptiä, CDN:ää, tietokantaa tai mallikutsuja.
 
-Käyttöliittymässä ovat Koti, Keskustelu, Ajot ja raportit, Hyväksynnät, Sovellukset, Ideat ja projektit, Järjestelmä sekä Asetukset. Ajotulosten lukija ja sovelluskorttien validaattori ovat toimivia. Keskustelu, työn hyväksyntä, isännän mittarit ja oikeat sovellusliitännät odottavat aiops-integraatiota. Niiden tilaa ei esitetä toimivana.
+Hub on Ilmarin juuri ja Eliaksen ohjauspaikka. Valikossa on neljä sivua: **Nyt** (`/hub`: tila, Töihin nyt, Seis ja Jatka, mikä odottaa sinua, viimeisin raportti, teot ja linkit Ravintopolkuun ja Hahmoon), **Keskustelu**, **Työt** (`/hub/kehita`: toiveet, Ilmarin omat työt ja työn sivu) ja **Asetukset** (yöajo, tavoitteet, pysyvät ohjeet, aivot, rajatesti, kone, dokumentit). Jokainen muutos on lomake gatewaylle samassa alkuperässä; Hubissa ei ole POST-reittejä. Vanhat osoitteet (`/hub/ilmari`, `/hub/mallit`, `/hub/jarjestelma`, `/hub/saannot`, `/hub/ajot`, `/hub/sovellukset`, `/hub/hyvaksynnat`, `/hub/ideat`) ohjautuvat uusiin.
 
 ## Hae toteutus omalle koneelle
 
@@ -22,7 +22,7 @@ curl --fail --silent --show-error --unix-socket .runtime/hub.sock \
   -H 'Host: ilmari.local' 'http://ilmari.local/hub?demo=1'
 ```
 
-Esimerkkikuvat: [Arctic Command työpöydällä](docs/kuvat/arctic-command-desktop.png) ja [puhelimessa](docs/kuvat/arctic-command-phone.png). Molemmissa näkyvä aineisto on synteettistä esimerkkidataa.
+Esimerkkikuvat: [Nyt työpöydällä](docs/kuvat/nyt-tyopoyta.png) ja [puhelimessa](docs/kuvat/nyt-puhelin.png). Molemmissa näkyvä aineisto on synteettistä esimerkkidataa.
 
 ## Käynnistä Codex-pilviympäristössä
 
@@ -43,9 +43,7 @@ curl --fail --silent --show-error --unix-socket .runtime/hub.sock \
   -H 'Host: ilmari.local' 'http://ilmari.local/hub?demo=1'
 ```
 
-`/hub` näyttää oikean yhdistämättömän tilan. `--demo` sallii erikseen valittavan `/hub?demo=1`-esimerkkitilan. Kaikki sen julkaisut ovat synteettisiä, merkittyjä esimerkkejä; ne eivät kuvaa aiops-työaseman ajoja, UniCafen ruokalistaa tai Joonaksen viestejä. Esimerkkitilassa ei ole henkilökohtaisia tietoja eikä palveluyhteyksiä.
-
-Teema, korttivalinta ja korttien järjestys kulkevat GET-osoitteessa. Niitä ei tallenneta evästeeseen, istuntoon tai palvelimelle. Ravintopolun 7/30/90 päivän valinta rajaa julkaistua havaintojaksoa; se ei täydennä puuttuvaa dataa.
+`/hub` näyttää kehitysympäristössä, ettei tietoja ole saatavilla. `--demo` sallii erikseen valittavan `/hub?demo=1`-esimerkkitilan. Sen aineisto on synteettistä ja merkitty jokaisen sivun alussa; napit eivät tee mitään eikä lomakkeita ole. Esimerkkitilassa ei ole henkilökohtaisia tietoja eikä palveluyhteyksiä. Esimerkkitila kulkee GET-osoitteessa, ei evästeessä.
 
 ## Tarkista
 
@@ -65,11 +63,7 @@ Selaimen pyynnöt ohjataan testissä suoraan ASGI-sovellukseen. Yhtään HTTP-pa
 
 ## Julkaistut tiedot ja tuotantoliitäntä
 
-Ajolukijan voi kehityksessä suunnata **erikseen hyväksyttyyn** julkaisuhakemistoon argumentilla `--runs-dir`. Tuotannon sovittu kohde on `/srv/aiops/ilmari/ajot`; raakakansioita, tietokantaa, avaimia tai työkopiota ei saa liittää Hubiin. Tunnetut julkaisutiedostot ovat `meta.json`, `raportti.md`, `ehdotukset.jsonl`, `sol-tulos.json` ja `luonnos.patch`. Lukija torjuu symboliset linkit, erikoistiedostot, liian suuret sisällöt, virheellisen JSONin ja polkujen vaihtokilpailut. Raportti ja patch esitetään tekstinä.
-
-Aiops-lähderepon luku palautti tässä ympäristössä 403. Siksi `MUODOT.md`:n todellista semanttista skeemaa ja gatewayn koodia ei ole tarkastettu: metatiedot ja Sol-tulos näytetään validoituina julkaisutietoina, niiden kenttiä ei tulkita tuotannon ajotilaksi. Esimerkkien `demo_*`-kentät eivät ole tuotantosopimus.
-
-Sovelluskortit noudattavat tämän repon **ehdotettua** `ilmari.card.v1`-sopimusta. Lähde, havaintoaika, julkaisuhetki ja ajantasaisuus näytetään erikseen. Dataluokka tarkistetaan palvelimen luotetusta asetuksesta; julkaisijan oma väite ei riitä. Yksityiset julkaisut ovat oletuksena pois käytöstä ja `restricted`-yhteenvedot torjutaan. URL-viitteitä ei haeta. Ei plugineja, sovellusten raakakantoja, telemetriaa tai automaattista pilvivientiä.
+Hub lukee vain kiinteitä hakemistoja `/srv/aiops/ilmari/` alla (toiminta, keskustelu, kehitys, kayttoonotot, mallit, roolit, jarjestelma, dokumentit), jotka gateway, dispatcher tai asennus julkaisee. Yhteinen lukija (`lukija.py`) torjuu symboliset linkit, erikoistiedostot, liian suuret sisällöt, väärät omistajat ja polkujen vaihtokilpailut; teksti näytetään koodattuna. Ajot ja raportit, sovelluskortit, Säännöt-sivu ja teemat poistettiin 18.11.2026 (Hub juureksi); niiden vanhat kuvaukset (`docs/run-publication.md`, `docs/card-publication.md`) ovat historiaa. Konfiguraation avaimet `julkaisut` ja `peruskirja` hyväksytään yhä, mutta niitä ei käytetä.
 
 Tämä kehityspalvelin **ei ole tuotannon Tailscale-tunnistusta toteuttava gateway**. Se hylkää TCP-asiakkaat ja sallii vain paikallisen Unix-soketin lukupyynnöt. Aiops-integraation käyttäjä, tiedosto-oikeudet ja reititys nykyisen suojatun gatewayn kautta vaativat katselmoinnin ja arkkitehtuuripäätöksen. Älä julkaise sokettia Tailscale Servellä tämän ohjeen perusteella.
 
@@ -79,7 +73,7 @@ Katso [UI-määrittely](docs/valmistelu/ilmari-hub-ui.md), [ajojulkaisut](docs/r
 
 Tuotantotila käynnistetään konfiguraatiolla: `ilmari-ui --config /etc/ilmari-hub/hub.toml --socket /run/ilmari-hub/hub.sock`.
 Silloin Hub hyväksyy vain Tailscale Serven kautta tulevat pyynnöt sallituilta tunnuksilta, lukee julkaisut konfiguraation
-hakemistosta ja palauttaa Serven poistaman `/hub`-etuliitteen. Esimerkkitila ja `--runs-dir` eivät ole käytössä.
+hakemistoista ja palauttaa Serven poistaman `/hub`-etuliitteen. Esimerkkitila ei ole käytössä.
 
 - Palvelutiedosto: `config/systemd/ilmari-hub.service` (käyttäjä ilmari-hub, ei verkkoa, `/srv`:stä näkyy vain julkaisu).
 - Konfiguraation malli: `config/hub.toml.esimerkki`.
@@ -91,5 +85,5 @@ muutoslokiin, eivät tämän repon skripteissä.
 ### Sovelluksena puhelimessa ja koneella
 
 Avaa `https://TYÖASEMA/hub` Chromessa ja valitse valikosta **Asenna sovellus** (puhelimessa myös **Lisää aloitusnäyttöön**).
-Sovellus avautuu omaan ikkunaansa ja pitää gatewayn sivut (hyväksynnät, `/ilmari`) samassa ikkunassa. Hub ei toimi ilman
+Sovellus avautuu omaan ikkunaansa ja pitää gatewayn sivut (passkey-hyväksynnät) samassa ikkunassa. Hub ei toimi ilman
 yhteyttä työasemaan, koska siinä ei ole service workeria.

@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake, piste with context %}
+{% macro tekorivit(lista) -%}
+<ol class="rows log">{% for t in lista %}<li>{% if loop.first or paiva(loop.previtem.aika) != paiva(t.aika) %}<p class="day" aria-hidden="true">{{ paiva(t.aika) }}</p>{% endif %}<details><summary><span><span class="date">{{ paiva(t.aika) }} </span><time datetime="{{ t.aika }}">{{ kello(t.aika) }}</time></span><span>{{ t.mita }}</span></summary><div class="more"><span class="who">{{ t.tekija }}</span>{% if t.miksi %} · Miksi: {{ t.miksi }}{% endif %}{% if t.peru %} · Peruminen: {{ t.peru }}{% endif %}{% if t.tyo %} · {% if t.tyo_linkki %}<a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% else %}työ {{ t.tyo }}{% endif %}{% endif %}</div></details></li>{% endfor %}</ol>
+{%- endmacro %}
+{% block sisalto %}
+{% set m = malli %}
+<section aria-labelledby="h-tila">
+  <h1 id="h-tila" class="sr-only">Ilmarin tila</h1>
+{% if tilarivi is none %}
+  <p class="empty">Ilmarin tila ei ole saatavilla tässä ympäristössä.</p>
+{% else %}
+  {% set varattu = m and (m.dsh_tyo or m.yoajo) %}
+  {#- Vapaa, mutta työ on kesken: pääsana kertoo työn, ei "Vapaa" #}
+  {% set tyo_kesken = m and m.dsh_tyo and tilarivi.savy == 'success' %}
+  <div class="state">
+    <div><p class="state-word">{{ piste(tilarivi.savy, tilarivi.savy == 'accent' or tyo_kesken) }}{% if tyo_kesken and rajatesti_kaynnissa %}Rajatesti käynnissä{% elif tyo_kesken %}<span><a href="{{ url('/hub/kehita/' ~ m.dsh_tyo) }}">Työ {{ m.dsh_tyo }}</a> kesken</span>{% else %}{{ tilarivi.teksti }}{% endif %}</p>
+    <p class="state-text">{{ tilarivi.selitys }}
+      {%- if tilarivi.seis is sameas false and m %} {{ 'Malli on käynnissä' if m.tila == 'running' else 'Malli ei ole käynnissä' }}{% if tyo_kesken %}{% elif m.dsh_tyo and rajatesti_kaynnissa %}, rajatesti käynnissä{% elif m.dsh_tyo %}, työ <a href="{{ url('/hub/kehita/' ~ m.dsh_tyo) }}">{{ m.dsh_tyo }}</a> kesken{% else %}, ei työtä kesken{% endif %}.{% endif %}
+      {%- if tilarivi.savy == 'success' and asetukset %} {{ ('Yöajo alkaa klo ' ~ asetukset.kello|replace(':', '.') ~ '.') if asetukset.paalla else 'Yöajo pois päältä.' }}{% endif %}</p></div>
+{% if gateway_url or demo %}
+    <div class="actions">
+      {%- if tilarivi.toihin %}{% call lomake('/ilmari/vuoro') %}<button class="btn--primary" type="submit"{% if varattu %} disabled{% endif %}>Töihin nyt</button>{% endcall %}{% endif %}
+      {%- if tilarivi.seis is not sameas true %}{% call lomake('/ilmari/seis') %}<button class="btn--stop" type="submit">Seis</button>{% endcall %}{% endif %}
+      {%- if tilarivi.seis is not sameas false %}{% call lomake('/ilmari/jatka') %}<button class="btn--primary" type="submit">Jatka</button>{% endcall %}{% endif -%}
+    </div>
+{% endif %}
+  </div>
+{% if toihin_rajatesti and tilarivi.toihin %}
+  <p class="note" role="status">Rajatesti ajetaan ensin (noin minuutti). Työvuoro alkaa sen jälkeen itsestään.</p>
+{% elif tilarivi.toihin and varattu %}
+  <p class="muted small">{% if m.dsh_tyo and rajatesti_kaynnissa %}Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään.{% elif m.dsh_tyo %}Töihin nyt toimii, kun työ {{ m.dsh_tyo }} on valmis.{% else %}Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</p>
+{% endif %}
+{% endif %}
+</section>
+{% if odottaa %}
+<section aria-labelledby="h-odottaa">
+  <h2 id="h-odottaa" class="label">Odottaa sinua</h2>
+  <div class="rows">{% for r in odottaa %}<a class="row" href="{{ r.href }}"><span>{{ r.nro }}</span><span>{{ r.teksti }}</span><span class="row-state tag {{ r.savy }}">{{ r.tag }}</span>{% if r.ala %}<span class="row-sub">{{ r.ala }}</span>{% endif %}</a>{% endfor %}</div>
+</section>
+{% endif %}
+{% if raportti %}
+<section aria-labelledby="h-raportti">
+  <h2 id="h-raportti" class="label">Viimeisin raportti <span class="aside">{{ raportti.nimi }} {{ paiva(raportti.aika) }} klo {{ kello(raportti.aika) }}</span></h2>
+  <div class="sheet pre">{{ raportti.teksti }}</div>
+</section>
+{% endif %}
+{% if toiminta is not none and toiminta.tila == 'ready' %}
+<section aria-labelledby="h-teot">
+  <h2 id="h-teot" class="label">Teot{% if toiminta.teot_ohitettu %} <span class="aside">{{ toiminta.teot_ohitettu }} kelvotonta riviä ohitettu</span>{% endif %}</h2>
+{% if toiminta.teot is none %}
+  <p class="empty">Tekoja ei voi lukea.</p>
+{% elif teot %}
+  {{ tekorivit(teot) }}
+{% if vanhat_teot %}
+  <details class="fold"><summary>Vanhemmat teot ({{ vanhat_teot|length }})</summary>{{ tekorivit(vanhat_teot) }}</details>
+{% endif %}
+{% else %}
+  <p class="empty">Ei tekoja vielä.</p>
+{% endif %}
+</section>
+{% endif %}
+{% if muualle %}
+<section aria-labelledby="h-muualle">
+  <h2 id="h-muualle" class="label">Muualle</h2>
+  <p class="actions">{% for nimi, href in muualle %}<a class="btn btn--quiet" href="{{ href }}">{{ nimi }} ↗</a>{% endfor %}</p>
+</section>
+{% endif %}
+{% endblock %}
