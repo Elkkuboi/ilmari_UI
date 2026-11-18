@@ -17,11 +17,24 @@
 {% if tilarivi.seis is not sameas true %}<form method="post" action="{{ gateway_url }}/ilmari/seis"><input type="hidden" name="paluu" value="hub"><button class="button button--danger" type="submit">{{ icon('pause') }} Seis</button></form>{% endif %}
 {% if tilarivi.seis is not sameas false %}<form method="post" action="{{ gateway_url }}/ilmari/jatka"><input type="hidden" name="paluu" value="hub"><button class="button button--primary" type="submit">Jatka {{ icon('arrow') }}</button></form>{% endif %}
 </div>
-<p class="small">Seis peruu Ilmarin käynnissä olevat työt ja yöajon heti ja estää uudet, kunnes painat Jatka. Tila säilyy uudelleenkäynnistysten yli.</p>
+<p class="small">Seis peruu Ilmarin käynnissä olevat työt ja vuoron (yöajo tai työvuoro) heti ja estää uudet, kunnes painat Jatka. Tila säilyy uudelleenkäynnistysten yli.</p>
+{% if tilarivi.toihin %}{% set varattu = malli and (malli.dsh_tyo or malli.yoajo) %}
+<form method="post" action="{{ gateway_url }}/ilmari/vuoro" class="dev-actions"><input type="hidden" name="paluu" value="hub"><button class="button button--primary" type="submit"{% if varattu %} disabled{% endif %}>Töihin nyt {{ icon('arrow') }}</button><span class="small">Ilmari tekee saman kierroksen kuin yöllä (rästit, itsearviointi, tutkimus, raportti), enintään 90 min. Seis pysäyttää heti. Jos rajatestistä on yli 26 tuntia, gateway ajaa sen ensin ja vuoro alkaa, kun se on läpi.{% if malli and malli.dsh_tyo %} Töihin nyt toimii, kun dsh-työ {{ malli.dsh_tyo }} on valmis.{% elif malli and malli.yoajo %} Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</span></form>
+{% endif %}
 {% elif not demo %}<p class="small">Seis ja Jatka ovat käytössä vain työasemalla (gateway samassa osoitteessa).</p>{% endif %}
 </section>
 {% if toiminta.tila == 'ready' %}
 {% set tilanne = toiminta.tilanne %}
+{% if toiminta.raportti or toiminta.raportti_virhe %}
+<section class="panel panel-padding" aria-labelledby="ilmari-raportti"><h2 id="ilmari-raportti">Viimeisin raportti</h2>
+{% if toiminta.raportti_virhe %}<p>Raporttia ei voi lukea.</p>
+{% else %}{% set rp = toiminta.raportti %}
+<p class="small">{{ rp.nimi }} · <time datetime="{{ rp.aika }}">{{ format_time(rp.aika) }}</time> · säie {{ rp.saie }}</p>
+<div class="safe-text ilmari-raportti">{{ rp.teksti }}</div>
+<p class="small">Koko keskustelu: <a href="{{ url('/hub/keskustelu') }}">Keskustelu</a> → kansio Yöajot.</p>
+{% endif %}
+</section>
+{% endif %}
 {% if toiminta.virheet %}<section class="panel panel-padding"><h2>Julkaisun ongelmat</h2><ul>{% for v in toiminta.virheet %}<li>{{ v }}</li>{% endfor %}</ul></section>{% endif %}
 
 <section class="panel panel-padding" aria-labelledby="ilmari-yoajo"><h2 id="ilmari-yoajo">Yöajo</h2>
@@ -31,7 +44,7 @@
 {% if gateway_url %}
 <form method="post" action="{{ gateway_url }}/ilmari/asetukset" class="ilmari-form"><label><input type="checkbox" name="yoajo_paalla" value="1"{% if a is none or a.paalla %} checked{% endif %}> Yöajo päällä</label><label for="yoajo-kello">Alkaa klo <input id="yoajo-kello" type="time" name="yoajo_kello" value="{{ a.kello if a else '02:00' }}" step="60" required></label><input type="hidden" name="paluu" value="hub"><button class="button" type="submit">Tallenna</button></form>
 {% endif %}
-<p class="small">Yöajo alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten, eikä Seis ole päällä. Aamuraportti tulee keskusteluun kansioon Yöajot.</p>
+<p class="small">Yöajo alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten, eikä Seis ole päällä. Aamuraportti tulee tämän sivun alkuun ja keskusteluun kansioon Yöajot.</p>
 </section>
 
 <section class="panel panel-padding" aria-labelledby="ilmari-tavoitteet"><h2 id="ilmari-tavoitteet">Tavoitteet</h2>
@@ -69,7 +82,7 @@
 <p class="small">Uusin ensin, enintään 100. <strong>Gateway</strong> on gatewayn itse havaitsema teko. <strong>Ilmari</strong> on Ilmarin oma kirjaus: sen kertoma, ei gatewayn todentama.</p>
 {% if toiminta.teot_ohitettu %}<p class="rules-note">{{ toiminta.teot_ohitettu }} kelvotonta riviä ohitettiin.</p>{% endif %}
 {% if toiminta.teot is none %}<p>Tekolokia ei voi lukea.</p>
-{% elif toiminta.teot %}<ol class="teko-list">{% for t in toiminta.teot %}<li><div class="teko-head"><span class="badge badge--{{ 'neutral' if t.lahde == 'gateway' else 'accent' }}">{{ t.tekija }}</span> <time datetime="{{ t.aika }}">{{ format_time(t.aika) }}</time> · {{ t.laji }}{% if t.tyo %} · <a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% endif %}{% if t.saie %} · säie {{ t.saie }}{% endif %}</div><p class="teko-mita">{{ t.mita }}</p>{% if t.miksi %}<p class="small"><span class="teko-label">Miksi:</span> {{ t.miksi }}</p>{% endif %}{% if t.peru %}<p class="small"><span class="teko-label">Peruminen:</span> {{ t.peru }}</p>{% endif %}</li>{% endfor %}</ol>
+{% elif toiminta.teot %}<ol class="teko-list">{% for t in toiminta.teot %}<li><div class="teko-head"><span class="badge badge--{{ 'neutral' if t.lahde == 'gateway' else 'accent' }}">{{ t.tekija }}</span> <time datetime="{{ t.aika }}">{{ format_time(t.aika) }}</time> · {{ t.laji }}{% if t.tyo %} · {% if t.tyo_linkki %}<a href="{{ url('/hub/kehita/' ~ t.tyo) }}">työ {{ t.tyo }}</a>{% else %}työ {{ t.tyo }}{% endif %}{% endif %}{% if t.saie %} · säie {{ t.saie }}{% endif %}</div><p class="teko-mita">{{ t.mita }}</p>{% if t.miksi %}<p class="small"><span class="teko-label">Miksi:</span> {{ t.miksi }}</p>{% endif %}{% if t.peru %}<p class="small"><span class="teko-label">Peruminen:</span> {{ t.peru }}</p>{% endif %}</li>{% endfor %}</ol>
 {% else %}<p>Ei tekoja vielä.</p>{% endif %}
 </section>
 {% endif %}

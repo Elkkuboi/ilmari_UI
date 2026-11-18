@@ -663,6 +663,7 @@ button.thread-button:hover { background: var(--il-surface-raised); border-color:
 .ilmari-goals { margin: 0; padding-left: 22px; display: grid; gap: 6px; overflow-wrap: anywhere; }
 .ilmari-ohje-rivi { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; color: var(--il-text-subtle); }
 .ilmari-ohje-rivi form { margin: 0; }
+.ilmari-raportti { margin: 10px 0; padding: 12px 14px; border-left: 3px solid var(--il-accent); border-radius: 6px; background: var(--il-surface-raised); }
 .teko-list { list-style: none; margin: 0; padding: 0; }
 .teko-list li { padding: 12px 0; border-bottom: 1px solid var(--il-border); overflow-wrap: anywhere; }
 .teko-list li:last-child { border: 0; }

@@ -40,7 +40,7 @@ from .themes import SKINS, normalize_skin
 PACKAGE_DIR = Path(__file__).parent
 HELSINKI = ZoneInfo("Europe/Helsinki")
 DEMO_NOW = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
-TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 1, 10, tzinfo=timezone.utc)  # esimerkin yöajo käynnissä (03.10 Helsingissä)
+TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 14, 10, tzinfo=timezone.utc)  # esimerkin työvuoro käynnissä (16.10 Helsingissä)
 APP_CATALOG = (
     {"id": "ravintopolku", "name": "Ravintopolku", "description": "Kirjauksista julkaistu ravintokooste. Puuttuvat päivät säilyvät puuttuvina.", "data_class": "private", "icon": "leaf"},
     {"id": "unicafe", "name": "UniCafe", "description": "Päivätty ruokalista, valitut kriteerit ja alkuperäinen lähde.", "data_class": "public", "icon": "food"},
@@ -516,12 +516,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tyot = kehitys.lue_kehitystyot(juuri, omistajat=omistajat) if juuri is not None else None
         historia = kehitys.lue_kayttoonotot(historia_juuri, omistaja=omistaja) if historia_juuri is not None else None
         gateway_url = settings.identity.origin if settings.identity is not None and not data["demo"] else None
-        data.update(tyot=tyot, lahde=juuri is not None, historia=historia, ehdotukset=yoajon_ehdotukset(data),
+        # Pala 1b: Eliaksen toiveet ja Ilmarin omat työt omiin listoihinsa (lukija rajaa kumpaakin erikseen)
+        eliaksen = [t for t in tyot if not t.ilmarin] if tyot is not None else None
+        ilmarin = [t for t in tyot if t.ilmarin] if tyot is not None else None
+        data.update(tyot=eliaksen, ilmarin_tyot=ilmarin, lahde=juuri is not None, historia=historia,
+                    ehdotukset=yoajon_ehdotukset(data),
                     gateway=lambda polku: gateway_polku(polku, data["demo"]), gateway_url=gateway_url,
                     lahteet=kehitys.LAHTEET, malli=mallin_tila(request), toive=request.query_params.get("toive", "")[:4000],
                     claude_code_url="https://claude.ai/code")
         response = templates.TemplateResponse(request=request, name="develop.html", context=data)
-        if tyot and any(t.meta.get("tila") not in kehitys.LOPULLISET for t in tyot[:5]):
+        if tyot and any(t.meta.get("tila") not in kehitys.LOPULLISET for t in eliaksen[:5] + ilmarin[:5]):
             response.headers["Refresh"] = "15"
         return response
 
