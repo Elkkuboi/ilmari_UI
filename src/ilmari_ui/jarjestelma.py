@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .dokumentit import _json, _kelpaa
-from .peruskirja import ReadFailure, RunReader, _lue
+from .lukija import Hakemisto, ReadFailure, _lue
 
 OLETUS = Path("/srv/aiops/ilmari/jarjestelma")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "jarjestelma"
@@ -112,24 +112,24 @@ def lue_jarjestelma(root: str | Path, *, omistajat: frozenset[int] | None = None
                     now: datetime | None = None) -> Jarjestelma:
     """omistajat=None vain kehitys- ja esimerkkitilassa; tuotannossa dispatcher (aiops-run) ja root."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return Jarjestelma("error", "Mittareiden polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             if omistajat is not None and os.fstat(hd).st_uid not in omistajat:
-                raise ReadFailure("wrong_owner", "Mittareita ei ole julkaissut dispatcher.")
+                raise ReadFailure("wrong_owner", "Mittareiden omistaja on väärä.")
             tiedot = os.stat(TIEDOSTO, dir_fd=hd, follow_symlinks=False)
             if omistajat is not None and tiedot.st_uid not in omistajat:
-                raise ReadFailure("wrong_owner", "Mittareita ei ole julkaissut dispatcher.")
+                raise ReadFailure("wrong_owner", "Mittareiden omistaja on väärä.")
             data = _lue(hd, TIEDOSTO, tiedot.st_uid if omistajat is not None else None, deadline, RAJA)
         return _tarkista(_json(data), now or datetime.now(UTC))
     except FileNotFoundError:
-        return Jarjestelma("not_published", "Dispatcher ei ole vielä julkaissut mittareita.")
+        return Jarjestelma("not_published", "Mittareita ei ole vielä.")
     except ReadFailure as error:
         if error.code == "not_found":
-            return Jarjestelma("not_published", "Dispatcher ei ole vielä julkaissut mittareita.")
+            return Jarjestelma("not_published", "Mittareita ei ole vielä.")
         return Jarjestelma("error", error.message)
     except OSError as error:
         return Jarjestelma("error", f"Mittareita ei voi lukea ({error.strerror}).")

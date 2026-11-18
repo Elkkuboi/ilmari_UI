@@ -9,8 +9,6 @@ väärentämät arvot ja poisti asiakkaan Tailscale-Funnel-Request-otsakkeen, mu
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
@@ -21,29 +19,20 @@ from ilmari_ui.config import parse_config
 
 RP = "tyoasema.taild1a5b7.ts.net"
 LOGIN = "Elkkuboi@github"
-RUN_ID = "20261013-235929-yo-q6"
 SERVE = {"x-forwarded-host": RP, "tailscale-user-login": LOGIN, "x-forwarded-proto": "https",
          "x-forwarded-for": "100.67.5.28"}
 
 
 @pytest.fixture
-def publication(tmp_path_factory) -> Path:
-    root = tmp_path_factory.mktemp("julkaisu") / "ajot"  # ASCII-polku: konfiguraatio hyväksyy vain nimimerkit
-    run = root / RUN_ID
-    run.mkdir(parents=True)
-    (run / "meta.json").write_text(json.dumps({"alku": "2026-10-13T23:59:29", "malli": "q6"}), encoding="utf-8")
-    (run / "raportti.md").write_text("# Ilmari: yöluenta\nRiippumaton tuotantotestin raportti.\n", encoding="utf-8")
-    return root
-
-
-@pytest.fixture
-def config(publication: Path):
-    return parse_config({"hub": {"rp_id": RP, "julkaisut": str(publication), "kayttajat": {LOGIN: "elias"}}})
+def config(tmp_path_factory):
+    # julkaisut-avain hyväksytään yhä (tuotannon hub.toml on rootin), vaikka ajoja ei enää näytetä
+    julkaisut = tmp_path_factory.mktemp("julkaisu") / "ajot"  # ASCII-polku: konfiguraatio hyväksyy vain nimimerkit
+    return parse_config({"hub": {"rp_id": RP, "julkaisut": str(julkaisut), "kayttajat": {LOGIN: "elias"}}})
 
 
 @pytest.fixture
 def client(config):
-    settings = Settings(runs_dir=config.runs_dir, identity=config)
+    settings = Settings(identity=config)
     with TestClient(create_app(settings), base_url="http://localhost", client=None) as c:
         yield c
 
@@ -117,7 +106,7 @@ def test_toistettu_otsake_hylataan(client, nimi, arvo, odotettu):
 
 
 def test_tcp_asiakas_hylataan_vaikka_otsakkeet_ovat_oikeat(config):
-    settings = Settings(runs_dir=config.runs_dir, identity=config)
+    settings = Settings(identity=config)
     with TestClient(create_app(settings), base_url="http://localhost") as tcp:  # oletusasiakas = TCP-osoite
         assert tcp.get("/", headers=SERVE).status_code == 403
 
@@ -132,44 +121,68 @@ def test_hylkays_ei_heijasta_syotetta(client):
 # --------------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("serven_polku,otsikko", [
-    ("/", "Koti"),
-    ("/ajot", "Ajot ja raportit"),
-    (f"/ajot/{RUN_ID}", "Ajon raportti"),
-    ("/hyvaksynnat", "Hyväksynnät"),
-    ("/asetukset", "Asetukset ja ulkoasu"),
+    ("/", "Nyt"),
+    ("/keskustelu", "Keskustelu"),
+    ("/kehita", "Työt"),
+    ("/asetukset", "Asetukset"),
+    ("/dokumentit", "Dokumentit"),
 ])
 def test_serven_polku_ohjautuu_hubin_sivulle(client, serven_polku, otsikko):
     vastaus = get(client, serven_polku)
     assert vastaus.status_code == 200
-    assert BeautifulSoup(vastaus.text, "html.parser").title.text == f"{otsikko} · Ilmari Hub"
+    assert BeautifulSoup(vastaus.text, "html.parser").title.text == f"{otsikko} · Ilmari"
 
 
-def test_ajon_raportti_luetaan_julkaisusta(client):
-    assert "Riippumaton tuotantotestin raportti." in get(client, f"/ajot/{RUN_ID}").text
+@pytest.mark.parametrize("serven_polku,kohde", [
+    ("/ilmari", "/hub"),
+    ("/ilmari?toihin=rajatesti", "/hub?toihin=rajatesti"),   # gateway palaa tänne, kun Töihin nyt ajaa rajatestin
+    ("/mallit", "/hub/asetukset"),                           # gateway palaa tänne profiilin ja roolin vaihdon jälkeen
+    ("/jarjestelma", "/hub/asetukset"),
+    ("/saannot", "/hub/dokumentit"),
+    ("/ajot", "/hub"), ("/ajot/20261013-235929-yo-q6", "/hub"), ("/hyvaksynnat", "/hub"), ("/sovellukset", "/hub"),
+    ("/sovellukset/hahmo", "/hub"), ("/ideat", "/hub"),
+])
+def test_vanhat_osoitteet_ohjataan_selaimen_osoitteeseen(client, serven_polku, kohde):
+    """Ohjaus selaimen näkemään osoitteeseen (etuliite /hub mukana), kysely säilyy, turvaotsakkeet ovat mukana."""
+    vastaus = get(client, serven_polku)
+    assert vastaus.status_code == 307 and vastaus.headers["location"] == kohde
+    assert "script-src 'none'" in vastaus.headers["content-security-policy"]
+
+
+def test_vanha_osoite_ohjataan_vain_vartijan_lapi(client):
+    """Kielletty suunta: ohjaus ei ohita vartijaa (väärä tunnus, POST)."""
+    assert get(client, "/ilmari", SERVE | {"tailscale-user-login": "muu@example.com"}).status_code == 403
+    assert get(client, "/ilmari", method="POST").status_code == 405
 
 
 def test_staattinen_tiedosto_etuliitteen_kautta(client):
     vastaus = get(client, "/static/app.css")
     assert vastaus.status_code == 200 and vastaus.headers["content-type"].startswith("text/css")
     assert get(client, "/static/app.css", method="HEAD").status_code == 200  # vartija päästää HEADin
+    fontti = get(client, "/static/fonts/IBMPlexMono-Regular.woff2")
+    assert fontti.status_code == 200 and fontti.headers["content-type"] == "font/woff2"
+    assert fontti.content[:4] == b"wOF2" and "font-src 'self'" in fontti.headers["content-security-policy"]
 
 
 def test_etuliite_ei_tuplaannu(client):
-    assert get(client, "/hub/ajot").status_code == 404  # selaimen osoite olisi /hub/hub/ajot
+    assert get(client, "/hub/kehita").status_code == 404  # selaimen osoite olisi /hub/hub/kehita
 
 
 @pytest.mark.parametrize("otsakkeet", [SERVE, SERVE | {"x-forwarded-prefix": "/muu"}])
-def test_kaikki_sisaiset_linkit_osoittavat_hubiin(client, otsakkeet):
-    sivu = BeautifulSoup(get(client, "/", otsakkeet).text, "html.parser")
+@pytest.mark.parametrize("polku", ["/", "/keskustelu", "/kehita", "/asetukset", "/dokumentit"])
+def test_kaikki_sisaiset_linkit_osoittavat_hubiin(client, otsakkeet, polku):
+    sivu = BeautifulSoup(get(client, polku, otsakkeet).text, "html.parser")
     osoitteet = [t.get("href") or t.get("action") or t.get("src") for t in sivu.select("[href], [action], [src]")]
     sisaiset = [o for o in osoitteet if o and o.startswith("/")]
-    assert sisaiset and all(o == "/hub" or o.startswith(("/hub/", "/hub?")) for o in sisaiset), sisaiset
+    assert sisaiset and all(o == "/hub" or o.startswith(("/hub/", "/hub?", "/hub#")) for o in sisaiset), sisaiset
     assert not any("/muu" in o for o in sisaiset)
+    ulkoiset = [o for o in osoitteet if o and o.startswith("http")]
+    assert all(o.startswith((f"https://{RP}/", f"https://{RP}:8443/", f"https://{RP}:8444/")) for o in ulkoiset), ulkoiset
 
 
 def test_tuotantotila_nayttaa_tyoaseman_eika_kehitysymparistoa(client):
     teksti = get(client, "/").text
-    assert "Työasema" in teksti and "Kehitysympäristö" not in teksti and "KEHITYSYMPÄRISTÖ" not in teksti
+    assert "työasema" in teksti and "kehitysympäristö" not in teksti and "Esimerkkitila" not in teksti
 
 
 # --------------------------------------------------------------------------------------------------
@@ -180,7 +193,9 @@ def test_tuotantotila_nayttaa_tyoaseman_eika_kehitysymparistoa(client):
     ("/", SERVE, "GET", 200),
     ("/static/app.css", SERVE, "GET", 200),
     ("/ei-ole", SERVE, "GET", 404),
-    (f"/ajot/{RUN_ID[:-1]}x", SERVE, "GET", 404),
+    ("/kehita/abc", SERVE, "GET", 404),
+    ("/ilmari", SERVE, "GET", 307),
+    ("/static/fonts/IBMPlexMono-Regular.woff2", SERVE, "GET", 200),
     ("/", SERVE, "POST", 405),
     ("/", _ilman("tailscale-user-login"), "GET", 403),
     ("/", SERVE | {"x-forwarded-host": "paha.example"}, "GET", 421),
@@ -198,7 +213,7 @@ def test_turvaotsakkeet_kaikissa_vastauksissa(client, polku, otsakkeet, metodi, 
 
 
 def test_sivuilla_ei_ole_skripteja_eika_tapahtumakasittelijoita(client):
-    for polku in ("/", "/ajot", f"/ajot/{RUN_ID}", "/asetukset"):
+    for polku in ("/", "/keskustelu", "/kehita", "/asetukset", "/dokumentit", "/ei-ole"):
         sivu = BeautifulSoup(get(client, polku).text, "html.parser")
         assert not sivu.find_all("script")
         assert not [a for t in sivu.find_all(True) for a in t.attrs if a.lower().startswith("on")]
@@ -208,8 +223,8 @@ def test_sivuilla_ei_ole_skripteja_eika_tapahtumakasittelijoita(client):
 # Tilojen erottelu
 # --------------------------------------------------------------------------------------------------
 
-def test_kehitystila_ei_hyvaksy_tuotannon_otsakkeita(publication):
-    with TestClient(create_app(Settings(runs_dir=publication)), base_url="http://localhost", client=None) as dev:
+def test_kehitystila_ei_hyvaksy_tuotannon_otsakkeita():
+    with TestClient(create_app(Settings()), base_url="http://localhost", client=None) as dev:
         assert dev.get("/hub", headers=SERVE).status_code == 403  # kehitystila vaatii Host ilmari.local
 
 
@@ -217,15 +232,12 @@ def test_tuotantotila_ei_hyvaksy_kehitystilan_hostia(client):
     assert get(client, "/", {"host": "ilmari.local"}).status_code == 421
 
 
-def test_esimerkkitila_ja_vieras_julkaisujuuri_estetaan_tuotannossa(config, tmp_path):
+def test_esimerkkitila_estetaan_tuotannossa(config):
     with pytest.raises(ValueError, match="Esimerkkitila"):
-        Settings(runs_dir=config.runs_dir, identity=config, demo_enabled=True)
-    with pytest.raises(ValueError, match="konfiguraatiosta"):
-        Settings(runs_dir=tmp_path, identity=config)
-    with pytest.raises(ValueError, match="konfiguraatiosta"):
-        Settings(identity=config)
+        Settings(identity=config, demo_enabled=True)
+    assert Settings(identity=config).identity is config and Settings(demo_enabled=True).identity is None
 
 
 def test_esimerkkidata_ei_nay_tuotannossa(client):
     vastaus = get(client, "/?demo=1")
-    assert vastaus.status_code == 200 and "DEMO – ESIMERKKIDATA" not in vastaus.text
+    assert vastaus.status_code == 200 and "Esimerkkitila" not in vastaus.text and "Aamuraportti 19.11." not in vastaus.text

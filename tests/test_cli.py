@@ -72,12 +72,11 @@ def test_launcher_default_is_private_unix_and_demo_disabled(monkeypatch, private
     assert observed["config"].access_log is False
     assert not (private_directory / ".runtime" / "hub.sock").exists()
     client = TestClient(observed["config"].app, base_url="http://ilmari.local", client=None)
-    assert "DEMO – ESIMERKKIDATA" not in client.get("/hub?demo=1").text
+    assert "Esimerkkitila" not in client.get("/hub?demo=1").text
 
 
-def test_explicit_socket_demo_and_run_directory_are_passed_without_tcp(monkeypatch, private_directory):
+def test_explicit_socket_and_demo_are_passed_without_tcp(monkeypatch, private_directory):
     address = private_directory / "hub.sock"
-    publication = private_directory / "published-runs"
     captured = {}
 
     class ProbeServer:
@@ -89,9 +88,9 @@ def test_explicit_socket_demo_and_run_directory_are_passed_without_tcp(monkeypat
             assert sockets[0].getsockname() == str(address)
 
     monkeypatch.setattr(cli.uvicorn, "Server", ProbeServer)
-    run_main(monkeypatch, "--socket", str(address), "--demo", "--runs-dir", str(publication))
+    run_main(monkeypatch, "--socket", str(address), "--demo")
     client = TestClient(captured["config"].app, base_url="http://ilmari.local", client=None)
-    assert "DEMO – ESIMERKKIDATA" in client.get("/hub?demo=1").text
+    assert "Esimerkkitila" in client.get("/hub?demo=1").text
     assert not address.exists()
 
 
@@ -170,12 +169,14 @@ def test_overlong_socket_path_is_rejected_before_creating_directories(monkeypatc
     assert not folder.exists()
 
 
-@pytest.mark.parametrize("publication", ["relative-publication", "/", "/tmp/../publication"])
-def test_invalid_publication_root_is_refused_before_creating_a_socket(monkeypatch, private_directory, publication):
+@pytest.mark.parametrize("removed", [("--runs-dir", "/srv/aiops/ilmari/ajot"), ("--peruskirja-dir", "/tmp/x"),
+                                     ("--runs-dir", "relative-publication")])
+def test_removed_source_options_are_refused_before_creating_a_socket(monkeypatch, private_directory, removed):
+    """Hub juureksi (18.11.2026): tietolähteet ovat kiinteitä polkuja; ajojen ja peruskirjan valitsimet poistettiin."""
     socket_dir = private_directory / "runtime"
     address = socket_dir / "hub.sock"
     with pytest.raises(SystemExit) as failure:
-        run_main(monkeypatch, "--socket", str(address), "--runs-dir", publication)
+        run_main(monkeypatch, "--socket", str(address), *removed)
     assert failure.value.code == 2
     assert not address.exists()
     assert not socket_dir.exists()
@@ -235,7 +236,7 @@ def test_real_server_sigterm_cleans_socket_and_allows_restart(private_directory)
                     last_error = type(error).__name__
                 else:
                     assert response.status_code == 200
-                    assert "DEMO – ESIMERKKIDATA" in response.text
+                    assert "Esimerkkitila" in response.text
                     assert stat.S_ISSOCK(address.stat().st_mode)
                     assert stat.S_IMODE(address.stat().st_mode) == 0o600
                     return
@@ -297,15 +298,15 @@ def test_production_config_enables_identity_and_prefix(monkeypatch, private_dire
     app = captured["config"].app
     serve = {"x-forwarded-host": "tyoasema.taild1a5b7.ts.net", "tailscale-user-login": "Elkkuboi@github"}
     with TestClient(app, base_url="http://localhost", client=None) as client:
-        assert client.get("/ajot", headers=serve).status_code == 200            # Serven polku ilman /hub-etuliitettä
-        assert client.get("/ajot", headers={**serve, "tailscale-user-login": "muu@github"}).status_code == 403
+        assert client.get("/kehita", headers=serve).status_code == 200          # Serven polku ilman /hub-etuliitettä
+        assert client.get("/kehita", headers={**serve, "tailscale-user-login": "muu@github"}).status_code == 403
         assert client.get("/hub", headers={"host": "ilmari.local"}).status_code == 421   # kehitystila ei ole päällä
     assert not address.exists()
 
 
 @pytest.mark.parametrize("extra", [("--demo",), ("--runs-dir", "/srv/aiops/ilmari/ajot"),
                                    ("--peruskirja-dir", "/srv/aiops/ilmari/peruskirja")])
-def test_production_config_refuses_demo_and_runs_dir(monkeypatch, private_directory, extra):
+def test_production_config_refuses_demo_and_removed_options(monkeypatch, private_directory, extra):
     socket_dir = private_directory / "runtime"
     config = _hub_toml(private_directory, private_directory / "ajot")
     with pytest.raises(SystemExit) as failure:

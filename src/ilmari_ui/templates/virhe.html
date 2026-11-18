@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block sisalto %}
+<section aria-labelledby="h-virhe">
+  <h1 id="h-virhe" class="label">{{ otsikko }} <span class="aside">{{ koodi }}</span></h1>
+  <p>{{ viesti }}</p>
+  <p><a class="back" href="{{ url('/hub') }}">Nyt</a></p>
+</section>
+{% endblock %}

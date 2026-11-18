@@ -168,8 +168,11 @@ def test_ristiriitainen_historia_ei_nay(tmp_path, muutos):
 
 def test_esimerkkiaineisto_kelpaa():
     tyot = lue_kehitystyot(ESIMERKKI)
-    assert [t.tyo for t in tyot] == [43, 42, 41, 40] and all(t.virheet == () for t in tyot)  # 43: Ilmarin oma (18.11.)
+    assert [t.tyo for t in tyot] == [98, 43, 42, 41, 40] and all(t.virheet == () for t in tyot)  # 43: Ilmarin oma (18.11.)
     assert lue_kehitystyo(ESIMERKKI, 41).vaihe == ("Otettu käyttöön", "success")
+    # Hubin juuri (18.11.): esimerkissä yksi Ilmarin työ odottaa Eliaksen hyväksyntää ("Odottaa sinua")
+    assert [(t.tyo, t.tagi) for t in tyot] == [(98, ("hyväksy", "warn")), (43, ("valmis", "ok")), (42, ("käynnissä", "")),
+                                               (41, ("käytössä", "ok")), (40, ("hylätty", ""))]
     assert lue_kayttoonotot(ESIMERKKI_KAYTTOONOTOT, omistaja=None).tila == "ready"
 
 
@@ -346,3 +349,38 @@ def test_selaus_on_rajattu(tmp_path, monkeypatch):
     monkeypatch.setattr(kehitys, "time", types.SimpleNamespace(monotonic=lambda: oikea() + next(lisa)))
     tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
     assert [t.tyo for t in tyot] == list(range(61, 11, -1)) and all(t.virheet == () for t in tyot)
+
+
+# --- Hub juureksi (18.11.2026): lyhyt tila listan riville ja "Odottaa sinua" --------------------------------------------
+
+@pytest.mark.parametrize("lisat,odotettu", [
+    ({}, ("hyväksy", "warn")),                                                         # valmis haara, ei päätöstä
+    ({"paatos": {"paatos": "hyvaksytty"}}, ("hyväksytty", "")),                        # yhdistys kesken
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "yhdistetty"}}, ("ota käyttöön", "warn")),
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}}, ("sulje käsin", "stop")),
+    ({"paatos": {"paatos": "hyvaksytty"}, "yhdistys": {"tila": "ristiriita"}, "sulku": {"viesti": "PR #8"}},
+     ("suljettu käsin", "")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"}},
+     ("käyttöönotto kesken", "")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"},
+      "kayttoonotto": {"tulos": "asennettu", "edellinen": "e" * 40}}, ("käytössä", "ok")),
+    ({"paatos": {"paatos": "hyvaksytty", "kayttoonotto_pyynto": "k"}, "yhdistys": {"tila": "yhdistetty"},
+      "kayttoonotto": {"tulos": "testit_epaonnistuivat"}}, ("käyttöönotto epäonnistui", "stop")),
+    ({"paatos": {"paatos": "hylatty"}}, ("hylätty", "")),
+])
+def test_tagi_ja_odottavat(tmp_path, lisat, odotettu):
+    julkaise(tmp_path, **lisat)
+    t = lue_kehitystyo(tmp_path, 41, omistajat=OMAT)
+    assert t.tagi == odotettu
+    from ilmari_ui.kehitys import ODOTTAVAT
+    assert (t.tagi[0] in ODOTTAVAT) is (odotettu[0] in ("hyväksy", "ota käyttöön", "sulje käsin"))
+
+
+def test_tagi_keskeneraiselle_ja_tyotilalle(tmp_path):
+    julkaise(tmp_path / "a", m=meta(tila="running"))
+    assert lue_kehitystyo(tmp_path / "a", 41, omistajat=OMAT).tagi == ("käynnissä", "")
+    julkaise(tmp_path / "b", m=meta(tila="failed"))
+    assert lue_kehitystyo(tmp_path / "b", 41, omistajat=OMAT).tagi == ("epäonnistui", "stop")
+    # kielletty suunta: Ilmarin työtilan (oma) valmis työ ei odota Eliasta
+    julkaise(tmp_path / "c", m=meta(jattaja="aiops-ceo", lahde="oma"))
+    assert lue_kehitystyo(tmp_path / "c", 41, omistajat=OMAT).tagi == ("valmis", "ok")

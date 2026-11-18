@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .dokumentit import _json, _kelpaa
-from .peruskirja import ReadFailure, RunReader, _lue
+from .lukija import Hakemisto, ReadFailure, _lue
 
 OLETUS = Path("/srv/aiops/ilmari/keskustelu")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "keskustelu"
@@ -136,24 +136,24 @@ def lue_keskustelu(root: str | Path, *, omistajat: frozenset[int] | None = None,
                    timeout_seconds: float = 2.0) -> Keskustelu:
     """omistajat=None vain kehitys- ja esimerkkitilassa; tuotannossa gateway (aiops-gw) ja root."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return Keskustelu("error", "Keskustelun polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             if omistajat is not None and os.fstat(hd).st_uid not in omistajat:
-                raise ReadFailure("wrong_owner", "Keskustelun julkaisua ei ole tehnyt gateway.")
+                raise ReadFailure("wrong_owner", "Keskustelun omistaja on väärä.")
             tiedot = os.stat(TIEDOSTO, dir_fd=hd, follow_symlinks=False)
             if omistajat is not None and tiedot.st_uid not in omistajat:
-                raise ReadFailure("wrong_owner", "Keskustelun julkaisua ei ole tehnyt gateway.")
+                raise ReadFailure("wrong_owner", "Keskustelun omistaja on väärä.")
             data = _lue(hd, TIEDOSTO, tiedot.st_uid if omistajat is not None else None, deadline, RAJA)
             keskustelu = _tarkista(_json(data))
             # Säielista on valinnainen (vanha gateway ei julkaise sitä); rikkinäinen lista ei kaada keskustelua.
             try:
                 tiedot = os.stat(SAIKEET_TIEDOSTO, dir_fd=hd, follow_symlinks=False)
                 if omistajat is not None and tiedot.st_uid not in omistajat:
-                    raise ReadFailure("wrong_owner", "Säielistan julkaisua ei ole tehnyt gateway.")
+                    raise ReadFailure("wrong_owner", "Säielistan omistaja on väärä.")
                 lista = _lue(hd, SAIKEET_TIEDOSTO, tiedot.st_uid if omistajat is not None else None, deadline, RAJA)
                 saikeet, aktiivinen = _tarkista_saikeet(_json(lista))
             except FileNotFoundError:
@@ -167,10 +167,10 @@ def lue_keskustelu(root: str | Path, *, omistajat: frozenset[int] | None = None,
         return Keskustelu(keskustelu.tila, None, keskustelu.paivitetty, keskustelu.viimeisin, keskustelu.malli,
                           keskustelu.viestit, keskustelu.saie, saikeet, aktiivinen)
     except FileNotFoundError:
-        return Keskustelu("not_published", "Gateway ei ole vielä julkaissut keskustelua.")
+        return Keskustelu("not_published", "Keskustelua ei ole vielä.")
     except ReadFailure as error:
         if error.code == "not_found":
-            return Keskustelu("not_published", "Gateway ei ole vielä julkaissut keskustelua.")
+            return Keskustelu("not_published", "Keskustelua ei ole vielä.")
         return Keskustelu("error", error.message)
     except OSError as error:
         return Keskustelu("error", f"Keskustelua ei voi lukea ({error.strerror}).")

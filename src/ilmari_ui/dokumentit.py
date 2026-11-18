@@ -2,10 +2,11 @@
 
 aiopsin asennus (scripts/julkaise_dokumentit.py, ajetaan deploy.sh:sta) julkaisee asennetun commitin dokumentit
 hakemistoon /srv/aiops/ilmari/dokumentit kahtena tiedostona: dokumentit.json ja meta.json (muoto aiops-dokumentit-v1).
-Lukija noudattaa peruskirjan sääntöjä ja käyttää sen tiedostonlukijaa: hakemisto ja tiedostot ovat rootin, tiedostot
-luetaan linkkejä seuraamatta ja aikarajan sisällä, ja dokumentit näytetään vain, jos dokumentit.json:n SHA-256 ja koko
-ovat meta.json:n arvot. Jokaisen dokumentin kentät ja teksti tarkistetaan uudelleen (sama merkkirajaus kuin
-peruskirjassa). Teksti piirretään peruskirjan rajatulla Markdownilla (jasenna) ilman raakaa HTML:ää.
+Lukija käyttää yhteistä turvallista lukijaa (lukija.py): hakemisto ja tiedostot ovat rootin, tiedostot luetaan
+linkkejä seuraamatta ja aikarajan sisällä, ja dokumentit näytetään vain, jos dokumentit.json:n SHA-256 ja koko ovat
+meta.json:n arvot. Jokaisen dokumentin kentät ja teksti tarkistetaan uudelleen. Teksti piirretään rajatulla
+Markdownilla (jasenna, tämän tiedoston lopussa), joka tuottaa tietorakenteen eikä HTML:ää: sivupohja koodaa jokaisen
+tekstin, joten mikään dokumentin merkki ei voi muuttua merkinnäksi. Linkit näytetään tekstinä sellaisinaan.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .peruskirja import _COMMIT, ReadFailure, RunReader, _lue, jasenna
+from .lukija import _COMMIT, Hakemisto, ReadFailure, _lue
 
 OLETUS = Path("/srv/aiops/ilmari/dokumentit")
 ESIMERKKI = Path(__file__).resolve().parent / "demo" / "dokumentit"
@@ -36,16 +37,18 @@ RYHMAT = (("perus", "Perusdokumentit"), ("promptit", "Ilmarin promptit"), ("adr"
           ("valmistelu", "Valmistelu"), ("historia", "Historia"), ("audit", "Auditointi"))
 MAARA_MAX = 300
 TEKSTI_MAX = 256 * 1024
+LOHKORAJA = 4000
+SARAKERAJA = 12
 HAKU_MAX = 100
 OSUMIA_MAX = 50
 _TUNNISTE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}\Z")
 _POLKU = re.compile(r"docs/[A-Za-z0-9._/-]{1,200}\.md\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 VIESTIT = {
-    "wrong_owner": "Dokumenttien julkaisua ei ole tehnyt asennus (omistaja ei ole root).",
-    "too_large": "Julkaistut dokumentit ylittävät lukurajan.",
-    "changed": "Julkaisu muuttui lukemisen aikana. Yritä uudelleen.",
-    "unsafe_file": "Julkaisun tiedostotyyppi tai linkitys ei ole sallittu.",
+    "wrong_owner": "Dokumentit eivät ole asennuksen tekemiä (omistaja ei ole root).",
+    "too_large": "Dokumentit ylittävät lukurajan.",
+    "changed": "Dokumentit muuttuivat lukemisen aikana. Yritä uudelleen.",
+    "unsafe_file": "Tiedostotyyppi tai linkitys ei ole sallittu.",
     "timeout": "Dokumenttien lukuaikaraja ylittyi.",
 }
 
@@ -76,26 +79,26 @@ def _ei_toistoja(parit: list[tuple[str, Any]]) -> dict[str, Any]:
     tulos: dict[str, Any] = {}
     for avain, arvo in parit:
         if avain in tulos:
-            _virhe("Julkaisun JSON-objektissa on sama kenttä kahdesti.")
+            _virhe("JSON-objektissa on sama kenttä kahdesti.")
         tulos[avain] = arvo
     return tulos
 
 
 def _ei_vakioita(_arvo: str) -> None:
-    _virhe("Julkaisun JSON sisältää kielletyn vakion.")
+    _virhe("JSON sisältää kielletyn vakion.")
 
 
 def _json(raaka: bytes) -> Any:
     try:
         teksti = raaka.decode("utf-8")
     except UnicodeDecodeError:
-        _virhe("Julkaisu ei ole UTF-8-muodossa.")
+        _virhe("Tiedosto ei ole UTF-8-muodossa.")
     try:
         return json.loads(teksti, object_pairs_hook=_ei_toistoja, parse_constant=_ei_vakioita)
     except ReadFailure:
         raise
     except ValueError:
-        _virhe("Julkaisu ei ole kelvollista JSONia.")
+        _virhe("Tiedosto ei ole kelvollista JSONia.")
 
 
 def _tarkista_meta(meta: Any, data: bytes) -> None:
@@ -104,19 +107,19 @@ def _tarkista_meta(meta: Any, data: bytes) -> None:
     if meta["muoto"] != MUOTO:
         _virhe("meta.json on tuntematonta muotoa.")
     if type(meta["commit"]) is not str or _COMMIT.fullmatch(meta["commit"]) is None:
-        _virhe("Julkaisun commit ei ole täysi tiiviste.")
+        _virhe("Commit ei ole täysi tiiviste.")
     if type(meta["sha256"]) is not str or _SHA256.fullmatch(meta["sha256"]) is None:
-        _virhe("Julkaisun tiiviste ei ole SHA-256.")
+        _virhe("Tiiviste ei ole SHA-256.")
     if type(meta["koko"]) is not int or type(meta["maara"]) is not int:
-        _virhe("Julkaisun koko tai määrä ei ole kokonaisluku.")
+        _virhe("Koko tai määrä ei ole kokonaisluku.")
     try:
         aika = datetime.fromisoformat(meta["julkaistu"]) if type(meta["julkaistu"]) is str else None
     except ValueError:
         aika = None
     if aika is None or aika.tzinfo is None:
-        _virhe("Julkaisuaika ei ole aikavyöhykkeellinen ISO-aika.")
+        _virhe("Aika ei ole aikavyöhykkeellinen ISO-aika.")
     if meta["koko"] != len(data) or meta["sha256"] != hashlib.sha256(data).hexdigest():
-        _virhe("Julkaisu on kesken tai ristiriitainen (tiiviste ei täsmää).")
+        _virhe("Tiedosto on kesken tai ristiriitainen (tiiviste ei täsmää).")
 
 
 def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[dict[str, str], ...]:
@@ -126,7 +129,7 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[dict[str, str
         _virhe("dokumentit.json ei vastaa meta.json:ia.")
     lista = sisalto["dokumentit"]
     if type(lista) is not list or not 0 < len(lista) <= MAARA_MAX or len(lista) != meta["maara"]:
-        _virhe("Dokumenttien määrä ei vastaa julkaisua.")
+        _virhe("Dokumenttien määrä ei vastaa meta.json:ia.")
     ryhmat = {avain for avain, _ in RYHMAT}
     nahty: set[str] = set()
     tulos: list[dict[str, str]] = []
@@ -150,14 +153,14 @@ def _tarkista_sisalto(sisalto: Any, meta: dict[str, Any]) -> tuple[dict[str, str
 
 
 def lue_dokumentit(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: float = 2.0) -> Dokumentit:
-    """Lukee julkaistut dokumentit. omistaja=None vain kehitys- ja esimerkkitilassa."""
+    """Lukee asennetut dokumentit. omistaja=None vain kehitys- ja esimerkkitilassa."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return Dokumentit("error", "Dokumenttien polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             if omistaja is not None and os.fstat(hd).st_uid != omistaja:
                 raise ReadFailure("wrong_owner", VIESTIT["wrong_owner"])
             data = _lue(hd, DATA, omistaja, deadline, RAJA_DATA)
@@ -168,12 +171,12 @@ def lue_dokumentit(root: str | Path, *, omistaja: int | None = 0, timeout_second
         return Dokumentit("ready", None, meta, dokumentit)
     except ReadFailure as error:
         if error.code == "not_found":
-            return Dokumentit("not_published", "Dokumentteja ei ole julkaistu. aiopsin asennus (deploy.sh) julkaisee ne.")
+            return Dokumentit("not_published", "Dokumentteja ei ole vielä asennettu.")
         return Dokumentit("error", VIESTIT.get(error.code, error.message))
 
 
 def piirrettava(dokumentti: dict[str, str]) -> tuple[tuple[dict[str, Any], ...] | None, str | None]:
-    """Rajatun Markdownin lohkot (peruskirjan jasenna) tai virheilmoitus."""
+    """Rajatun Markdownin lohkot (jasenna) tai virheilmoitus."""
     try:
         return jasenna(dokumentti["teksti"]), None
     except ReadFailure as error:
@@ -214,3 +217,168 @@ def hae(kokoelma: Dokumentit, kysely: str) -> list[dict[str, Any]]:
                        "ote": ote})
     osumat.sort(key=lambda o: -o["osumia"])
     return osumat[:OSUMIA_MAX]
+
+
+# --------------------------------------------------------------------------------------------------
+# Rajattu Markdown
+# --------------------------------------------------------------------------------------------------
+
+_OTSIKKO = re.compile(r"(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*\Z")
+_VIIVA = re.compile(r"(?:-[ \t]*){3,}\Z|(?:\*[ \t]*){3,}\Z|(?:_[ \t]*){3,}\Z")
+_LUETTELO = re.compile(r"([ \t]*)([-*+])[ \t]+(.*)\Z")
+_NUMERO = re.compile(r"([ \t]*)([0-9]{1,9})[.)][ \t]+(.*)\Z")
+_EROTIN = re.compile(r"\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*\Z")
+
+
+def osat(teksti: str) -> tuple[tuple[str, str], ...]:
+    """Tekstinsisäiset osat: ("teksti"|"lihava"|"koodi", merkkijono). Pariton merkki jää tekstiksi."""
+    tulos: list[tuple[str, str]] = []
+    puskuri: list[str] = []
+    i = 0
+
+    def tyhjenna() -> None:
+        if puskuri:
+            tulos.append(("teksti", "".join(puskuri)))
+            puskuri.clear()
+
+    while i < len(teksti):
+        if teksti[i] == "`":
+            j = teksti.find("`", i + 1)
+            if j > i + 1:
+                tyhjenna()
+                tulos.append(("koodi", teksti[i + 1:j]))
+                i = j + 1
+                continue
+        if teksti.startswith("**", i):
+            j = teksti.find("**", i + 2)
+            if j > i + 2:
+                tyhjenna()
+                tulos.append(("lihava", teksti[i + 2:j]))
+                i = j + 2
+                continue
+        puskuri.append(teksti[i])
+        i += 1
+    tyhjenna()
+    return tuple(tulos)
+
+
+def _solut(rivi: str) -> list[str]:
+    rivi = rivi.strip()
+    if rivi.startswith("|"):
+        rivi = rivi[1:]
+    if rivi.endswith("|"):
+        rivi = rivi[:-1]
+    return [solu.strip() for solu in rivi.split("|")][:SARAKERAJA]
+
+
+def _sisennys(alku: str) -> int:
+    return 1 if len(alku.expandtabs(4)) >= 2 else 0
+
+
+def jasenna(teksti: str) -> tuple[dict[str, Any], ...]:
+    rivit = teksti.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    lohkot: list[dict[str, Any]] = []
+    kappale: list[str] = []
+    i, n = 0, len(rivit)
+
+    def lisaa(lohko: dict[str, Any]) -> None:
+        if len(lohkot) >= LOHKORAJA:
+            raise ReadFailure("too_large", "Dokumentissa on liikaa lohkoja.")
+        lohkot.append(lohko)
+
+    def tyhjenna() -> None:
+        if kappale:
+            lisaa({"tyyppi": "kappale", "osat": osat(" ".join(kappale))})
+            kappale.clear()
+
+    while i < n:
+        rivi = rivit[i]
+        riisuttu = rivi.strip()
+        if riisuttu.startswith("```"):
+            tyhjenna()
+            koodi: list[str] = []
+            i += 1
+            while i < n and not rivit[i].strip().startswith("```"):
+                koodi.append(rivit[i])
+                i += 1
+            i += 1  # sulkeva aita (tai tiedoston loppu)
+            lisaa({"tyyppi": "koodi", "teksti": "\n".join(koodi)})
+            continue
+        if not riisuttu:
+            tyhjenna()
+            i += 1
+            continue
+        otsikko = _OTSIKKO.fullmatch(riisuttu) if not rivi[:1].isspace() else None
+        if otsikko:
+            tyhjenna()
+            lisaa({"tyyppi": "otsikko", "taso": len(otsikko.group(1)), "osat": osat(otsikko.group(2))})
+            i += 1
+            continue
+        if _VIIVA.fullmatch(riisuttu):
+            tyhjenna()
+            lisaa({"tyyppi": "viiva"})
+            i += 1
+            continue
+        if riisuttu.startswith("|") and i + 1 < n and _EROTIN.fullmatch(rivit[i + 1].strip()):
+            tyhjenna()
+            otsikot = _solut(riisuttu)
+            leveys = len(otsikot)
+            i += 2
+            taulu: list[tuple] = []
+            while i < n and rivit[i].strip().startswith("|"):
+                solut = (_solut(rivit[i]) + [""] * leveys)[:leveys]
+                taulu.append(tuple(osat(s) for s in solut))
+                i += 1
+            lisaa({"tyyppi": "taulukko", "otsikot": tuple(osat(s) for s in otsikot), "rivit": tuple(taulu)})
+            continue
+        if riisuttu.startswith(">"):
+            tyhjenna()
+            lainaus: list[str] = []
+            while i < n and rivit[i].strip().startswith(">"):
+                lainaus.append(rivit[i].strip()[1:].strip())
+                i += 1
+            lisaa({"tyyppi": "lainaus", "osat": osat(" ".join(lainaus))})
+            continue
+        luettelo, numero = _LUETTELO.fullmatch(rivi), _NUMERO.fullmatch(rivi)
+        # Lista voi keskeyttää kappaleen; numeroitu vain numerolla 1 (muuten "2026. vuonna" olisi lista).
+        if luettelo or (numero and (not kappale or numero.group(2) == "1")):
+            tyhjenna()
+            jarjestetty = luettelo is None
+            sama, muu = (_NUMERO, _LUETTELO) if jarjestetty else (_LUETTELO, _NUMERO)
+            alku = int(numero.group(2)) if jarjestetty else 1
+            kohdat: list[dict[str, Any]] = []
+            nykyinen: list[str] = []
+            sisennys = 0
+            while i < n:
+                r = rivit[i]
+                if not r.strip():
+                    seuraava = sama.fullmatch(rivit[i + 1]) if i + 1 < n else None
+                    if seuraava and not seuraava.group(1):  # tyhjä rivi saman listan kohtien välissä
+                        i += 1
+                        continue
+                    break
+                m_sama, m_muu = sama.fullmatch(r), muu.fullmatch(r)
+                if m_sama or (m_muu and m_muu.group(1)):
+                    m = m_sama or m_muu
+                    if nykyinen:
+                        kohdat.append({"osat": osat(" ".join(nykyinen)), "sisennys": sisennys})
+                        nykyinen = []
+                    sisennys = _sisennys(m.group(1))
+                    nykyinen.append(m.group(3).strip())
+                elif m_muu:
+                    break  # toisenlainen lista alkaa
+                elif r[:1].isspace():
+                    nykyinen.append(r.strip())  # kohdan jatkorivi
+                elif _OTSIKKO.fullmatch(r.strip()) or _VIIVA.fullmatch(r.strip()) or r.strip().startswith(("|", ">", "```")):
+                    break
+                else:
+                    nykyinen.append(r.strip())  # laiska jatkorivi
+                i += 1
+            if nykyinen:
+                kohdat.append({"osat": osat(" ".join(nykyinen)), "sisennys": sisennys})
+            lisaa({"tyyppi": "lista", "jarjestetty": jarjestetty, "alku": alku, "kohdat": tuple(kohdat)})
+            continue
+        kappale.append(riisuttu)
+        i += 1
+    tyhjenna()
+    return tuple(lohkot)

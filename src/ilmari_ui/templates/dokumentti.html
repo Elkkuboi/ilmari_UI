@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import markdown_lohkot with context %}
+{% block sisalto %}
+<a class="back" href="{{ url('/hub/dokumentit') }}">Dokumentit</a>
+<article aria-labelledby="h-dok">
+  <h1 id="h-dok" class="label">{{ dokumentti.otsikko }} <span class="aside">{{ dokumentti.polku }}{% if dokumentti.paiva %} · {{ dokumentti.paiva }}{% endif %}{% if dokumentti.tila %} · {{ dokumentti.tila }}{% endif %} · {{ kokoelma.meta.commit[:7] }}</span></h1>
+  <div class="prose">{{ markdown_lohkot(lohkot) }}</div>
+</article>
+{% endblock %}

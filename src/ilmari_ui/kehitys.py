@@ -12,7 +12,7 @@ Hub ei kirjoita mitään eikä tee toimia: Hyväksy, Ota käyttöön ja Palauta 
 tästä linkitetään (paluu=hub tuo takaisin), ja toive, muutospyyntö ja hylkäys ovat tavallisia lomakkeita, jotka
 lähetetään gatewaylle samassa alkuperässä (aiops 31.10.2026: Hub on Kehitä-polun ensisijainen näkymä).
 Käynnissä olevan työn eteneminen (meta.json `eteneminen`: kontin vaiheet ja dsh:n päättelyn alkurivit) näytetään
-sellaisenaan ilman ohjausmerkkejä; diff jaetaan tiedostoittain näyttöä varten (jaa_diff). Tiedostot luetaan peruskirjan lukijalla (linkkejä seuraamatta, kokorajat,
+sellaisenaan ilman ohjausmerkkejä; diff jaetaan tiedostoittain näyttöä varten (jaa_diff). Tiedostot luetaan yhteisellä lukijalla (lukija.py: linkkejä seuraamatta, kokorajat,
 aikaraja), JSON tiukasti (ei toistuvia kenttiä, ei vakioita) ja tekstit näytetään vain ilman ohjausmerkkejä.
 """
 
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from .dokumentit import _json, _kelpaa
-from .peruskirja import _COMMIT, ReadFailure, RunReader, _lue
+from .lukija import _COMMIT, Hakemisto, ReadFailure, _lue
 
 OLETUS = Path("/srv/aiops/ilmari/kehitys")
 OLETUS_KAYTTOONOTOT = Path("/srv/aiops/ilmari/kayttoonotot")
@@ -59,11 +59,12 @@ KAYTTOONOTOT = {"asennettu": "Otettu käyttöön", "ei_mainissa": "Ei GitHubin m
 PALAUTUKSET = {"asennettu": "Palautettu edelliseen", **{k: "Palautus: " + v.lower() for k, v in KAYTTOONOTOT.items()
                                                            if k != "asennettu"}}
 LOPULLISET = ("succeeded", "failed", "cancelled")
+ODOTTAVAT = ("hyväksy", "ota käyttöön", "sulje käsin")   # tagi: Eliaksen päätettävä (Hubin "Odottaa sinua")
 SULJETTAVAT = ("ristiriita", "virhe", "hylatty")
 ETENEMINEN_MAX = 10
 ETENEMINEN_RIVI_MAX = 200
 # Kehityslähteet (aiops ADR-0030, kehitys.LAHTEET): lomakkeen valinnat; gateway tarkistaa arvon joka tapauksessa.
-LAHTEET = (("aiops", "aiops (Ilmarin oma koodi)"), ("ravintopolku", "Ravintopolku (ravintopäiväkirja)"))
+LAHTEET = (("aiops", "Ilmari (aiops)"), ("ravintopolku", "Ravintopolku"))
 DIFF_TIEDOSTOJA_MAX = 200
 DIFF_RIVEJA_MAX = 4000
 MUOTO_KAYTTOONOTOT = "aiops-kayttoonotot-v1"
@@ -75,10 +76,10 @@ RAJA_META = 4 * 1024
 _TYO = re.compile(r"[1-9][0-9]{0,17}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 VIESTIT = {
-    "wrong_owner": "Julkaisua ei ole tehnyt gateway tai asennus (väärä omistaja).",
-    "too_large": "Julkaisu ylittää lukurajan.",
-    "changed": "Julkaisu muuttui lukemisen aikana. Yritä uudelleen.",
-    "unsafe_file": "Julkaisun tiedostotyyppi tai linkitys ei ole sallittu.",
+    "wrong_owner": "Tiedoston omistaja on väärä.",
+    "too_large": "Tiedosto ylittää lukurajan.",
+    "changed": "Tiedosto muuttui lukemisen aikana. Yritä uudelleen.",
+    "unsafe_file": "Tiedostotyyppi tai linkitys ei ole sallittu.",
     "timeout": "Lukuaikaraja ylittyi.",
 }
 
@@ -127,6 +128,42 @@ class Kehitystyo:
         if tila in ("failed", "cancelled"):
             return TILAT[tila].capitalize(), "danger"
         return TILAT.get(tila, tila or "tuntematon").capitalize(), "muted"
+
+    @property
+    def tagi(self) -> tuple[str, str]:
+        """Lyhyt tila listan riville: (teksti, sävy "ok" | "warn" | "stop" | ""). Ensin Eliaksen päätettävät
+        (ODOTTAVAT), sitten lopputulos samassa järjestyksessä kuin vaihe."""
+        toimet = self.toimet
+        if toimet["hyvaksy"]:
+            return "hyväksy", "warn"
+        if toimet["kayttoonotto"]:
+            return "ota käyttöön", "warn"
+        if toimet["sulje"]:
+            return "sulje käsin", "stop"
+        if self.sulku is not None:
+            return "suljettu käsin", ""
+        if self.palautus is not None:
+            return ("palautettu", "") if self.palautus.get("tulos") == "asennettu" else ("palautus epäonnistui", "stop")
+        if self.paatos is not None and self.paatos.get("palautus_pyynto"):
+            return "palautus kesken", ""
+        if self.kayttoonotto is not None:
+            return (("käytössä", "ok") if self.kayttoonotto.get("tulos") == "asennettu"
+                    else ("käyttöönotto epäonnistui", "stop"))
+        if self.paatos is not None and self.paatos.get("kayttoonotto_pyynto"):
+            return "käyttöönotto kesken", ""
+        if self.yhdistys is not None:
+            return ("yhdistetty", "ok") if self.yhdistys.get("tila") == "yhdistetty" else ("yhdistys epäonnistui", "stop")
+        if self.paatos is not None:
+            return ("hyväksytty", "") if self.paatos.get("paatos") == "hyvaksytty" else ("hylätty", "")
+        tila = str(self.meta.get("tila", ""))
+        if tila == "succeeded":
+            testit = (self.meta.get("tulos") or {}).get("testit")
+            if isinstance(testit, dict) and testit.get("paluukoodi") not in (0, None):
+                return "testit epäonnistuivat", "warn"
+            return "valmis", "ok"
+        if tila in ("failed", "cancelled"):
+            return TILAT[tila], "stop"
+        return TILAT.get(tila, tila or "tuntematon"), ""
 
     @property
     def kesken(self) -> bool:
@@ -321,16 +358,16 @@ def lue_kehitystyo(root: str | Path, tyo: int, *, omistajat: frozenset[int] | No
                    timeout_seconds: float = 2.0, tekstit: bool = True) -> Kehitystyo | None:
     """Yksi kehitystyö tai None, jos sitä ei ole. Rikkinäinen tiedosto näkyy virheenä, ei kaada sivua."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return None
     deadline = time.monotonic() + timeout_seconds
     virheet: list[str] = []
     try:
-        with kavelija._root_fd(deadline) as juuri_fd:
+        with kavelija.juuri(deadline) as juuri_fd:
             if omistajat is not None and os.fstat(juuri_fd).st_uid not in omistajat:
                 return None
-            with kavelija._run_fd(juuri_fd, str(tyo)) as hd:
+            with kavelija.ali(juuri_fd, str(tyo)) as hd:
                 meta = _siivoa_meta(tyo, _lue_json(hd, "meta.json", omistajat, deadline))
                 osat: dict[str, Any] = {}
                 for nimi, siivoa in (("paatos.json", _siivoa_paatos),
@@ -370,12 +407,12 @@ def lue_kehitystyot(root: str | Path, *, omistajat: frozenset[int] | None = None
     työnnä Eliaksen töitä pois listalta. Selaus päättyy, kun molemmat ovat täynnä, SELAA_MAX hakemistoa on luettu
     tai (uusimpien TOITA_MAX:n jälkeen) aikaraja ylittyy, jotta sivu ei jää odottamaan."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return None
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as juuri_fd:
+        with kavelija.juuri(deadline) as juuri_fd:
             if omistajat is not None and os.fstat(juuri_fd).st_uid not in omistajat:
                 return None
             nimet = os.listdir(juuri_fd)
@@ -453,25 +490,25 @@ def _tarkista_historia(meta: Any, data: bytes) -> tuple[dict[str, Any], tuple[di
     if not isinstance(meta, dict) or set(meta) != META_KENTAT or meta["muoto"] != MUOTO_KAYTTOONOTOT:
         _virhe("meta.json:n kentät eivät vastaa muotoa.")
     if type(meta["commit"]) is not str or (meta["commit"] and _COMMIT.fullmatch(meta["commit"]) is None):
-        _virhe("Julkaisun commit ei ole täysi tiiviste.")
+        _virhe("Commit ei ole täysi tiiviste.")
     if type(meta["sha256"]) is not str or _SHA256.fullmatch(meta["sha256"]) is None:
-        _virhe("Julkaisun tiiviste ei ole SHA-256.")
+        _virhe("Tiiviste ei ole SHA-256.")
     if type(meta["koko"]) is not int or type(meta["maara"]) is not int:
-        _virhe("Julkaisun koko tai määrä ei ole kokonaisluku.")
+        _virhe("Koko tai määrä ei ole kokonaisluku.")
     try:
         aika = datetime.fromisoformat(meta["julkaistu"]) if type(meta["julkaistu"]) is str else None
     except ValueError:
         aika = None
     if aika is None or aika.tzinfo is None:
-        _virhe("Julkaisuaika ei ole aikavyöhykkeellinen ISO-aika.")
+        _virhe("Aika ei ole aikavyöhykkeellinen ISO-aika.")
     if meta["koko"] != len(data) or meta["sha256"] != hashlib.sha256(data).hexdigest():
-        _virhe("Julkaisu on kesken tai ristiriitainen (tiiviste ei täsmää).")
+        _virhe("Tiedosto on kesken tai ristiriitainen (tiiviste ei täsmää).")
     sisalto = _json(data)
     if not isinstance(sisalto, dict) or set(sisalto) != HISTORIA_KENTAT or sisalto["muoto"] != MUOTO_KAYTTOONOTOT:
         _virhe("historia.json:n kentät eivät vastaa muotoa.")
     lista = sisalto["kayttoonotot"]
     if type(lista) is not list or len(lista) != meta["maara"] or len(lista) > 100:
-        _virhe("Käyttöönottojen määrä ei vastaa julkaisua.")
+        _virhe("Käyttöönottojen määrä ei vastaa meta.json:ia.")
     kirjaukset = []
     for k in lista:
         if type(k) is not dict or set(k) != KIRJAUS_KENTAT:
@@ -490,12 +527,12 @@ def _tarkista_historia(meta: Any, data: bytes) -> tuple[dict[str, Any], tuple[di
 def lue_kayttoonotot(root: str | Path, *, omistaja: int | None = 0, timeout_seconds: float = 2.0) -> Kayttoonotot:
     """Käyttöönottojen historia (kääre julkaisee rootina). omistaja=None vain kehitys- ja esimerkkitilassa."""
     try:
-        kavelija = RunReader(root, timeout_seconds=timeout_seconds)
+        kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
         return Kayttoonotot("error", "Käyttöönottojen polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     try:
-        with kavelija._root_fd(deadline) as hd:
+        with kavelija.juuri(deadline) as hd:
             if omistaja is not None and os.fstat(hd).st_uid != omistaja:
                 raise ReadFailure("wrong_owner", VIESTIT["wrong_owner"])
             data = _lue(hd, "historia.json", omistaja, deadline, RAJA_HISTORIA)

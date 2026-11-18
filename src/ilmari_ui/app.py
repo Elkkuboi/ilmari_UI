@@ -1,4 +1,8 @@
-"""Lukevan Hubin ASGI-sovellus.
+"""Ilmari Hub: Eliaksen ohjauspaikka ja Ilmarin tila yhdellä sivustolla, palvelinrenderöitynä ja vain lukevana.
+
+Neljä sivua: Nyt (/hub, juuri), Keskustelu, Työt ja Asetukset, sekä Dokumentit Asetusten alla. Hub lukee gatewayn ja
+asennuksen julkaisemat tiedostot; jokainen muutos on lomake, joka lähetetään gatewaylle samassa alkuperässä
+(paluu=hub), eikä Hubissa ole yhtään POST-reittiä.
 
 Palvelin toimii vain Unix-soketissa. Kehitystilassa (ei identiteettiasetusta) se hyväksyy vain Host-nimen
 ilmari.local eikä todista Tailscale-identiteettiä. Tuotantotilassa (aiops ADR-0013) Tailscale Serve ohjaa polun /hub
@@ -9,9 +13,8 @@ tuotantotilassa se palautetaan ennen reititystä.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
-import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -22,68 +25,48 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .cards import load_cards
-from . import muodot
-from .config import HubConfig
-from .dokumentit import (ESIMERKKI as DOKUMENTIT_ESIMERKKI, OLETUS as DOKUMENTIT_OLETUS, etsi as etsi_dokumentti,
-                         hae as hae_dokumentit, lue_dokumentit, piirrettava, ryhmittain)
+from . import dokumentit as dokumentit_lukija
+from . import jarjestelma as jarjestelma_lukija
 from . import kehitys
 from . import keskustelu as keskustelu_lukija
-from . import jarjestelma as jarjestelma_lukija
+from . import mallit as mallit_lukija
 from . import toiminta as toiminta_lukija
-from .mallit import (ESIMERKKI as MALLIT_ESIMERKKI, OLETUS as MALLIT_OLETUS, OLETUS_ROOLIT as MALLIT_YLIKIRJOITUS,
-                     RAM_MARGINAALI_GB, lue_mallit, lue_ylikirjoitus, vapaa_ram_gb)
-from .peruskirja import lue_peruskirja
-from .runs import ReadFailure, RunReader
-from .themes import SKINS, normalize_skin
+from .config import HubConfig
 
 PACKAGE_DIR = Path(__file__).parent
 HELSINKI = ZoneInfo("Europe/Helsinki")
-DEMO_NOW = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
 TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 14, 10, tzinfo=timezone.utc)  # esimerkin työvuoro käynnissä (16.10 Helsingissä)
-APP_CATALOG = (
-    {"id": "ravintopolku", "name": "Ravintopolku", "description": "Kirjauksista julkaistu ravintokooste. Puuttuvat päivät säilyvät puuttuvina.", "data_class": "private", "icon": "leaf"},
-    {"id": "unicafe", "name": "UniCafe", "description": "Päivätty ruokalista, valitut kriteerit ja alkuperäinen lähde.", "data_class": "public", "icon": "food"},
-    {"id": "ideat", "name": "Kolme business-ideaa", "description": "Ongelma, hypoteesi ja seuraava koe. Tilaa harkitulle ideoinnille.", "data_class": "private", "icon": "idea"},
-    {"id": "jarvis", "name": "Joonaksen Jarvis", "description": "Vain omistajan erikseen hyväksymät ja jakamat päivitykset.", "data_class": "private", "icon": "feed"},
-    {"id": "hahmo", "name": "Hahmo", "description": "Paikallinen roolipeli- ja fantasiahahmo: keskustelu, puhe ja kuvat omalla työasemalla. Oma sovellus, johon Hub linkittää.", "data_class": "private", "icon": "palette"},
-)
-# Hahmo (aiops ADR-0026, 2.11.2026): oma sovellus työasemalla (hahmo.service, 127.0.0.1:8700). Hub ei kutsu sitä
-# (PrivateNetwork), vaan linkittää Tailscale Serven porttiin, jossa Hahmon oma käyttöliittymä on; tila luetaan
-# keskustelun julkaisusta (Hahmo tarvitsee käynnissä olevan Ilmarin mallityön).
-HAHMO_PORTTI = 8444
-HAHMO_TILA = {"status": "oma sovellus", "status_label": "Oma sovellus",
-              "message": "Hahmo on oma sovellus työasemalla. Hub ei lue sen keskusteluja, vaan linkittää siihen."}
-APP_IDS = tuple(app["id"] for app in APP_CATALOG)
+JARJESTELMA_DEMO_NYT = datetime(2026, 10, 30, 12, 0, 20, tzinfo=timezone.utc)
 SERVE_PREFIX = "/hub"
-RUN_COUNT_LIMIT = 200
-ALIASES = {"/": "/hub", "/chat": "/hub/keskustelu", "/runs": "/hub/ajot", "/approvals": "/hub/hyvaksynnat", "/apps": "/hub/sovellukset", "/ideas": "/hub/ideat", "/system": "/hub/jarjestelma", "/rules": "/hub/saannot", "/settings": "/hub/asetukset"}
+# Muut sovellukset työasemalla omissa Serve-porteissaan samalla nimellä kuin Hub (aiops ADR-0026: Hahmo). Hub ei kutsu
+# niitä (PrivateNetwork), vaan linkittää niihin.
+RAVINTOPOLKU_PORTTI = 8443
+HAHMO_PORTTI = 8444
+VALIKKO = (("nyt", "/hub", "Nyt"), ("keskustelu", "/hub/keskustelu", "Keskustelu"), ("tyot", "/hub/kehita", "Työt"),
+           ("asetukset", "/hub/asetukset", "Asetukset"))
+TEKOJA_NAKYVISSA = 12
+ODOTTAA_MAX = 5
+NYT_PAIVITYS = "30"
+TYOT_PAIVITYS = "15"
+# Vanhat osoitteet (ennen 18.11.2026) ohjataan uusiin; kyselyosa säilyy. Gateway palaa lomakkeiden jälkeen vielä
+# osoitteisiin /hub/ilmari (myös ?toihin=rajatesti) ja /hub/mallit.
+VANHAT_OSOITTEET = {
+    "/hub/ilmari": "/hub", "/hub/mallit": "/hub/asetukset", "/hub/jarjestelma": "/hub/asetukset",
+    "/hub/saannot": "/hub/dokumentit", "/hub/ajot": "/hub", "/hub/ajot/{x}": "/hub", "/hub/hyvaksynnat": "/hub",
+    "/hub/sovellukset": "/hub", "/hub/sovellukset/{x}": "/hub", "/hub/ideat": "/hub",
+}
 
 
 @dataclass(frozen=True)
 class Settings:
-    """Tietolähteet ovat ylläpitäjän asetuksia, eivät selaimen syötteitä."""
+    """Tietolähteet ovat kiinteitä polkuja (moduulien OLETUS); selain ei valitse niitä."""
 
-    runs_dir: Path | None = None
-    cards_dir: Path | None = None
-    rules_dir: Path | None = None  # kehitystila; tuotannossa peruskirjan polku tulee konfiguraatiosta
     demo_enabled: bool = False
-    app_classes: dict[str, str] = field(default_factory=lambda: {app["id"]: app["data_class"] for app in APP_CATALOG})
-    allowed_private_apps: frozenset[str] = frozenset()
-    allowed_source_hosts: frozenset[str] = frozenset()
     identity: HubConfig | None = None  # tuotantotila: Tailscale-tunnistus ja Serven etuliite (ADR-0013)
 
     def __post_init__(self) -> None:
-        for root in (self.runs_dir, self.cards_dir, self.rules_dir):
-            if root is not None and (not root.is_absolute() or root == Path("/") or ".." in root.parts):
-                raise ValueError("Julkaisujuuren pitää olla yksilöity absoluuttinen hakemistopolku ilman '..'-osia.")
-        if self.identity is not None:
-            if self.demo_enabled:
-                raise ValueError("Esimerkkitila ei ole sallittu tuotantotilassa.")
-            if self.runs_dir != self.identity.runs_dir:
-                raise ValueError("Tuotantotilan julkaisujuuri tulee konfiguraatiosta.")
-            if self.rules_dir is not None and self.rules_dir != self.identity.rules_dir:
-                raise ValueError("Tuotantotilan peruskirjan polku tulee konfiguraatiosta.")
+        if self.identity is not None and self.demo_enabled:
+            raise ValueError("Esimerkkitila ei ole sallittu tuotantotilassa.")
 
 
 class RestorePrefix:
@@ -154,62 +137,56 @@ def production_rejection(request: Request, identity: HubConfig) -> tuple[int, st
     return None
 
 
-def format_time(value: Any) -> str:
-    if value is None:
-        return "Ei saatavilla"
+def _aika(value: Any) -> datetime | None:
     try:
         parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            return "Ei saatavilla"
-        return parsed.astimezone(HELSINKI).strftime("%d.%m.%Y klo %H.%M")
     except (ValueError, TypeError, OverflowError):
-        return "Ei saatavilla"
-
-
-def format_date(value: Any) -> str:
-    try:
-        return date.fromisoformat(str(value)[:10]).strftime("%d.%m.%Y")
-    except (ValueError, TypeError):
-        return "Ei saatavilla"
-
-
-def series_chart(card: dict[str, Any] | None, days: int = 7) -> dict[str, Any] | None:
-    """Katkaise viiva puuttuvan havainnon kohdalla; älä interpoloi tietoa."""
-    if not card or card["kind"] != "time_series":
         return None
-    data = card["data"]
-    end = date.fromisoformat(data["period_end"])
-    cutoff = date.fromordinal(max(1, end.toordinal() - days + 1))
-    start = max(date.fromisoformat(data["period_start"]), cutoff)
-    observed = {point["date"]: point["value"] for point in data["points"]}
-    samples = [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
-    values = [observed.get(day) for day in samples]
-    known = [float(value) for value in values if value is not None]
-    low = (min(known) * 1.15 if min(known) < 0 else max(0, min(known) * .85)) if known else 0
-    high = (max(known) * .85 if max(known) < 0 else max(known) * 1.1) if known else 1
-    if high <= low:
-        high = low + 1
-    segments, current, points = [], [], []
-    for index, (day, value) in enumerate(zip(samples, values, strict=True)):
-        x = round(36 + index * 574 / max(1, len(samples) - 1), 2)
-        y = round(170 - (float(value) - low) * 135 / (high - low), 2) if value is not None else None
-        points.append({"x": x, "y": y, "missing": value is None, "label": format_date(day), "value": value})
-        if value is None:
-            if current:
-                segments.append(" ".join(current))
-                current = []
-        else:
-            current.append(f"{x},{y}")
-    if current:
-        segments.append(" ".join(current))
-    return {"segments": segments, "points": points, "coverage": len(known), "total": len(samples), "range_label": f"{format_date(start)} – {format_date(end)}", "min": round(low), "max": round(high)}
+    return parsed.astimezone(HELSINKI) if parsed.tzinfo is not None else None
+
+
+def format_time(value: Any) -> str:
+    """Aikavyöhykkeellinen aika Helsingin aikana (14.10.2026 klo 01.05); ilman vyöhykettä ei arvata."""
+    parsed = _aika(value)
+    return parsed.strftime("%d.%m.%Y klo %H.%M") if parsed else "Ei saatavilla"
+
+
+def paiva(value: Any) -> str:
+    """Päivä ja kuukausi (18.11.) tai tyhjä."""
+    parsed = _aika(value)
+    return f"{parsed.day}.{parsed.month}." if parsed else ""
+
+
+def kello(value: Any) -> str:
+    """Kellonaika (04.55) tai tyhjä."""
+    parsed = _aika(value)
+    return parsed.strftime("%H.%M") if parsed else ""
+
+
+def lyhyt_aika(value: Any) -> str:
+    """Tänään pelkkä kellonaika, muuten päivä ja kellonaika (18.11. 22.29)."""
+    parsed = _aika(value)
+    if parsed is None:
+        return ""
+    if parsed.date() == datetime.now(HELSINKI).date():
+        return parsed.strftime("%H.%M")
+    return f"{parsed.day}.{parsed.month}. {parsed.strftime('%H.%M')}"
+
+
+def osoitteet(demo: bool):
+    """Hubin sisäinen osoite; esimerkkitila kulkee mukana kyselyssä (ei evästeitä)."""
+    def url(path: str, **query: Any) -> str:
+        params = {"demo": "1"} if demo else {}
+        params.update({key: value for key, value in query.items() if value is not None})
+        return path + ("?" + urlencode(params) if params else "")
+    return url
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="Ilmari Hub", docs_url=None, redoc_url=None, openapi_url=None)
     templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
-    templates.env.globals.update(format_time=format_time, format_date=format_date, chart_for=series_chart)
+    templates.env.globals.update(format_time=format_time, paiva=paiva, kello=kello, lyhyt_aika=lyhyt_aika)
     app.mount("/hub/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
 
     @app.middleware("http")
@@ -262,350 +239,266 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.identity is not None:
         app.add_middleware(RestorePrefix)  # viimeisenä lisätty on uloin: polku palautetaan ennen vartijaa ja reititystä
 
-    def context(request: Request, page: str, title: str) -> dict[str, Any]:
-        skin = normalize_skin(request.query_params.get("skin"))
-        demo = settings.demo_enabled and request.query_params.get("demo") == "1"
-        selection = request.query_params.get("home_cards", ",".join(APP_IDS))
-        if any(f"slot{index}" in request.query_params for index in range(1, 5)):
-            selection = ",".join(request.query_params.get(f"slot{index}", "") for index in range(1, 5))
-        home_cards = list(dict.fromkeys(item for item in selection.split(",") if item in APP_IDS))
-        days = int(request.query_params.get("days", "7")) if request.query_params.get("days") in ("7", "30", "90") else 7
+    # --- Yhteiset osat ------------------------------------------------------------------------------------------
 
-        def url(path: str, **query: Any) -> str:
-            path = ALIASES.get(path, path)
-            params: dict[str, Any] = {"skin": skin}
-            if demo:
-                params["demo"] = "1"
-            if home_cards != list(APP_IDS):
-                params["home_cards"] = ",".join(home_cards)
-            params.update(query)
-            params = {key: value for key, value in params.items() if value is not None}
-            return path + ("?" + urlencode(params) if params else "")
+    def esimerkki(request: Request) -> bool:
+        return settings.demo_enabled and request.query_params.get("demo") == "1"
 
-        configured_classes = {app["id"]: app["data_class"] for app in APP_CATALOG} | settings.app_classes
-        card_states = load_cards(
-            PACKAGE_DIR / "demo" / "cards" if demo else settings.cards_dir,
-            app_classes=configured_classes,
-            allowed_private_apps=frozenset(APP_IDS) if demo else settings.allowed_private_apps,
-            allowed_source_hosts=frozenset({"example.org"}) if demo else settings.allowed_source_hosts,
-            now=DEMO_NOW if demo else None,
-            demo=demo,
-        )
-        cards, apps = [], []
-        for entry in APP_CATALOG:
-            state = card_states[entry["id"]]
-            if entry["id"] == "hahmo":
-                apps.append({**entry, **HAHMO_TILA})
-                continue
-            apps.append({**entry, "status": state.status, "status_label": state.status, "message": state.message})
-            for card in state.cards:
-                item = card.model_dump(mode="json")
-                item.update(status=state.status, status_label=state.status)
-                cards.append(item)
+    def gateway(polku: str, demo: bool) -> str:
+        """Gatewayn sivu samassa alkuperässä (Tailscale Serve: gateway juuressa, Hub polussa /hub); muuten #."""
+        return settings.identity.origin + polku if settings.identity is not None and not demo else "#"
 
-        reader = RunReader(PACKAGE_DIR / "demo" / "runs" if demo else settings.runs_dir or Path("/srv/aiops/ilmari/ajot"))
-        listing = reader.list_runs()
-        runs = [run_view(run.run_id, run.meta, run.errors, demo) for run in listing.runs]
-        return {
-            "request": request, "skin": skin, "skins": SKINS, "demo": demo,
-            "demo_enabled": settings.demo_enabled, "current_page": page, "page_title": title, "url": url,
-            "cards": cards, "apps": apps, "home_cards": home_cards,
-            "home_card_items": [next((card for card in cards if card["app_id"] == app_id), None) for app_id in home_cards],
-            "runs": runs, "runs_state": listing.state, "runs_errors": listing.errors,
-            "runs_truncated": listing.truncated, "reader": reader, "days": days,
-            "approval_items": [], "system_metrics": [], "budget": None,
-            "source_state": "esimerkkidata" if demo else ("julkaisut" if settings.identity else "kehitysympäristö"),
-            "mode_label": "Esimerkkitila" if demo else ("Työasema" if settings.identity else "Kehitysympäristö"),
-            "gateway_connected": False,
+    def render(request: Request, sivu: str, otsikko: str, aktiivinen: str | None, status_code: int = 200,
+               **extra: Any):
+        demo = esimerkki(request)
+        context = {
+            "request": request, "demo": demo, "otsikko": otsikko, "aktiivinen": aktiivinen, "valikko": VALIKKO,
+            "url": osoitteet(demo), "gateway": lambda polku: gateway(polku, demo),
+            "gateway_url": settings.identity.origin if settings.identity is not None else None,
+            "ymparisto": "esimerkkitila" if demo else ("työasema" if settings.identity else "kehitysympäristö"),
+            "haettu": datetime.now(HELSINKI).strftime("%H.%M"),
         }
+        context.update(extra)
+        return templates.TemplateResponse(request=request, name=f"{sivu}.html", context=context,
+                                          status_code=status_code)
 
-    def render(request: Request, page: str, title: str, **extra: Any):
-        data = context(request, page, title)
-        data.update(extra)
-        return templates.TemplateResponse(request=request, name=f"{page}.html", context=data)
+    def lue_toiminta(demo: bool) -> tuple[toiminta_lukija.Toiminta | None, datetime]:
+        if demo:
+            return toiminta_lukija.lue_toiminta(toiminta_lukija.ESIMERKKI), TOIMINTA_DEMO_NYT
+        if settings.identity is not None:
+            return (toiminta_lukija.lue_toiminta(toiminta_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat()),
+                    datetime.now(timezone.utc))
+        return None, datetime.now(timezone.utc)
+
+    def lue_keskustelu(demo: bool) -> keskustelu_lukija.Keskustelu | None:
+        if demo:
+            return keskustelu_lukija.lue_keskustelu(keskustelu_lukija.ESIMERKKI)
+        if settings.identity is not None:
+            return keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+        return None
+
+    def mallin_tila(k: keskustelu_lukija.Keskustelu | None) -> dict[str, Any] | None:
+        """Ilmarin mallin tila keskustelun julkaisusta (tila, käynnissä oleva työ, yöajo) tai None."""
+        return k.malli if k is not None and k.tila == "ready" else None
+
+    def kehitystyot(demo: bool) -> tuple[tuple[kehitys.Kehitystyo, ...] | None, bool]:
+        """(työt uusin ensin tai None, onko lähde määritetty)."""
+        if demo:
+            return kehitys.lue_kehitystyot(kehitys.ESIMERKKI), True
+        if settings.identity is not None:
+            return kehitys.lue_kehitystyot(kehitys.OLETUS, omistajat=kehitys.sallitut_omistajat()), True
+        return None, False
+
+    def kesken(tyot: tuple[kehitys.Kehitystyo, ...] | None) -> bool:
+        """Onko jokin uusimmista töistä (Eliaksen tai Ilmarin) vielä kesken: sivu päivittyy itsestään."""
+        if not tyot:
+            return False
+        eliaksen = [t for t in tyot if not t.ilmarin][:5]
+        ilmarin = [t for t in tyot if t.ilmarin][:5]
+        return any(t.meta.get("tila") not in kehitys.LOPULLISET for t in eliaksen + ilmarin)
+
+    # --- Nyt: Hubin juuri ---------------------------------------------------------------------------------------
+
+    def odottaa_sinua(toiminta, tyot, url) -> list[dict[str, Any]]:
+        """Asiat, joissa Eliaksella on päätettävää: työn hyväksyntä, käyttöönotto tai käsin sulkeminen, epäonnistunut
+        rajatesti ja tilan lukuvirheet. Enintään ODOTTAA_MAX riviä, tärkein ensin."""
+        rivit: list[dict[str, Any]] = []
+        if toiminta is not None and toiminta.tila != "ready":
+            rivit.append({"href": url("/hub"), "nro": "!", "teksti": "Ilmarin tilaa ei voi lukea", "tag": "päivitä",
+                          "savy": "stop", "ala": toiminta.viesti or ""})
+        elif toiminta is not None:
+            r = (toiminta.tilanne or {}).get("rajatesti")
+            if r is not None and not r["lapi"]:
+                rivit.append({"href": url("/hub/asetukset") + "#rajatesti", "nro": "!", "teksti": "Rajatesti ei mennyt läpi",
+                              "tag": "ei läpi", "savy": "stop",
+                              "ala": f"{len(r['hylatyt'])} kohtaa ei läpi · {paiva(r['aika'])} {kello(r['aika'])}"})
+            for virhe in toiminta.virheet:
+                rivit.append({"href": url("/hub"), "nro": "!", "teksti": "Osaa tilasta ei voi lukea", "tag": "päivitä",
+                              "savy": "warn", "ala": virhe})
+        for t in tyot or ():
+            tag, savy = t.tagi
+            if tag not in kehitys.ODOTTAVAT:
+                continue
+            testit = (t.meta.get("tulos") or {}).get("testit")
+            osat = ["Ilmarin työ" if t.ilmarin else "Sinun toiveesi", t.meta.get("lahde") or "aiops"]
+            if testit:
+                osat.append("testit läpi" if testit.get("paluukoodi") == 0 else "testit epäonnistuivat")
+            if lyhyt_aika(t.meta.get("paivitetty") or t.meta.get("luotu")):
+                osat.append(lyhyt_aika(t.meta.get("paivitetty") or t.meta.get("luotu")))
+            rivit.append({"href": url(f"/hub/kehita/{t.tyo}"), "nro": t.tyo,
+                          "teksti": t.meta.get("toive", "").split("\n")[0][:120] or "Toive puuttuu",
+                          "tag": tag, "savy": savy, "ala": " · ".join(osat)})
+        return rivit[:ODOTTAA_MAX]
 
     @app.get("/", include_in_schema=False)
     async def root():
         return RedirectResponse("/hub", status_code=307)
 
     @app.get("/hub", response_class=HTMLResponse)
-    async def home(request: Request):
-        return render(request, "home", "Koti")
-
-    @app.get("/hub/keskustelu", response_class=HTMLResponse)
-    async def chat(request: Request):
-        """Keskustelu Hubissa (28.10.): gatewayn julkaisu luetaan, lomake menee gatewaylle samassa alkuperässä."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            keskustelu, gateway_url = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.ESIMERKKI), None
-        elif settings.identity is not None:
-            keskustelu = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
-            gateway_url = settings.identity.origin
-        else:
-            keskustelu, gateway_url = None, None
-        response = render(request, "chat", "Keskustelu", keskustelu=keskustelu, gateway_url=gateway_url)
-        if gateway_url:
-            response.headers["Refresh"] = "15"
+    async def nyt_sivu(request: Request):
+        """Ilmarin tila ja ohjaus (Töihin nyt, Seis, Jatka), mitä odottaa Eliasta, viimeisin raportti ja teot.
+        Lomakkeet menevät gatewaylle (paluu=hub); gateway palaa tänne ?toihin=rajatesti, kun Töihin nyt ajaa ensin
+        rajatestin. Päivittyy itsestään vain, kun vuoro tai työ on käynnissä."""
+        demo = esimerkki(request)
+        toiminta, nyt = lue_toiminta(demo)
+        malli = mallin_tila(lue_keskustelu(demo))
+        tyot, _ = kehitystyot(demo)
+        tilarivi = toiminta_lukija.tilarivi(toiminta, nyt)
+        valmis = toiminta is not None and toiminta.tila == "ready"
+        teot = (toiminta.teot or ()) if valmis else ()
+        dsh_tyo = (malli or {}).get("dsh_tyo")
+        response = render(
+            request, "nyt", "Nyt", "nyt", toiminta=toiminta, tilarivi=tilarivi, malli=malli,
+            asetukset=toiminta.asetukset if valmis else None,
+            raportti=toiminta.raportti if valmis else None,
+            rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, dsh_tyo),
+            toihin_rajatesti=request.query_params.get("toihin") == "rajatesti",
+            odottaa=odottaa_sinua(toiminta, tyot, osoitteet(demo)),
+            teot=teot[:TEKOJA_NAKYVISSA], vanhat_teot=teot[TEKOJA_NAKYVISSA:],
+            muualle=(("Ravintopolku", muualle(RAVINTOPOLKU_PORTTI, demo)), ("Hahmo", muualle(HAHMO_PORTTI, demo)))
+            if demo or settings.identity is not None else ())
+        if (tilarivi or {}).get("kaynnissa") or dsh_tyo or kesken(tyot):
+            response.headers["Refresh"] = NYT_PAIVITYS
         return response
 
-    @app.get("/hub/ajot", response_class=HTMLResponse)
-    async def runs(request: Request):
-        data = context(request, "runs", "Ajot ja raportit")
-        if not data["demo"]:
-            for run in data["runs"][:RUN_COUNT_LIMIT]:  # ehdotusmäärät ja tuomiot vaativat ajon tiedostot
-                try:
-                    detail = data["reader"].read_run(run["run_id"])
-                except ReadFailure:
-                    continue
-                run.update(proposal_count=len(detail.proposals), verdicts=muodot.verdict_counts(detail.sol_result))
-        return templates.TemplateResponse(request=request, name="runs.html", context=data)
+    def muualle(portti: int, demo: bool) -> str:
+        """Toinen sovellus työasemalla omassa Serve-portissaan; esimerkkitilassa ei linkkiä."""
+        return f"https://{settings.identity.rp_id}:{portti}/" if settings.identity is not None and not demo else "#"
 
-    @app.get("/hub/ajot/{run_id}", response_class=HTMLResponse)
-    async def run_detail(request: Request, run_id: str):
-        data = context(request, "run_detail", "Ajon raportti")
-        try:
-            detail = data["reader"].read_run(run_id)
-        except ReadFailure:
-            return templates.TemplateResponse(request=request, name="error.html", context={**data, "message": "Ajoa ei löydy tai julkaisua ei voi lukea turvallisesti.", "error_title": "Ajo ei ole saatavilla", "status_code": 404}, status_code=404)
-        run = run_view(detail.run_id, detail.meta, detail.errors, data["demo"])
-        if not data["demo"]:
-            run.update(proposal_count=len(detail.proposals), verdicts=muodot.verdict_counts(detail.sol_result))
-        data.update(run=run, meta=detail.meta or {}, report=detail.report, suggestions=detail.proposals,
-                    proposals=muodot.proposals(detail.proposals, detail.sol_result), sol_summary=muodot.sol_summary(detail.sol_result),
-                    verdict_labels=muodot.VERDICT_LABELS,
-                    sol=json.dumps(detail.sol_result, ensure_ascii=False, indent=2) if detail.sol_result is not None else None,
-                    patch=detail.patch, run_errors=detail.errors if data["demo"] else muodot.relevant_errors(detail.errors))
-        return templates.TemplateResponse(request=request, name="run_detail.html", context=data)
+    # --- Keskustelu ---------------------------------------------------------------------------------------------
 
-    @app.get("/hub/hyvaksynnat", response_class=HTMLResponse)
-    async def approvals(request: Request):
-        return render(request, "approvals", "Hyväksynnät")
-
-    @app.get("/hub/sovellukset", response_class=HTMLResponse)
-    async def apps(request: Request):
-        return render(request, "apps", "Sovellukset")
-
-    @app.get("/hub/sovellukset/{app_id}", response_class=HTMLResponse)
-    async def app_detail(request: Request, app_id: str):
-        if app_id not in APP_IDS:
-            return render_error(request, 404, "Sovellusta ei löydy", "Tätä sovellusta ei ole Hubin katalogissa.")
-        data = context(request, "app_detail", next(app["name"] for app in APP_CATALOG if app["id"] == app_id))
-        cards = [card for card in data["cards"] if card["app_id"] == app_id]
-        card = cards[0] if cards else None
-        data.update(app=next(app for app in data["apps"] if app["id"] == app_id), cards=cards, card=card, chart=series_chart(card, data["days"]))
-        if app_id == "hahmo":
-            data.update(hahmo=hahmo_tila(data["demo"]))
-        return templates.TemplateResponse(request=request, name="app_detail.html", context=data)
-
-    def hahmo_tila(demo: bool) -> dict[str, Any]:
-        """Linkki Hahmon omaan käyttöliittymään (Serve, portti HAHMO_PORTTI samalla nimellä kuin Hub) ja Ilmarin
-        mallin tila keskustelun julkaisusta. Esimerkkitilassa ei linkkiä eikä tilaa."""
-        if demo or settings.identity is None:
-            return {"url": None, "malli": None}
-        keskustelu = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
-        malli = keskustelu.malli if keskustelu.tila == "ready" else None
-        return {"url": f"https://{settings.identity.rp_id}:{HAHMO_PORTTI}/", "malli": malli}
-
-    @app.get("/hub/ideat", response_class=HTMLResponse)
-    async def ideas(request: Request):
-        return render(request, "ideas", "Ideat ja projektit")
-
-    @app.get("/hub/jarjestelma", response_class=HTMLResponse)
-    async def system(request: Request):
-        """Koneen mittarit (aiops jarjestelma.py, 30.10.2026). Tuotannossa vain dispatcherin julkaisema kelpaa."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            mittarit = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.ESIMERKKI, now=datetime(2026, 10, 30, 12, 0, 20, tzinfo=timezone.utc))
-        elif settings.identity is not None:
-            mittarit = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.OLETUS, omistajat=jarjestelma_lukija.sallitut_omistajat())
-        else:
-            mittarit = None
-        return render(request, "system", "Järjestelmä", mittarit=mittarit)
-
-    @app.get("/hub/saannot", response_class=HTMLResponse)
-    async def rules(request: Request):
-        """Peruskirja vain luku -tilassa (aiops ADR-0017). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
-        data = context(request, "rules", "Säännöt")
-        if data["demo"]:
-            kirja = lue_peruskirja(PACKAGE_DIR / "demo" / "peruskirja", omistaja=None)
-        elif settings.identity is not None:
-            kirja = lue_peruskirja(settings.identity.rules_dir, omistaja=0)
-        elif settings.rules_dir is not None:
-            kirja = lue_peruskirja(settings.rules_dir, omistaja=None)
-        else:
-            kirja = None
-        data.update(kirja=kirja)
-        return templates.TemplateResponse(request=request, name="rules.html", context=data)
-
-    def dokumenttikokoelma(request: Request):
-        """Asennetun commitin dokumentit (aiops istunto 2). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            return lue_dokumentit(DOKUMENTIT_ESIMERKKI, omistaja=None)
+    @app.get("/hub/keskustelu", response_class=HTMLResponse)
+    async def keskustelu_sivu(request: Request):
+        """Gatewayn julkaisema keskustelu; lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub)."""
+        k = lue_keskustelu(esimerkki(request))
+        response = render(request, "keskustelu", "Keskustelu", "keskustelu", keskustelu=k)
         if settings.identity is not None:
-            return lue_dokumentit(DOKUMENTIT_OLETUS, omistaja=0)
-        return None
+            response.headers["Refresh"] = TYOT_PAIVITYS
+        return response
 
-    @app.get("/hub/dokumentit", response_class=HTMLResponse)
-    async def documents(request: Request):
-        kokoelma = dokumenttikokoelma(request)
-        valmis = kokoelma is not None and kokoelma.tila == "ready"
-        kysely = (request.query_params.get("q") or "").strip()[:100]
-        return render(request, "documents", "Dokumentit", kokoelma=kokoelma, kysely=kysely,
-                      ryhmat=ryhmittain(kokoelma) if valmis else [],
-                      osumat=hae_dokumentit(kokoelma, kysely) if valmis and kysely else [])
-
-    @app.get("/hub/dokumentit/{tunniste}", response_class=HTMLResponse)
-    async def document_detail(request: Request, tunniste: str):
-        kokoelma = dokumenttikokoelma(request)
-        dokumentti = etsi_dokumentti(kokoelma, tunniste) if kokoelma is not None and kokoelma.tila == "ready" else None
-        if dokumentti is None:
-            return render_error(request, 404, "Dokumenttia ei löydy",
-                                "Dokumenttia ei ole asennetussa versiossa. Palaa dokumenttilistaan.")
-        lohkot, virhe = piirrettava(dokumentti)
-        if lohkot is None:
-            return render_error(request, 422, "Dokumenttia ei voi näyttää", virhe or "Dokumentti on liian suuri.")
-        return render(request, "document", dokumentti["otsikko"], kokoelma=kokoelma, dokumentti=dokumentti,
-                      lohkot=lohkot)
-
-    # --- Kehitä (aiops istunto 2, ADR-0024): Hub näyttää, gateway toimii ------------------------------------------
-
-    def kehityslahteet(request: Request) -> tuple[Path | None, Path | None, frozenset[int] | None, int | None]:
-        """(kehityshakemisto, käyttöönottohakemisto, sallitut omistajat, historian omistaja) tai None-arvot."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            return kehitys.ESIMERKKI, kehitys.ESIMERKKI_KAYTTOONOTOT, None, None
-        if settings.identity is not None:
-            return kehitys.OLETUS, kehitys.OLETUS_KAYTTOONOTOT, kehitys.sallitut_omistajat(), 0
-        return None, None, None, None
-
-    def gateway_polku(polku: str, demo: bool) -> str:
-        """Gatewayn sivu samassa alkuperässä (Tailscale Serve: gateway juuressa, Hub polussa /hub)."""
-        if demo:
-            return "#esimerkkitila"
-        return (settings.identity.origin if settings.identity is not None else "") + polku
-
-    def yoajon_ehdotukset(data: dict[str, Any]) -> list[dict[str, Any]]:
-        """Uusimman julkaistun yöajon ehdotukset toiveiksi (istunto 2, kohta 3)."""
-        if not data["runs"]:
-            return []
-        try:
-            detail = data["reader"].read_run(data["runs"][0]["run_id"])
-        except ReadFailure:
-            return []
-        rivit = []
-        for p in muodot.proposals(detail.proposals, detail.sol_result)[:10]:
-            toive = (p["title"] or "") + ("\n\n" + p["proposal"] if p["proposal"] else "")
-            rivit.append({**p, "run_id": detail.run_id,
-                          "toive_url": gateway_polku("/kehita?" + urlencode({"toive": toive[:1500]}), data["demo"])})
-        return rivit
-
-    def mallin_tila(request: Request) -> dict[str, Any] | None:
-        """Ilmarin mallin tila gatewayn keskustelujulkaisusta (tila, dsh-työ): Kehitä-lomake kertoo, alkaako työ heti.
-        None, kun julkaisua ei ole."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            k = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.ESIMERKKI)
-        elif settings.identity is not None:
-            k = keskustelu_lukija.lue_keskustelu(keskustelu_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
-        else:
-            return None
-        return k.malli if k.tila == "ready" else None
+    # --- Työt (Kehitä): Hub näyttää, gateway toimii -------------------------------------------------------------
 
     @app.get("/hub/kehita", response_class=HTMLResponse)
-    async def develop(request: Request):
-        """Kehitä Hubissa (aiops 31.10.: Hub ensisijaiseksi): toive jätetään tästä gatewaylle (paluu=hub), lista
-        näyttää käynnissä olevan työn viimeisimmän etenemisrivin ja päivittyy itsestään, kun työ on kesken."""
-        data = context(request, "develop", "Kehitä")
-        juuri, historia_juuri, omistajat, omistaja = kehityslahteet(request)
-        tyot = kehitys.lue_kehitystyot(juuri, omistajat=omistajat) if juuri is not None else None
-        historia = kehitys.lue_kayttoonotot(historia_juuri, omistaja=omistaja) if historia_juuri is not None else None
-        gateway_url = settings.identity.origin if settings.identity is not None and not data["demo"] else None
-        # Pala 1b: Eliaksen toiveet ja Ilmarin omat työt omiin listoihinsa (lukija rajaa kumpaakin erikseen)
-        eliaksen = [t for t in tyot if not t.ilmarin] if tyot is not None else None
-        ilmarin = [t for t in tyot if t.ilmarin] if tyot is not None else None
-        data.update(tyot=eliaksen, ilmarin_tyot=ilmarin, lahde=juuri is not None, historia=historia,
-                    ehdotukset=yoajon_ehdotukset(data),
-                    gateway=lambda polku: gateway_polku(polku, data["demo"]), gateway_url=gateway_url,
-                    lahteet=kehitys.LAHTEET, malli=mallin_tila(request), toive=request.query_params.get("toive", "")[:4000],
-                    claude_code_url="https://claude.ai/code")
-        response = templates.TemplateResponse(request=request, name="develop.html", context=data)
-        if tyot and any(t.meta.get("tila") not in kehitys.LOPULLISET for t in eliaksen[:5] + ilmarin[:5]):
-            response.headers["Refresh"] = "15"
+    async def tyot_sivu(request: Request):
+        """Uusi toive gatewaylle (paluu=hub), Eliaksen toiveet ja Ilmarin omat työt omina listoinaan ja
+        käyttöönottojen historia. Päivittyy itsestään, kun jokin uusimmista töistä on kesken."""
+        demo = esimerkki(request)
+        tyot, lahde = kehitystyot(demo)
+        if demo:
+            historia = kehitys.lue_kayttoonotot(kehitys.ESIMERKKI_KAYTTOONOTOT, omistaja=None)
+        elif settings.identity is not None:
+            historia = kehitys.lue_kayttoonotot(kehitys.OLETUS_KAYTTOONOTOT, omistaja=0)
+        else:
+            historia = None
+        response = render(
+            request, "tyot", "Työt", "tyot", lahde=lahde, tyot_luettu=tyot is not None,
+            eliaksen=[t for t in tyot if not t.ilmarin] if tyot else [],
+            ilmarin=[t for t in tyot if t.ilmarin] if tyot else [],
+            historia=historia, malli=mallin_tila(lue_keskustelu(demo)), lahteet=kehitys.LAHTEET,
+            toive=request.query_params.get("toive", "")[:4000])
+        if kesken(tyot):
+            response.headers["Refresh"] = TYOT_PAIVITYS
         return response
 
     @app.get("/hub/kehita/{tyo}", response_class=HTMLResponse)
-    async def develop_detail(request: Request, tyo: str):
-        data = context(request, "develop_detail", "Kehitystyö")
-        juuri, _, omistajat, _ = kehityslahteet(request)
-        t = kehitys.lue_kehitystyo(juuri, int(tyo), omistajat=omistajat) if juuri is not None and kehitys._TYO.fullmatch(tyo) else None
+    async def tyo_sivu(request: Request, tyo: str):
+        demo = esimerkki(request)
+        if demo:
+            juuri, omistajat = kehitys.ESIMERKKI, None
+        elif settings.identity is not None:
+            juuri, omistajat = kehitys.OLETUS, kehitys.sallitut_omistajat()
+        else:
+            juuri, omistajat = None, None
+        t = (kehitys.lue_kehitystyo(juuri, int(tyo), omistajat=omistajat)
+             if juuri is not None and kehitys._TYO.fullmatch(tyo) else None)
         if t is None:
-            return render_error(request, 404, "Kehitystyötä ei löydy", "Työtä ei ole julkaistu. Palaa Kehitä-näkymään.")
-        gateway_url = settings.identity.origin if settings.identity is not None and not data["demo"] else None
-        data.update(t=t, meta=t.meta, tulos=t.meta.get("tulos"), vaihe=t.vaihe, toimet=t.toimet,
-                    diffit=kehitys.jaa_diff(t.tekstit["muutos.diff"]) if "muutos.diff" in t.tekstit else [],
-                    gateway=lambda polku: gateway_polku(polku, data["demo"]), gateway_url=gateway_url)
-        response = templates.TemplateResponse(request=request, name="develop_detail.html", context=data)
+            return virhe(request, 404, "Työtä ei löydy", "Työtä ei ole tai sitä ei voi lukea.")
+        response = render(request, "tyo", f"Työ {t.tyo}", "tyot", t=t, meta=t.meta, tulos=t.meta.get("tulos"),
+                          toimet=t.toimet,
+                          diffit=kehitys.jaa_diff(t.tekstit["muutos.diff"]) if "muutos.diff" in t.tekstit else [])
         if t.kesken:
-            response.headers["Refresh"] = "15"
+            response.headers["Refresh"] = TYOT_PAIVITYS
         return response
 
-    # --- Ilmari nyt (aiops ADR-0032, Pala 1, 18.11.2026): Hub näyttää, gateway toimii --------------------------------
-
-    @app.get("/hub/ilmari", response_class=HTMLResponse)
-    async def ilmari_nyt(request: Request):
-        """Ilmarin tila, Seis ja Jatka, yöajon asetukset, tavoitteet, pysyvät ohjeet, rajatesti ja tekoloki gatewayn
-        julkaisusta (/srv/aiops/ilmari/toiminta). Lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub), ja
-        gateway valvoo kaiken itse. Ei automaattista päivitystä: se tyhjentäisi kesken kirjoitetut tavoitteet."""
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            toiminta = toiminta_lukija.lue_toiminta(toiminta_lukija.ESIMERKKI)
-            gateway_url, nyt = None, TOIMINTA_DEMO_NYT
-        elif settings.identity is not None:
-            toiminta = toiminta_lukija.lue_toiminta(toiminta_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
-            gateway_url, nyt = settings.identity.origin, datetime.now(timezone.utc)
-        else:
-            toiminta, gateway_url, nyt = None, None, datetime.now(timezone.utc)
-        malli = mallin_tila(request)
-        # Gateway palaa tänne ?toihin=rajatesti, kun Töihin nyt ajaa ensin rajatestin (vuoro alkaa sen jälkeen itsestään).
-        return render(request, "ilmari", "Ilmari nyt", toiminta=toiminta, gateway_url=gateway_url,
-                      tilarivi=toiminta_lukija.tilarivi(toiminta, nyt), malli=malli,
-                      rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, (malli or {}).get("dsh_tyo")),
-                      toihin_rajatesti=request.query_params.get("toihin") == "rajatesti")
-
-    @app.get("/hub/mallit", response_class=HTMLResponse)
-    async def models(request: Request):
-        ylikirjoitus, gateway_url = None, None
-        if settings.demo_enabled and request.query_params.get("demo") == "1":
-            rekisteri = lue_mallit(MALLIT_ESIMERKKI, omistaja=None)
-            ylikirjoitus = {"kuva_tulkki": ""}
-        elif settings.identity is not None:
-            rekisteri = lue_mallit(MALLIT_OLETUS, omistaja=0)
-            ylikirjoitus = lue_ylikirjoitus(MALLIT_YLIKIRJOITUS, omistajat=kehitys.sallitut_omistajat())
-            gateway_url = settings.identity.origin
-        else:
-            rekisteri = None
-        vapaa = vapaa_ram_gb() if rekisteri is not None and rekisteri.tila == "ready" else None
-        return render(request, "models", "Mallit", mallit=rekisteri, ylikirjoitus=ylikirjoitus, gateway_url=gateway_url,
-                      vapaa_ram_gb=vapaa, ram_marginaali=RAM_MARGINAALI_GB)
+    # --- Asetukset ----------------------------------------------------------------------------------------------
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
-    async def settings_page(request: Request):
-        return render(request, "settings", "Asetukset ja ulkoasu")
+    async def asetukset_sivu(request: Request):
+        """Yöajo, tavoitteet, pysyvät ohjeet, aivot (profiili, roolit, rekisteri), rajatesti, kone ja muut linkit.
+        Ei automaattista päivitystä: se tyhjentäisi kesken kirjoitetut lomakkeet."""
+        demo = esimerkki(request)
+        toiminta, _ = lue_toiminta(demo)
+        valmis = toiminta is not None and toiminta.tila == "ready"
+        malli = mallin_tila(lue_keskustelu(demo))
+        if demo:
+            rekisteri, ylikirjoitus = mallit_lukija.lue_mallit(mallit_lukija.ESIMERKKI, omistaja=None), {"kuva_tulkki": ""}
+            kone = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.ESIMERKKI, now=JARJESTELMA_DEMO_NYT)
+        elif settings.identity is not None:
+            rekisteri = mallit_lukija.lue_mallit(mallit_lukija.OLETUS, omistaja=0)
+            ylikirjoitus = mallit_lukija.lue_ylikirjoitus(mallit_lukija.OLETUS_ROOLIT, omistajat=kehitys.sallitut_omistajat())
+            kone = jarjestelma_lukija.lue_jarjestelma(jarjestelma_lukija.OLETUS,
+                                                      omistajat=jarjestelma_lukija.sallitut_omistajat())
+        else:
+            rekisteri, ylikirjoitus, kone = None, None, None
+        mallit_valmis = rekisteri is not None and rekisteri.tila == "ready"
+        return render(
+            request, "asetukset", "Asetukset", "asetukset", toiminta=toiminta, valmis=valmis,
+            asetukset=toiminta.asetukset if valmis else None, tilanne=toiminta.tilanne if valmis else None,
+            tavoitteet=toiminta.tavoitteet if valmis else None, ohjeet=toiminta.ohjeet if valmis else None,
+            malli=malli, mallit=rekisteri, ylikirjoitus=ylikirjoitus,
+            nykyinen=rekisteri.nykyinen_profiili(ylikirjoitus) if mallit_valmis else None,
+            vapaa_ram_gb=mallit_lukija.vapaa_ram_gb() if mallit_valmis else None,
+            ram_marginaali=mallit_lukija.RAM_MARGINAALI_GB,
+            kone=kone if kone is not None and kone.tila == "ready" else None)
 
-    def render_error(request: Request, code: int, title: str, message: str):
-        data = context(request, "error", title)
-        return templates.TemplateResponse(request=request, name="error.html", context={**data, "message": message, "error_title": title, "status_code": code}, status_code=code)
+    # --- Dokumentit (Asetusten alla) ----------------------------------------------------------------------------
+
+    def dokumenttikokoelma(request: Request):
+        """Asennetun commitin dokumentit (aiops istunto 2). Tuotannossa vain rootin julkaisema kelpaa (ADR-0013)."""
+        if esimerkki(request):
+            return dokumentit_lukija.lue_dokumentit(dokumentit_lukija.ESIMERKKI, omistaja=None)
+        if settings.identity is not None:
+            return dokumentit_lukija.lue_dokumentit(dokumentit_lukija.OLETUS, omistaja=0)
+        return None
+
+    @app.get("/hub/dokumentit", response_class=HTMLResponse)
+    async def dokumentit_sivu(request: Request):
+        kokoelma = dokumenttikokoelma(request)
+        valmis = kokoelma is not None and kokoelma.tila == "ready"
+        kysely = (request.query_params.get("q") or "").strip()[:100]
+        return render(request, "dokumentit", "Dokumentit", "asetukset", kokoelma=kokoelma, kysely=kysely,
+                      ryhmat=dokumentit_lukija.ryhmittain(kokoelma) if valmis else [],
+                      osumat=dokumentit_lukija.hae(kokoelma, kysely) if valmis and kysely else [])
+
+    @app.get("/hub/dokumentit/{tunniste}", response_class=HTMLResponse)
+    async def dokumentti_sivu(request: Request, tunniste: str):
+        kokoelma = dokumenttikokoelma(request)
+        dokumentti = (dokumentit_lukija.etsi(kokoelma, tunniste)
+                      if kokoelma is not None and kokoelma.tila == "ready" else None)
+        if dokumentti is None:
+            return virhe(request, 404, "Dokumenttia ei löydy", "Dokumenttia ei ole asennetussa versiossa.")
+        lohkot, syy = dokumentit_lukija.piirrettava(dokumentti)
+        if lohkot is None:
+            return virhe(request, 422, "Dokumenttia ei voi näyttää", syy or "Dokumentti on liian suuri.")
+        return render(request, "dokumentti", dokumentti["otsikko"], "asetukset", kokoelma=kokoelma,
+                      dokumentti=dokumentti, lohkot=lohkot)
+
+    # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
+
+    def ohjaus(kohde: str):
+        async def ohjaa(request: Request):
+            kysely = request.url.query
+            return RedirectResponse(kohde + ("?" + kysely if kysely else ""), status_code=307)
+        return ohjaa
+
+    for vanha, kohde in VANHAT_OSOITTEET.items():
+        app.add_api_route(vanha, ohjaus(kohde), methods=["GET"], include_in_schema=False)
+
+    def virhe(request: Request, code: int, title: str, message: str):
+        return render(request, "virhe", title, None, status_code=code, viesti=message, koodi=code)
 
     @app.exception_handler(404)
     async def not_found(request: Request, exc):
-        return render_error(request, 404, "Sivua ei löydy", "Tarkista osoite tai palaa etusivulle.")
+        return virhe(request, 404, "Sivua ei löydy", "Tarkista osoite.")
 
     return app
-
-
-def run_view(run_id: str, meta: dict | None, errors: tuple, demo: bool) -> dict:
-    """Ajon yhteenveto. Oikeat julkaisut tulkitaan MUODOT.md:n mukaan (muodot.py); esimerkkidata omilla demo-kentillään."""
-    result = {"run_id": run_id, "title": run_id, "status": "partial" if errors else "published", "status_label": "Osittainen julkaisu" if errors else "Julkaistu", "started_at": None, "ended_at": None, "model": None, "proposal_count": None, "verdicts": None, "facts": None}
-    if demo and meta:
-        result.update(title=meta.get("demo_title", run_id), status="demo", status_label="Esimerkkijulkaisu", started_at=meta.get("demo_started_at"), ended_at=meta.get("demo_ended_at"), model=meta.get("demo_model"), proposal_count=meta.get("demo_proposal_count"), verdicts=meta.get("demo_verdicts"))
-    elif not demo:
-        facts = muodot.run_facts(run_id, meta)
-        partial = bool(muodot.relevant_errors(errors))
-        result.update(title=facts["title"], started_at=facts["started_at"], ended_at=facts["ended_at"], model=facts["model"], facts=facts,
-                      status="partial" if partial else "published", status_label="Osittainen julkaisu" if partial else "Julkaistu")
-    return result

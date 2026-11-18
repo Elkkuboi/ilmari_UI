@@ -39,16 +39,19 @@ def test_sivu_esimerkkitilassa_ilman_lomaketta():
     c = TestClient(create_app(Settings(demo_enabled=True)), base_url="http://ilmari.local", client=None)
     r = c.get("/hub/keskustelu?demo=1")
     assert r.status_code == 200 and "Mitä olen syönyt tänään?" in r.text and "&lt;b&gt;ei html&lt;/b&gt;" in r.text
-    assert 'action="' not in r.text and "Refresh" not in r.headers and "Malli: käynnissä" in r.text
+    assert 'action="' not in r.text and "<form" not in r.text and "Refresh" not in r.headers
+    assert 'href="#viesti"' in r.text and 'id="viesti"' in r.text  # pieni linkki kirjoituskenttään sivun alussa
+    # Hub juureksi (18.11.2026): selityspaneelit pois
+    assert "Näin viesti etenee" not in r.text and "Kokeile" not in r.text and "<svg" not in r.text
     r = c.get("/hub/keskustelu")
-    assert r.status_code == 200 and "lähdettä ei ole määritetty" in r.text
+    assert r.status_code == 200 and "Keskustelu ei ole saatavilla" in r.text and 'id="viesti"' not in r.text
 
 
 def test_tuotannossa_lomake_gatewaylle(tmp_path):
     root = tmp_path / "ajot"
     root.mkdir()
     config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(root), "kayttajat": {"elias@github": "elias"}}})
-    with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost",
                     client=None) as client:
         r = client.get("/keskustelu", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github",
                                                "x-forwarded-proto": "https", "x-forwarded-for": "100.67.5.28"})
@@ -110,7 +113,7 @@ def test_saiesivu_tuotannossa_ja_esimerkkitilassa(tmp_path, monkeypatch):
     alkup = km.OLETUS
     km.OLETUS = hak
     try:
-        with TestClient(create_app(Settings(runs_dir=config.runs_dir, identity=config)), base_url="http://localhost",
+        with TestClient(create_app(Settings(identity=config)), base_url="http://localhost",
                         client=None) as client:
             r = client.get("/keskustelu", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github",
                                                    "x-forwarded-proto": "https", "x-forwarded-for": "100.67.5.28"})
@@ -126,3 +129,19 @@ def test_saiesivu_tuotannossa_ja_esimerkkitilassa(tmp_path, monkeypatch):
     c = TestClient(create_app(Settings(demo_enabled=True)), base_url="http://ilmari.local", client=None)
     r = c.get("/hub/keskustelu?demo=1")
     assert r.status_code == 200 and "Hahmon kuvaohje" in r.text and "Arkisto (1)" in r.text and 'action="' not in r.text
+
+
+def test_tuotannossa_kaynnista_malli_vain_kun_malli_ei_ole_kaynnissa(tmp_path, monkeypatch):
+    import ilmari_ui.keskustelu as km
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    for tila, nakyy in (("running", False), ("stopped", True), (None, True)):
+        data = {"muoto": "aiops-keskustelu-v1", "paivitetty": "2026-10-28T20:00:00+00:00", "viimeisin": 0,
+                "malli": {"tila": tila, "tila_teksti": "x", "tyo": None}, "viestit": []}
+        monkeypatch.setattr(km, "OLETUS", julkaise(tmp_path / f"k-{tila}", data=data))
+        with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
+            r = client.get("/keskustelu", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"})
+        assert r.status_code == 200 and 'action="https://tyoasema.test/ilmari/viesti"' in r.text
+        assert ('action="https://tyoasema.test/kehita/malli"' in r.text) is nakyy
+        assert ('name="toiminto" value="kaynnista"' in r.text) is nakyy
