@@ -1,5 +1,23 @@
 # ilmari_UI: tämän repositorion tilanne 18.11.2026
 
+## Päivitys 18.11.2026 (ilta): Töihin nyt ja viimeisin raportti (aiops Pala 1b), haara `ilmari-nyt-2`
+
+- Ilmari nyt -sivun Tila-paneelissa on nappi **Töihin nyt** (lomake `POST {gateway}/ilmari/vuoro`, `paluu=hub`). Se
+  näkyy, kun tila on luettu, Seis ei ole päällä eikä vuoroa ole; harmaana, kun dsh-työ tai vanha yöajo on kesken. Jos
+  gateway ajaa ensin rajatestin, se palaa osoitteeseen `/hub/ilmari?toihin=rajatesti` ja sivu kertoo, että työvuoro
+  alkaa itsestään. Vuoron laji `tyovuoro` näkyy nimellä "Työvuoro".
+- Paneeli **Viimeisin raportti** heti Tilan jälkeen: gatewayn `toiminta/raportti.json` (kentät täsmälleen `versio`,
+  `aika`, `saie`, `laji`, `teksti`; teksti enintään 8 000 merkkiä, tiedosto enintään 64 KiB, sama omistajatarkistus
+  kuin muilla). Puuttuva tiedosto piilottaa paneelin, kelvoton näyttää "Raporttia ei voi lukea." Teksti näytetään
+  koodattuna (`pre-wrap`, ei `|safe`).
+- Tekoloki: "työ N" on linkki vain riveillä `tyo_alkoi`, `tyo_paattyi` ja `tyo_peruttu` (rajatestityötä ei julkaista).
+- Kehitä: Eliaksen toiveet ("Kehitystyöt") ja Ilmarin omat työt omissa listoissaan, kumpikin enintään 50 uusinta
+  (`lue_kehitystyot` rajaa listat erikseen, selaa enintään 2 000 hakemistoa tai 2 s). Ilmarin työt eivät enää työnnä
+  Eliaksen töitä pois listalta.
+- Asennusjärjestys: aiops (gateway, reitti `/ilmari/vuoro`) ensin, sitten Hub. Vanhalla gatewaylla nappi veisi
+  404-sivulle.
+- Testit: 801 passed, 72 skipped (ilman selainryhmää, shellcheckiä ja roottia).
+
 ## Päivitys 18.11.2026: Ilmari nyt (aiops ADR-0032, Pala 1 "Ilmari toimii itse"), haara `ilmari-nyt`
 
 - Uusi sivu `/hub/ilmari` ("Ilmari nyt", navigaatiossa Keskustelun jälkeen ja puhelimen alapalkissa; Sovellukset
