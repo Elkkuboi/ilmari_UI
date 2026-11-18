@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -298,3 +299,50 @@ def test_gatewayn_kirjoittama_ilmarin_meta_on_ilmarin_tyo(tmp_path):
 def test_esimerkin_ilmarin_tyo():
     t = lue_kehitystyo(ESIMERKKI, 43)
     assert t.ilmarin and t.meta["lahde"] == "oma" and t.toimet == KAIKKI_POIS and t.vaihe == ("Valmis", "success")
+
+
+# --- Pala 1b: Eliaksen toiveet ja Ilmarin omat työt rajataan erikseen ------------------------------------------------
+
+def ilmarin(juuri: Path, tyo: int) -> None:
+    julkaise(juuri, tyo, m=meta(tyo, jattaja="aiops-ceo", lahde="oma"), tiedostot={})
+
+
+def test_ilmarin_tyot_eivat_tyonna_eliaksen_toita_pois(tmp_path):
+    """Ennen: 50 uusinta hakemistoa ennen jättäjän lukemista, joten 60 Ilmarin yötyötä piilotti Eliaksen toiveet.
+    Nyt raja on kummallekin erikseen: Eliaksen kolme vanhaa työtä näkyvät, Ilmarin töistä 50 uusinta."""
+    for tyo in (1, 2, 3):
+        julkaise(tmp_path, tyo, m=meta(tyo), tiedostot={})
+    for tyo in range(101, 161):
+        ilmarin(tmp_path, tyo)
+    tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
+    assert [t.tyo for t in tyot if not t.ilmarin] == [3, 2, 1]
+    assert [t.tyo for t in tyot if t.ilmarin] == list(range(160, 110, -1))
+    assert [t.tyo for t in tyot] == sorted((t.tyo for t in tyot), reverse=True)  # uusin ensin
+
+
+def test_kumpikin_lista_enintaan_viisikymmenta(tmp_path):
+    for tyo in range(1, 221):
+        (ilmarin(tmp_path, tyo) if tyo % 2 else julkaise(tmp_path, tyo, m=meta(tyo), tiedostot={}))
+    tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
+    assert [t.tyo for t in tyot if not t.ilmarin] == list(range(220, 120, -2))
+    assert [t.tyo for t in tyot if t.ilmarin] == list(range(219, 119, -2))
+
+
+def test_selaus_on_rajattu(tmp_path, monkeypatch):
+    """Kielletty suunta: selaus ei jatku loputtomiin. SELAA_MAX rajaa luettavat hakemistot, ja uusimpien TOITA_MAX:n
+    jälkeen aikaraja lopettaa selauksen (sivu ei jää odottamaan)."""
+    import types
+
+    from ilmari_ui import kehitys
+    julkaise(tmp_path, 1, m=meta(1), tiedostot={})
+    for tyo in range(2, 62):
+        ilmarin(tmp_path, tyo)
+    monkeypatch.setattr(kehitys, "SELAA_MAX", 30)
+    assert [t.tyo for t in lue_kehitystyot(tmp_path, omistajat=OMAT)] == list(range(61, 31, -1))
+    monkeypatch.setattr(kehitys, "SELAA_MAX", 2000)
+    assert 1 in [t.tyo for t in lue_kehitystyot(tmp_path, omistajat=OMAT)]
+    # kello etenee sekunnin joka kutsulla: 50 uusinta luetaan silti, sen jälkeen selaus päättyy
+    oikea, lisa = time.monotonic, iter(range(10**6))
+    monkeypatch.setattr(kehitys, "time", types.SimpleNamespace(monotonic=lambda: oikea() + next(lisa)))
+    tyot = lue_kehitystyot(tmp_path, omistajat=OMAT)
+    assert [t.tyo for t in tyot] == list(range(61, 11, -1)) and all(t.virheet == () for t in tyot)

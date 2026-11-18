@@ -1,12 +1,15 @@
-"""Ilmarin toiminta Hubissa (aiops ADR-0032, Pala 1 "Ilmari toimii itse", 18.11.2026).
+"""Ilmarin toiminta Hubissa (aiops ADR-0032, Pala 1 "Ilmari toimii itse", 18.11.2026; Pala 1b työvuoro ja raportti).
 
 Gateway (aiops-gw) kirjoittaa hakemistoon /srv/aiops/ilmari/toiminta (aiops-gw:ilmari-julkaisu 2750) Ilmarin tilan:
 
 - asetukset.json  yöajo päällä/pois ja kellonaika (Elias muuttaa Hubista, gateway tallentaa)
-- tila.json       Seis-kytkin, viimeisin yöajo, käynnissä oleva vuoro ja viimeisin rajatestin tulos
+- tila.json       Seis-kytkin, viimeisin yöajo, käynnissä oleva vuoro (yöajo tai Eliaksen napista käynnistämä
+                  työvuoro) ja viimeisin rajatestin tulos
 - ohjeet.json     pysyvät ohjeet (Eliaksen korjaukset, jotka Ilmari tallensi)
 - tavoitteet.json Eliaksen tavoitteet riveinä
 - teot.jsonl      tekoloki: rivi per teko, vain lisäys; yli 2 MiB:n jälkeen vanha nimetään teot.1.jsonl:ksi
+- raportti.json   viimeisimmän päättyneen vuoron raportti (vuoron säikeen viimeisin Ilmarin viesti); puuttuu, kunnes
+                  ensimmäinen vuoro on päättynyt raporttiin (aikakatko ja Seis eivät kirjoita sitä)
 
 JSON-tiedostot gateway vaihtaa atomisesti (tmp + rename), joten ne luetaan peruskirjan lukijalla (linkkejä seuraamatta,
 omistaja, kokoraja, muuttumattomuus luvun aikana) ja tarkoilla kenttäjoukoilla. Puuttuva tiedosto tarkoittaa
@@ -16,7 +19,8 @@ katkaisu, linkitys tai tiedoston vaihto kesken luvun on virhe. Rikkinäinen teko
 
 Jokaisen tiedoston virhe on oma: rikkinäinen tekoloki ei piilota Seis-tilaa. Kaikki teksti on mallin tai gatewayn
 kirjoittamaa dataa: se siivotaan ohjausmerkeistä ja pohja koodaa sen (ei |safe-polkua, ei Markdownia). Hub ei kirjoita
-mitään; Seis, Jatka, asetukset, tavoitteet, ohjeen poisto ja rajatesti ovat gatewayn lomakereittejä (paluu=hub).
+mitään; Seis, Jatka, Töihin nyt, asetukset, tavoitteet, ohjeen poisto ja rajatesti ovat gatewayn lomakereittejä
+(paluu=hub).
 """
 
 from __future__ import annotations
@@ -46,7 +50,8 @@ OHJEET = "ohjeet.json"
 TAVOITTEET = "tavoitteet.json"
 TEOT = "teot.jsonl"
 TEOT_VANHA = "teot.1.jsonl"
-RAJAT = {ASETUKSET: 4 * 1024, TILA: 64 * 1024, OHJEET: 256 * 1024, TAVOITTEET: 64 * 1024}
+RAPORTTI = "raportti.json"
+RAJAT = {ASETUKSET: 4 * 1024, TILA: 64 * 1024, OHJEET: 256 * 1024, TAVOITTEET: 64 * 1024, RAPORTTI: 64 * 1024}
 TEOT_RAJA = 4 * 1024 * 1024        # kierrätys 2 MiB:n kohdalla; tätä suurempi = kierrätys ei toimi
 HANTA = 512 * 1024                 # tekolokista luettava loppuosa (100 riviä à 2000 tavua mahtuu moneen kertaan)
 TEKO_RIVI_MAX = 2000
@@ -62,15 +67,23 @@ OHJEET_KENTAT = frozenset({"versio", "ohjeet"})
 OHJE_KENTAT = frozenset({"id", "aika", "teksti"})
 TAVOITTEET_KENTAT = frozenset({"versio", "aika", "rivit"})
 TEKO_KENTAT = frozenset({"aika", "lahde", "laji", "mita", "miksi", "peru", "tyo", "saie"})
+RAPORTTI_KENTAT = frozenset({"versio", "aika", "saie", "laji", "teksti"})
 
 OLETUS_ASETUKSET = {"paalla": True, "kello": "02:00"}
-VUOROT = {"yoajo": "Yöajo"}
+VUOROT = {"yoajo": "Yöajo", "tyovuoro": "Työvuoro"}   # vuoron ja raportin laji (gateway: yöajo tai Töihin nyt)
+VUORON_TYOT = {"yoajo": "yön työt", "tyovuoro": "työvuoron työt"}
+# Tekolokin "työ N" on linkki Kehitä-sivulle vain työriveillä, joiden työ julkaistaan siellä: muiden rivien työtä
+# (esim. rajatesti) ei julkaista, joten linkki veisi 404-sivulle. Gateway kirjoittaa näiden rivien työn numeron aina
+# itse; tyo_alkoi-rivin lähde on silti "ilmari", koska sen teksti on mallin (tehtävän ensimmäinen rivi). Ilmarin omat
+# kirjaukset ovat lajia "kirjaus", eivätkä ne voi olla näitä lajeja.
+TYO_LINKIT = frozenset({"tyo_alkoi", "tyo_paattyi", "tyo_peruttu"})
 ODOTUKSET = {"estetty": "pitää estyä", "sallittu": "pitää toimia"}
 TEKIJAT = {"gateway": "Gateway", "ilmari": "Ilmari"}
 OHJEITA_MAX, OHJE_MAX = 40, 400
 RIVEJA_MAX, RIVI_MAX = 20, 200
 KOHTIA_MAX, HAVAINTO_MAX, KOHTA_NIMI_MAX = 40, 200, 120
 TEKO_TEKSTI_MAX = 1000
+RAPORTTI_MAX = 8000                # = Ilmarin viestin enimmäispituus gatewayssa
 _KELLO = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", re.ASCII)
 VIESTIT = {
     "wrong_owner": "Julkaisua ei ole tehnyt gateway (väärä omistaja).",
@@ -96,6 +109,8 @@ class Toiminta:
     teot: tuple[dict[str, Any], ...] | None = ()
     teot_ohitettu: int = 0
     virheet: tuple[str, ...] = field(default_factory=tuple)
+    raportti: dict[str, Any] | None = None   # None: ei julkaistu (paneelia ei näytetä) tai ei luettavissa
+    raportti_virhe: bool = False
 
 
 class _Ohitettava(Exception):
@@ -256,6 +271,16 @@ def tarkista_tavoitteet(data: Any) -> dict[str, Any]:
     return {"aika": _aika(data["aika"]), "rivit": [_teksti(r, RIVI_MAX, tyhja=False) for r in data["rivit"]]}
 
 
+def tarkista_raportti(data: Any) -> dict[str, Any]:
+    """raportti.json: viimeisimmän vuoron raportti. Teksti on mallin kirjoittamaa: rivinvaihdot sallitaan, ohjausmerkit
+    eivät; tuntematon laji on kelvoton tiedosto."""
+    _kentat(data, RAPORTTI_KENTAT, RAPORTTI)
+    if type(data["laji"]) is not str or data["laji"] not in VUOROT:
+        _virhe("Raportin laji on tuntematon.")
+    return {"aika": _aika(data["aika"]), "saie": _kokonaisluku(data["saie"]), "laji": data["laji"],
+            "nimi": VUOROT[data["laji"]], "teksti": _teksti(data["teksti"], RAPORTTI_MAX, tyhja=False, rivinvaihdot=True)}
+
+
 def tarkista_teko(raaka: bytes) -> dict[str, Any]:
     """Yksi tekolokin rivi. lahde on gatewayn asettama: "gateway" = havaittu tosiasia, "ilmari" = mallin kirjaus."""
     if len(raaka) > TEKO_RIVI_MAX:
@@ -267,10 +292,12 @@ def tarkista_teko(raaka: bytes) -> dict[str, Any]:
         tekstit = [t[k] for k in ("mita", "miksi", "peru", "laji")]
         if any(type(v) is not str for v in tekstit) or not t["mita"].strip() or not t["laji"].strip():
             raise _Ohitettava
+        tyo = _kokonaisluku(t["tyo"], tyhja=True)
         return {"aika": _aika(t["aika"]), "lahde": t["lahde"], "tekija": TEKIJAT[t["lahde"]],
                 "laji": _siisti(t["laji"], 40), "mita": _siisti(t["mita"], TEKO_TEKSTI_MAX),
                 "miksi": _siisti(t["miksi"], TEKO_TEKSTI_MAX), "peru": _siisti(t["peru"], TEKO_TEKSTI_MAX),
-                "tyo": _kokonaisluku(t["tyo"], tyhja=True), "saie": _kokonaisluku(t["saie"], tyhja=True)}
+                "tyo": tyo, "saie": _kokonaisluku(t["saie"], tyhja=True),
+                "tyo_linkki": tyo is not None and t["laji"] in TYO_LINKIT}
     except ReadFailure:
         raise _Ohitettava from None
 
@@ -414,6 +441,7 @@ def lue_toiminta(root: str | Path, *, omistajat: frozenset[int] | None = None,
             osa(OHJEET, lambda: json_osa(OHJEET, tarkista_ohjeet), ())
             osa(TAVOITTEET, lambda: json_osa(TAVOITTEET, tarkista_tavoitteet), {"aika": None, "rivit": []})
             osa(TEOT, lambda: _lue_teot(hd, omistajat, deadline), ((), 0))
+            osa(RAPORTTI, lambda: json_osa(RAPORTTI, tarkista_raportti), False)  # False: ei julkaistu
     except ReadFailure as error:
         if error.code == "not_found":
             return Toiminta("not_published", "Gateway ei ole vielä julkaissut Ilmarin toimintaa.")
@@ -422,7 +450,7 @@ def lue_toiminta(root: str | Path, *, omistajat: frozenset[int] | None = None,
         return Toiminta("error", f"Toimintaa ei voi lukea ({error.strerror}).")
     teot, ohitettu = osat[TEOT] if osat[TEOT] is not None else (None, 0)
     return Toiminta("ready", None, osat[ASETUKSET], osat[TILA], osat[OHJEET], osat[TAVOITTEET], teot, ohitettu,
-                    tuple(virheet))
+                    tuple(virheet), raportti=osat[RAPORTTI] or None, raportti_virhe=osat[RAPORTTI] is None)
 
 
 # --- Näyttö -----------------------------------------------------------------------------------------------------------
@@ -435,28 +463,41 @@ def kello(arvo: str | None) -> str:
         return ""
 
 
+def rajatesti_kaynnissa(toiminta: Toiminta | None, dsh_tyo: int | None) -> bool:
+    """Onko käynnissä oleva dsh-työ rajatesti? Gateway kirjaa jonoon jätetyn rajatestin tekolokiin (laji rajatesti,
+    lähde gateway, työn numero); uusin tällainen rivi kertoo saman työn. Rajatestiä ei julkaista Kehitä-sivulle, joten
+    sille ei tehdä linkkiä, ja Töihin nyt -pyyntö odottaa sen tulosta."""
+    if toiminta is None or dsh_tyo is None or not toiminta.teot:
+        return False
+    rivi = next((t for t in reversed(toiminta.teot) if t["laji"] == "rajatesti" and t["lahde"] == "gateway"), None)
+    return rivi is not None and rivi["tyo"] == dsh_tyo
+
+
 def tilarivi(toiminta: Toiminta | None, nyt: datetime) -> dict[str, Any] | None:
-    """Sivun ylin rivi: {teksti, savy, selitys, seis}. seis: True = pysäytetty, False = ei, None = ei tiedossa (silloin
-    sivu näyttää sekä Seis- että Jatka-napin)."""
+    """Sivun ylin rivi: {teksti, savy, selitys, seis, toihin}. seis: True = pysäytetty, False = ei, None = ei tiedossa
+    (silloin sivu näyttää sekä Seis- että Jatka-napin). toihin: Töihin nyt -nappi näytetään vain, kun tila on luettu,
+    Seis ei ole päällä eikä vuoroa ole (myös rikkinäinen vuoro piilottaa sen); gateway tarkistaa saman itse."""
     if toiminta is None:
         return None
     if toiminta.tila != "ready" or toiminta.tilanne is None:
-        return {"teksti": "Tila ei tiedossa", "savy": "warning", "seis": None,
+        return {"teksti": "Tila ei tiedossa", "savy": "warning", "seis": None, "toihin": False,
                 "selitys": "Ilmarin tilaa ei voi lukea. Seis toimii silti: gateway tarkistaa tilan itse."}
     t = toiminta.tilanne
     if t["seis"]:
         kuka = f" ({t['seis_kuka']})" if t["seis_kuka"] else ""
         aika = kello(t["seis_aika"])
-        return {"teksti": "Seis", "savy": "danger", "seis": True,
+        return {"teksti": "Seis", "savy": "danger", "seis": True, "toihin": False,
                 "selitys": (f"Pysäytetty klo {aika}{kuka}. " if aika else "Pysäytetty. ")
                 + "Ilmari ei aloita töitä eikä yöajoa, ennen kuin painat Jatka. Keskustelu ilman työkaluja toimii."}
     vuoro = t["vuoro"]
     if vuoro is not None:
         paattyy = datetime.fromisoformat(vuoro["paattyy"])
+        tyot = VUORON_TYOT.get(vuoro["laji"], "vuoron työt")
         if paattyy > nyt:
             return {"teksti": f"{vuoro['nimi']} käynnissä klo {kello(vuoro['paattyy'])} asti", "savy": "accent",
-                    "seis": False, "selitys": f"Ilmari tekee yön työt säikeeseen {vuoro['saie']}. Seis pysäyttää sen heti."}
-        return {"teksti": f"{vuoro['nimi']}n aika ylittyi", "savy": "warning", "seis": False,
+                    "seis": False, "toihin": False,
+                    "selitys": f"Ilmari tekee {tyot} säikeeseen {vuoro['saie']}. Seis pysäyttää sen heti."}
+        return {"teksti": f"{vuoro['nimi']}n aika ylittyi", "savy": "warning", "seis": False, "toihin": False,
                 "selitys": f"Vuoron piti päättyä klo {kello(vuoro['paattyy'])}; gateway päättää sen seuraavalla kierroksella."}
-    return {"teksti": "Käynnissä", "savy": "success", "seis": False,
+    return {"teksti": "Käynnissä", "savy": "success", "seis": False, "toihin": t.get("vuoro_virhe") is False,
             "selitys": "Ilmari vastaa viesteihin ja tekee työt itse loppuun. Seis pysäyttää työt ja estää uudet."}

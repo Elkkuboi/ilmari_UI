@@ -5,11 +5,11 @@
  "seis_kuka": null,
  "yoajo_viimeisin": "2026-11-19",
  "vuoro": {
-  "laji": "yoajo",
-  "saie": 12,
-  "istunto": 31,
-  "alkoi": "2026-11-19T02:01:12+02:00",
-  "paattyy": "2026-11-19T04:56:12+02:00"
+  "laji": "tyovuoro",
+  "saie": 13,
+  "istunto": 32,
+  "alkoi": "2026-11-19T15:40:05+02:00",
+  "paattyy": "2026-11-19T17:05:05+02:00"
  },
  "rajatesti": {
   "aika": "2026-11-19T02:00:41+02:00",

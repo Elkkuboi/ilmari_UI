@@ -1,0 +1,7 @@
+{
+ "versio": 1,
+ "aika": "2026-11-19T04:40:12+02:00",
+ "saie": 12,
+ "laji": "yoajo",
+ "teksti": "Aamuraportti 19.11.\n\nTehty\n- Tein työtilaan tehtävälistan kolmesta tavoitteesta (työ 43).\n- Itsearviointi: Ravintopolun työssä 98 testit ajettiin ennen committia, kuten ohje 2 sanoo.\n\nKesken\n- Paikallisen mallin nopeus 32k-kontekstilla: mittaan ensi yönä.\n\nTarvitsen sinulta\n- Hyväksy tai hylkää haara ilmari/98 Kehitä-sivulla.\n\nMerkintä kuten <script>alert(1)</script> näkyy tekstinä."
+}
