@@ -12,7 +12,7 @@
   <p class="pre">{{ meta.toive or 'Toive puuttuu' }}</p>
   <dl class="kv">
     <dt>Kohde</dt><dd>{{ meta.lahde or 'aiops' }} · {{ 'Ilmarin oma työ' if t.ilmarin else 'sinun toiveesi' }}{% if meta.jatka %} · jatkaa työtä <a href="{{ url('/hub/kehita/' ~ meta.jatka) }}">{{ meta.jatka }}</a>{% endif %}</dd>
-    <dt>Tila</dt><dd>{{ vaihe_teksti }}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}{% if t.kesken %} · päivittyy itsestään{% endif %}</dd>
+    <dt>Tila</dt><dd>{{ vaihe_teksti }}{% if meta.kesto %} · {{ meta.kesto }}{% endif %}{% if paivittyy %} · päivittyy itsestään{% endif %}</dd>
     {% if tulos %}<dt>Haara</dt><dd><code>{{ tulos.haara or '–' }}</code>{% if tulos.commiteja is not none %} · {{ tulos.commiteja }} {{ 'commit' if tulos.commiteja == 1 else 'committia' }}{% endif %}{% if tulos.paa %} · kärki <code>{{ tulos.paa[:7] }}</code>{% endif %}</dd>
     <dt>Muutokset</dt><dd>{{ muutosrivi(tulos.muutokset, diffit) or 'ei muutoksia' }}</dd>
     <dt>Testit</dt><dd>{% if tulos.testit %}<span class="tag {{ 'ok' if tulos.testit.paluukoodi == 0 else 'stop' }}">{{ 'läpi' if tulos.testit.paluukoodi == 0 else 'epäonnistuivat' }}</span> {{ testirivi(tulos.testit.yhteenveto) }}{% else %}ei ajettu{% endif %}</dd>{% endif %}

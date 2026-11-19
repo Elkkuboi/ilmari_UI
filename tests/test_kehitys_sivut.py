@@ -216,3 +216,60 @@ def test_valmiit_tyot_eivat_paivity(tmp_path, monkeypatch):
         r = client.get("/kehita", headers=OTSAKKEET)
         t = client.get("/kehita/5", headers=OTSAKKEET)
     assert "Refresh" not in r.headers and "Refresh" not in t.headers
+
+
+# --- Päivitys ei hävitä kesken olevaa tekstiä (19.11.2026) --------------------------------------------------
+
+def kentat(r):
+    return [k.get("name") for k in BeautifulSoup(r.text, "html.parser").find_all(["textarea", "select", "input"])
+            if k.get("type") != "hidden"]
+
+
+def test_tyolista_seuraa_ilman_kenttaa_ja_kirjoitustila_ilman_paivitysta(tmp_path, monkeypatch):
+    """Työ kesken: lista päivittyy ilman toivekenttää, ja kenttä tulee linkistä (kirjoita=1) tai esitäytetyn toiveen
+    kanssa ilman päivitystä. Muu parametrin arvo ei avaa kenttää eikä näy sivulla."""
+    juuri = tmp_path / "kehitys"
+    kirjoita(juuri, 5, tila="running")
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    with tuotanto(tmp_path) as client:
+        seuranta = client.get("/kehita", headers=OTSAKKEET)
+        kirjoitus = client.get("/kehita?kirjoita=1", headers=OTSAKKEET)
+        esitaytetty = client.get("/kehita?toive=Lis%C3%A4%C3%A4+poisto", headers=OTSAKKEET)
+        muut = [client.get(f"/kehita?{q}", headers=OTSAKKEET) for q in ("kirjoita=0", "kirjoita=%3Cb%3E", "kirjoita=1x")]
+    assert seuranta.headers["refresh"] == "15" and kentat(seuranta) == [] and 'action="https://tyoasema.test/kehita"' not in seuranta.text
+    linkki = BeautifulSoup(seuranta.text, "html.parser").find("a", string="Kirjoita toive")
+    assert linkki["href"] == "/hub/kehita?kirjoita=1" and "Työ 5" in seuranta.text
+    for r in (kirjoitus, esitaytetty):
+        assert r.status_code == 200 and "refresh" not in r.headers and kentat(r) == ["toive", "lahde"]
+        assert 'action="https://tyoasema.test/kehita"' in r.text and "Kirjoita toive" not in r.text
+    assert BeautifulSoup(esitaytetty.text, "html.parser").find("textarea").get_text() == "Lisää poisto"
+    for r in muut:
+        assert r.headers["refresh"] == "15" and kentat(r) == [] and "<b>" not in r.text and "1x" not in r.text
+
+
+def test_tyolista_ilman_keskeneraista_nayttaa_kentan_eika_paivity(tmp_path, monkeypatch):
+    juuri = tmp_path / "kehitys"
+    kirjoita(juuri, 5)
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    with tuotanto(tmp_path) as client:
+        r = client.get("/kehita", headers=OTSAKKEET)
+    assert "refresh" not in r.headers and kentat(r) == ["toive", "lahde"] and "Kirjoita toive" not in r.text
+
+
+def test_tyosivu_ei_paivity_kun_sivulla_on_tekstikentta(tmp_path, monkeypatch):
+    """Sallittu: kesken oleva työ ilman kenttää päivittyy. Kielletty: kesken, mutta sivulla on sulkuviesti tai
+    muutospyyntö (ristiriitainen julkaisu), jolloin päivitystä ei ole eikä sivu lupaa sitä."""
+    juuri = tmp_path / "kehitys"
+    kirjoita(juuri, 60, tila="running")
+    kirjoita(juuri, 61, tila="running", paatos={"paatos": "hyvaksytty"}, yhdistys={"tila": "ristiriita"})
+    kirjoita(juuri, 62, paatos={"paatos": "hylatty", "palautus_pyynto": "x"})
+    monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    with tuotanto(tmp_path) as client:
+        r60, r61, r62 = (client.get(f"/kehita/{n}", headers=OTSAKKEET) for n in (60, 61, 62))
+    assert r60.headers["refresh"] == "15" and kentat(r60) == [] and "päivittyy itsestään" in r60.text
+    assert kentat(r61) == ["viesti"] and kentat(r62) == ["toive"]
+    for r in (r61, r62):
+        assert r.status_code == 200 and "refresh" not in r.headers and "päivittyy itsestään" not in r.text

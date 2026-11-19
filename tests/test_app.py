@@ -16,7 +16,9 @@ from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 import pytest
 
-from ilmari_ui.app import PACKAGE_DIR, Settings, create_app, format_time, koneen_ika, lyhyt_aika
+from fastapi.responses import HTMLResponse
+
+from ilmari_ui.app import PACKAGE_DIR, Settings, create_app, format_time, koneen_ika, lyhyt_aika, paivity
 from ilmari_ui.config import parse_config
 
 # (osoite, otsikko, aktiivinen valikkolinkki)
@@ -160,11 +162,11 @@ def test_ei_skripteja_tyyleja_eika_tapahtumakasittelijoita(demo_client):
 def test_paikalliset_tiedostot_latautuvat_turvaotsakkein(demo_client):
     dom = soup(demo_client.get("/hub"))
     resurssit = [l["href"] for l in dom.find_all("link", href=True)]
-    assert set(resurssit) == {"/hub/static/favicon.svg", "/hub/static/manifest.webmanifest",
-                              "/hub/static/icon-192.png", "/hub/static/app.css"}
+    assert set(resurssit) == {"/hub/static/favicon-v2.svg", "/hub/static/manifest.webmanifest",
+                              "/hub/static/icon-192-v2.png", "/hub/static/app.css"}
     for polku in resurssit + [f"/hub/static/fonts/{f}" for f in FONTIT] + ["/hub/static/fonts/IBM-Plex-LICENSE.txt",
-                                                                         "/hub/static/icon-512.png",
-                                                                         "/hub/static/icon-maskable-512.png"]:
+                                                                         "/hub/static/icon-512-v2.png",
+                                                                         "/hub/static/icon-maskable-512-v2.png"]:
         r = demo_client.get(polku)
         assert r.status_code == 200 and r.content, polku
         assert "script-src 'none'" in r.headers["content-security-policy"] and r.headers["x-content-type-options"] == "nosniff"
@@ -187,16 +189,37 @@ def test_tyyli_viittaa_vain_paikallisiin_fontteihin():
     assert not re.search(r"border-radius:\s*[1-9]", css)
 
 
-def test_manifesti_ja_kuvakkeet():
+VANHAT_KUVAKKEET = ("icon-192.png", "icon-512.png", "icon-maskable-512.png", "favicon.svg")
+
+
+def test_manifesti_ja_kuvakkeet(demo_client):
+    """Kuvakkeet versioiduilla nimillä (19.11.2026): asennettu sovellus huomaa uuden kuvakkeen vain uudesta
+    osoitteesta. Jokainen manifestin kuvake on olemassa, oikean kokoinen PNG ja ladattavissa."""
     m = json.loads((PACKAGE_DIR / "static" / "manifest.webmanifest").read_text(encoding="utf-8"))
     assert (m["name"], m["start_url"], m["background_color"], m["theme_color"]) == ("Ilmari", "/hub", "#f1ead9", "#f1ead9")
+    assert [(k["src"], k["sizes"], k["purpose"]) for k in m["icons"]] == [
+        ("/hub/static/icon-192-v2.png", "192x192", "any"), ("/hub/static/icon-512-v2.png", "512x512", "any"),
+        ("/hub/static/icon-maskable-512-v2.png", "512x512", "maskable")]
     for kuvake in m["icons"]:
         tiedosto = PACKAGE_DIR / "static" / Path(kuvake["src"]).name
         koko = int(kuvake["sizes"].split("x")[0])
         data = tiedosto.read_bytes()
         assert data[:8] == b"\x89PNG\r\n\x1a\n" and int.from_bytes(data[16:20], "big") == koko
-    svg = (PACKAGE_DIR / "static" / "favicon.svg").read_text(encoding="utf-8")
+        assert int.from_bytes(data[20:24], "big") == koko and kuvake["type"] == "image/png"
+        r = demo_client.get(kuvake["src"])
+        assert r.status_code == 200 and r.content == data and r.headers["content-type"] == "image/png"
+    svg = (PACKAGE_DIR / "static" / "favicon-v2.svg").read_text(encoding="utf-8")
     assert "#f1ead9" in svg and "#1f1b16" in svg and "#a8431a" in svg and "<script" not in svg
+
+
+def test_vanhoja_kuvakenimia_ei_ole():
+    """Kielletty suunta: vanhoja (versioimattomia) kuvaketiedostoja tai viittauksia niihin ei jää."""
+    for vanha in VANHAT_KUVAKKEET:
+        assert not (PACKAGE_DIR / "static" / vanha).exists(), vanha
+        assert local_client(Settings(demo_enabled=True)).get(f"/hub/static/{vanha}").status_code == 404
+    for tiedosto in [*PACKAGE_DIR.rglob("*.html"), *PACKAGE_DIR.rglob("*.py"), PACKAGE_DIR / "static" / "manifest.webmanifest"]:
+        teksti = tiedosto.read_text(encoding="utf-8")
+        assert not [v for v in VANHAT_KUVAKKEET if "/" + v in teksti], tiedosto
 
 
 def test_juuri_ohjaa_hubiin_ilman_evastetta(demo_client):
@@ -221,8 +244,35 @@ def test_esimerkkitila_vaatii_kyselyn(demo_client):
                                             ("/hub/keskustelu?demo=1", None), ("/hub/dokumentit?demo=1", None)])
 def test_automaattinen_paivitys_vain_kun_jotain_on_kaynnissa(demo_client, polku, paivitys):
     """Esimerkissä työvuoro ja työ 42 ovat käynnissä. Asetukset ei päivity koskaan (tyhjentäisi lomakkeet); keskustelu
-    päivittyy vain tuotannossa (test_keskustelu)."""
+    päivittyy vain, kun Ilmari vastaa vielä (test_keskustelu)."""
     assert demo_client.get(polku).headers.get("refresh") == paivitys
+
+
+@pytest.mark.parametrize("html,paivittyy", [
+    ("<p>tila</p>", True), ('<form><input type="hidden" name="paluu" value="hub"><button>Seis</button></form>', True),
+    ("<p>&lt;textarea&gt; on tekstiä, ei kenttä</p>", True),
+    ("<textarea name=t></textarea>", False), ('<input name="nimi">', False), ('<input type="text" name="x">', False),
+    ('<input name="x" type="hidden"><input name="y">', False), ("<select name=s></select>", False),
+    ("<TEXTAREA></TEXTAREA>", False)])
+def test_paivitys_ei_koskaan_sivulle_jolla_on_muokattava_kentta(html, paivittyy):
+    """Raja koodissa (19.11.2026): päivitys tyhjentäisi kesken kirjoitetun tekstin."""
+    assert ("refresh" in paivity(HTMLResponse(html), "5").headers) is paivittyy
+
+
+def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
+    """Jokainen sivu ja tila esimerkissä: joko päivitys tai muokattava kenttä, ei molempia. Nyt ja käynnissä oleva
+    työ päivittyvät ilman kenttiä; Työt seuraa työtä 42 ilman toivekenttää, kirjoitustilassa kenttä ilman päivitystä."""
+    tulokset = {}
+    for polku in ("/hub", "/hub/keskustelu", "/hub/kehita", "/hub/kehita?kirjoita=1", "/hub/kehita?toive=x",
+                  "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit"):
+        r = demo_client.get(polku + ("&" if "?" in polku else "?") + "demo=1")
+        kentat = [k for k in soup(r).find_all(["textarea", "select", "input"]) if k.get("type") != "hidden"]
+        assert not ("refresh" in r.headers and kentat), polku
+        tulokset[polku] = ("refresh" in r.headers, bool(kentat))
+    assert tulokset["/hub"] == (True, False) and tulokset["/hub/kehita/42"] == (True, False)
+    assert tulokset["/hub/kehita"] == (True, False) and tulokset["/hub/kehita?kirjoita=1"] == (False, True)
+    assert tulokset["/hub/kehita?toive=x"] == (False, True) and tulokset["/hub/keskustelu"] == (False, True)
+    assert tulokset["/hub/kehita/98"] == (False, True)
 
 
 # --- Raja (kehitystila): vain luku, oma alkuperä, Unix-soketti ----------------------------------------------------
