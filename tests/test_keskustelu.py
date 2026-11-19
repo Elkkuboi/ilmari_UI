@@ -182,8 +182,9 @@ def kentat(r):
 
 
 def test_ilmari_vastaa_sivu_odottaa_ilman_kenttaa_ja_paivittyy(tmp_path, monkeypatch):
-    """Eliaksen viesti on uusin ja alle 3 min vanha: tilarivi, päivitys 5 s välein, ei yhtään tekstikenttää (ei
-    viestiä eikä säikeen nimeä tai kansiota), ja linkki kirjoitustilaan vakioparametrilla."""
+    """Eliaksen viesti on uusin ja alle 10 min vanha: tilarivi, päivitys 5 s välein, ei yhtään tekstikenttää (ei
+    viestiä eikä säikeen nimeä tai kansiota), ja linkki kirjoitustilaan vakioparametrilla. Säikeen vaihto on
+    kirjoitustilassa: päivitys sulkisi avatun listan 5 s välein."""
     r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 600), ("elias", 20)))
     sivu = BeautifulSoup(r.text, "html.parser")
     assert r.status_code == 200 and r.headers["refresh"] == "5" and kentat(r) == []
@@ -193,7 +194,7 @@ def test_ilmari_vastaa_sivu_odottaa_ilman_kenttaa_ja_paivittyy(tmp_path, monkeyp
     assert sivu.find("a", string="↓ Kirjoita")["href"] == "/hub/keskustelu?kirjoita=1#viesti"
     assert "Säikeen asetukset" not in r.text and "Päivitä" not in r.text and "päivittyy itsestään" not in r.text
     assert 'action="https://tyoasema.test/ilmari/viesti"' not in r.text
-    assert 'action="https://tyoasema.test/ilmari/saie/1/valitse"' in r.text   # säikeen vaihto (napit) toimii yhä
+    assert "Vaihda säiettä" not in r.text and 'action="https://tyoasema.test/ilmari/saie/1/valitse"' not in r.text
 
 
 def test_kirjoitustila_nayttaa_kentan_eika_paivity(tmp_path, monkeypatch):
@@ -203,6 +204,7 @@ def test_kirjoitustila_nayttaa_kentan_eika_paivity(tmp_path, monkeypatch):
     assert r.status_code == 200 and "refresh" not in r.headers and "teksti" in kentat(r)
     assert sivu.find("a", string="Päivitä")["href"] == "/hub/keskustelu" and "Ilmari vastaa" not in r.text
     assert "Säikeen asetukset" in r.text and sivu.find("a", string="↓ Kirjoita")["href"] == "#viesti"
+    assert "Vaihda säiettä" in r.text and 'action="https://tyoasema.test/ilmari/saie/1/valitse"' in r.text
 
 
 @pytest.mark.parametrize("kysely", ["kirjoita=0", "kirjoita=", "kirjoita=1x", "kirjoita=%3Cb%3E", "Kirjoita=1"])
@@ -214,8 +216,8 @@ def test_vain_vakioarvo_avaa_kirjoitustilan(tmp_path, monkeypatch, kysely):
 
 
 @pytest.mark.parametrize("lista,odottaa", [
-    ((("elias", 170),), True),                     # alle 3 min: Ilmari vastaa vielä
-    ((("elias", 190),), False),                    # yli 3 min: vastausta ei enää odoteta
+    ((("elias", 590),), True),                     # alle 10 min: Ilmari vastaa vielä (esim. GPU varattu)
+    ((("elias", 610),), False),                    # yli 10 min: vastausta ei enää odoteta
     ((("elias", 20), ("ilmari", 5)), False),       # Ilmari vastasi
     ((("ilmari", 5),), False),
     ((), False),                                   # tyhjä säie

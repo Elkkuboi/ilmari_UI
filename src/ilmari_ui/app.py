@@ -53,7 +53,9 @@ KESKUSTELU_PAIVITYS = "5"
 # Sivu, jolla on muokattava kenttä, ei päivity itsestään: selain tyhjentää kesken kirjoitetun tekstin (19.11.2026).
 # Itsestään päivittyy vain odotus- tai seurantatila ilman kenttää; kentän saa näkyviin parametrilla kirjoita=1.
 MUOKATTAVA = re.compile(rb'<textarea\b|<select\b|<input\b(?![^>]*\btype="hidden")', re.IGNORECASE)
-VASTAUS_ODOTUS = timedelta(minutes=3)   # Eliaksen viestiä tuoreempi: Ilmari vastaa vielä
+# Eliaksen viestiä tuoreempi: Ilmari vastaa vielä. 10 min = aiops ceo.py:n VASTAUS_AIKARAJA_S; mallin lataus (GPU
+# varattu) voi yksin kestää 5 min. Ilmari lähettää vastauksen myös virheestä, joten odotus päättyy yleensä siihen.
+VASTAUS_ODOTUS = timedelta(minutes=10)
 KELLON_VARA = timedelta(minutes=1)      # tulevaisuuteen merkitty viesti ei jätä sivua odottamaan
 # Vanhat osoitteet (ennen 18.11.2026) ohjataan uusiin; kyselyosa säilyy ja ankkuri tulee sen perään. Vanha gateway
 # palaa lomakkeiden jälkeen vielä osoitteisiin /hub/ilmari (myös ?toihin=rajatesti) ja /hub/mallit (aivot).
@@ -241,7 +243,7 @@ def kirjoitus(request: Request) -> bool:
 
 
 def odottaa_vastausta(k: Any, nyt: datetime) -> bool:
-    """Aktiivisen säikeen viimeisin viesti on Eliaksen ja alle 3 minuuttia vanha: Ilmari ei ole vielä vastannut."""
+    """Aktiivisen säikeen viimeisin viesti on Eliaksen ja alle 10 minuuttia vanha: Ilmari ei ole vielä vastannut."""
     if k is None or k.tila != "ready" or not k.viestit or k.viestit[-1]["lahettaja"] != "elias":
         return False
     aika = _aika(k.viestit[-1]["aika"])

@@ -5,7 +5,7 @@
 {% set saie = k.saie if k else none %}
 <section aria-labelledby="h-saie">
   <h1 id="h-saie" class="label">Keskustelu <span class="aside">{% if saie %}{{ saie.nimi }}{% if saie.kansio %} · {{ saie.kansio }}{% endif %} · {% endif %}{% if k %}{{ k.viestit|length }}&nbsp;viestiä · {% endif %}<a href="{{ url('/hub/keskustelu', kirjoita=1) if odottaa }}#viesti">↓ Kirjoita</a></span></h1>
-{% if saie %}
+{% if saie and not odottaa %}
   <details class="fold threads"><summary>Vaihda säiettä ({{ k.saikeet|length }})</summary>
     {% call lomake('/ilmari/saie') %}<button class="btn--quiet" type="submit">Uusi keskustelu</button>{% endcall %}
 {% for kansio, lista in k.kansiot %}
@@ -25,7 +25,7 @@
 {% endfor %}
 {% endif %}
   </details>
-{% if (gateway_url or demo) and not odottaa %}
+{% if gateway_url or demo %}
   <details class="fold"><summary>Säikeen asetukset</summary>
     <div class="stack">
     {% call lomake('/ilmari/saie/' ~ saie.id ~ '/nimea') %}<label for="saie-nimi">Nimi</label><div class="actions"><input id="saie-nimi" name="nimi" maxlength="60" required value="{{ saie.nimi }}"><button class="btn--quiet" type="submit">Nimeä</button></div>{% endcall %}

@@ -3,9 +3,9 @@
 ## Päivitys 19.11.2026 (ilta): päivitys ei hävitä viestiä, versioidut kuvakkeet, haara `paivitys-ja-kuvakkeet`
 
 - Sivu, jolla on muokattava kenttä, ei päivity itsestään (`paivity()` jättää `Refresh`-otsakkeen pois, jos sivulla on
-  `textarea`, `select` tai muu kuin piilotettu `input`). Keskustelu: kun Eliaksen viesti on uusin ja alle 3 min vanha,
-  sivu odottaa ("Ilmari vastaa…", 5 s, ei kenttiä); muuten kenttä näkyy, ei päivitystä, linkki Päivitä. Työt: työn
-  ollessa kesken lista seuraa sitä ilman toivekenttää (15 s). Kenttä tulee näkyviin parametrilla `kirjoita=1` (vain
+  `textarea`, `select` tai muu kuin piilotettu `input`). Keskustelu: kun Eliaksen viesti on uusin ja alle 10 min vanha,
+  sivu odottaa ("Ilmari vastaa…", 5 s, ei kenttiä eikä säikeen vaihtoa); muuten kenttä näkyy, ei päivitystä, linkki
+  Päivitä. Työt: työn ollessa kesken lista seuraa sitä ilman toivekenttää (15 s). Kenttä tulee näkyviin parametrilla `kirjoita=1` (vain
   tämä arvo kelpaa, sitä ei näytetä sivulla). Työn sivu ei päivity, jos sillä on sulku- tai muutoskenttä.
 - Kuvakkeet versioiduilla nimillä (`icon-192-v2.png`, `icon-512-v2.png`, `icon-maskable-512-v2.png`,
   `favicon-v2.svg`), jotta asennettu sovellus huomaa uuden kuvakkeen. Sisältö ennallaan.
