@@ -13,8 +13,9 @@ tuotantotilassa se palautetaan ennen reititystä.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -48,6 +49,12 @@ TEKOJA_NAKYVISSA = 12
 ODOTTAA_MAX = 5
 NYT_PAIVITYS = "30"
 TYOT_PAIVITYS = "15"
+KESKUSTELU_PAIVITYS = "5"
+# Sivu, jolla on muokattava kenttä, ei päivity itsestään: selain tyhjentää kesken kirjoitetun tekstin (19.11.2026).
+# Itsestään päivittyy vain odotus- tai seurantatila ilman kenttää; kentän saa näkyviin parametrilla kirjoita=1.
+MUOKATTAVA = re.compile(rb'<textarea\b|<select\b|<input\b(?![^>]*\btype="hidden")', re.IGNORECASE)
+VASTAUS_ODOTUS = timedelta(minutes=3)   # Eliaksen viestiä tuoreempi: Ilmari vastaa vielä
+KELLON_VARA = timedelta(minutes=1)      # tulevaisuuteen merkitty viesti ei jätä sivua odottamaan
 # Vanhat osoitteet (ennen 18.11.2026) ohjataan uusiin; kyselyosa säilyy ja ankkuri tulee sen perään. Vanha gateway
 # palaa lomakkeiden jälkeen vielä osoitteisiin /hub/ilmari (myös ?toihin=rajatesti) ja /hub/mallit (aivot).
 VANHAT_OSOITTEET = {
@@ -219,6 +226,26 @@ def koneen_ika(kone: Any) -> str:
 
 def kohtaa(n: int) -> str:
     return f"{n} {'kohta' if n == 1 else 'kohtaa'}"
+
+
+def paivity(response, sekunnit: str):
+    """Automaattinen päivitys (Refresh), mutta ei koskaan sivulle, jolla on muokattava kenttä."""
+    if not MUOKATTAVA.search(response.body):
+        response.headers["Refresh"] = sekunnit
+    return response
+
+
+def kirjoitus(request: Request) -> bool:
+    """Kenttä näkyviin ja päivitys pois: vain vakioarvo kirjoita=1 kelpaa, eikä arvoa näytetä sivulla."""
+    return request.query_params.get("kirjoita") == "1"
+
+
+def odottaa_vastausta(k: Any, nyt: datetime) -> bool:
+    """Aktiivisen säikeen viimeisin viesti on Eliaksen ja alle 3 minuuttia vanha: Ilmari ei ole vielä vastannut."""
+    if k is None or k.tila != "ready" or not k.viestit or k.viestit[-1]["lahettaja"] != "elias":
+        return False
+    aika = _aika(k.viestit[-1]["aika"])
+    return aika is not None and -KELLON_VARA <= nyt - aika < VASTAUS_ODOTUS
 
 
 def osoitteet(demo: bool):
@@ -413,7 +440,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             muualle=(("Ravintopolku", muualle(RAVINTOPOLKU_PORTTI, demo)), ("Hahmo", muualle(HAHMO_PORTTI, demo)))
             if demo or settings.identity is not None else ())
         if (tilarivi or {}).get("kaynnissa") or dsh_tyo or kesken(tyot):
-            response.headers["Refresh"] = NYT_PAIVITYS
+            paivity(response, NYT_PAIVITYS)
         return response
 
     def muualle(portti: int, demo: bool) -> str:
@@ -424,11 +451,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/keskustelu", response_class=HTMLResponse)
     async def keskustelu_sivu(request: Request):
-        """Gatewayn julkaisema keskustelu; lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub)."""
+        """Gatewayn julkaisema keskustelu; lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub). Kun Ilmari
+        vastaa vielä, sivu odottaa ilman viestikenttää ja päivittyy itsestään; muuten kenttä näkyy eikä sivu päivity."""
         k = lue_keskustelu(esimerkki(request))
-        response = render(request, "keskustelu", "Keskustelu", "keskustelu", keskustelu=k)
-        if settings.identity is not None:
-            response.headers["Refresh"] = TYOT_PAIVITYS
+        odottaa = odottaa_vastausta(k, datetime.now(timezone.utc)) and not kirjoitus(request)
+        response = render(request, "keskustelu", "Keskustelu", "keskustelu", keskustelu=k, odottaa=odottaa)
+        if odottaa:
+            paivity(response, KESKUSTELU_PAIVITYS)
         return response
 
     # --- Työt (Kehitä): Hub näyttää, gateway toimii -------------------------------------------------------------
@@ -436,7 +465,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/hub/kehita", response_class=HTMLResponse)
     async def tyot_sivu(request: Request):
         """Uusi toive gatewaylle (paluu=hub), Eliaksen toiveet ja Ilmarin omat työt omina listoinaan ja
-        käyttöönottojen historia. Päivittyy itsestään, kun jokin uusimmista töistä on kesken."""
+        käyttöönottojen historia. Kun jokin uusimmista töistä on kesken, sivu seuraa sitä ilman toivekenttää ja
+        päivittyy itsestään; kenttä tulee näkyviin linkistä (kirjoita=1) tai esitäytetyn toiveen kanssa."""
         demo = esimerkki(request)
         tyot, lahde = kehitystyot(demo)
         if demo:
@@ -445,14 +475,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             historia = kehitys.lue_kayttoonotot(kehitys.OLETUS_KAYTTOONOTOT, omistaja=0)
         else:
             historia = None
+        toive = request.query_params.get("toive", "")[:4000]
+        seuranta = kesken(tyot) and not kirjoitus(request) and not toive
         response = render(
             request, "tyot", "Työt", "tyot", lahde=lahde, tyot_luettu=tyot is not None,
             eliaksen=[t for t in tyot if not t.ilmarin] if tyot else [],
             ilmarin=[t for t in tyot if t.ilmarin] if tyot else [],
             historia=historia, malli=mallin_tila(lue_keskustelu(demo)), lahteet=kehitys.LAHTEET,
-            toive=request.query_params.get("toive", "")[:4000])
-        if kesken(tyot):
-            response.headers["Refresh"] = TYOT_PAIVITYS
+            toive=toive, seuranta=seuranta)
+        if seuranta:
+            paivity(response, TYOT_PAIVITYS)
         return response
 
     @app.get("/hub/kehita/{tyo}", response_class=HTMLResponse)
@@ -468,11 +500,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
              if juuri is not None and kehitys._TYO.fullmatch(tyo) else None)
         if t is None:
             return virhe(request, 404, "Työtä ei löydy", "Työtä ei ole tai sitä ei voi lukea.")
+        # Sulkuviesti ja muutospyyntö ovat tekstikenttiä: niiden kanssa sivu ei päivity itsestään.
+        paivittyy = t.kesken and not (t.toimet["sulje"] or t.toimet["muutos"])
         response = render(request, "tyo", f"Työ {t.tyo}", "tyot", t=t, meta=t.meta, tulos=t.meta.get("tulos"),
-                          toimet=t.toimet,
+                          toimet=t.toimet, paivittyy=paivittyy,
                           diffit=kehitys.jaa_diff(t.tekstit["muutos.diff"]) if "muutos.diff" in t.tekstit else [])
-        if t.kesken:
-            response.headers["Refresh"] = TYOT_PAIVITYS
+        if paivittyy:
+            paivity(response, TYOT_PAIVITYS)
         return response
 
     # --- Asetukset ----------------------------------------------------------------------------------------------

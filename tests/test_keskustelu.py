@@ -2,9 +2,11 @@
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from ilmari_ui.app import Settings, create_app
@@ -56,7 +58,7 @@ def test_tuotannossa_lomake_gatewaylle(tmp_path):
         r = client.get("/keskustelu", headers={"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github",
                                                "x-forwarded-proto": "https", "x-forwarded-for": "100.67.5.28"})
     assert r.status_code == 200 and 'action="https://tyoasema.test/ilmari/viesti"' in r.text
-    assert 'name="paluu" value="hub"' in r.text and r.headers["refresh"] == "15"
+    assert 'name="paluu" value="hub"' in r.text and "refresh" not in r.headers   # kenttä näkyy: ei päivitystä
     assert "form-action 'self'" in r.headers["content-security-policy"]
 
 
@@ -146,3 +148,94 @@ def test_tuotannossa_kaynnista_malli_vain_kun_malli_ei_ole_kaynnissa(tmp_path, m
         assert ('action="https://tyoasema.test/kehita/malli"' in r.text) is nakyy
         assert ('name="toiminto" value="kaynnista"' in r.text) is nakyy
         assert r.text.count("ei ole käynnissä") == (1 if nakyy else 0)   # sama ilmoitus vain kerran
+
+
+# --- Päivitys ei hävitä kesken olevaa viestiä (19.11.2026) --------------------------------------------------
+
+OTSAKKEET = {"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"}
+
+
+def viestit(*lahettajat_ja_iat):
+    """Viestit (lähettäjä, ikä sekunteina) nyt-hetkestä taaksepäin; viimeinen on uusin."""
+    nyt = datetime.now(timezone.utc)
+    return [{"id": n, "aika": (nyt - timedelta(seconds=ika)).isoformat(timespec="seconds"), "lahettaja": lahettaja,
+             "teksti": f"viesti {n}"} for n, (lahettaja, ika) in enumerate(lahettajat_ja_iat, 1)]
+
+
+def keskustelusivu(tmp_path, monkeypatch, lista, polku="/keskustelu", nimi="k"):
+    data = {"muoto": "aiops-keskustelu-v2", "paivitetty": "2026-11-19T20:00:00+00:00", "viimeisin": len(lista),
+            "malli": {"tila": "running", "tila_teksti": "käynnissä", "tyo": None, "dsh_tyo": None, "yoajo": False},
+            "saie": V2["saie"], "viestit": [{**v, "saie": 2} for v in lista]}
+    hak = julkaise(tmp_path / nimi, data=data)
+    (hak / "saikeet.json").write_text(json.dumps(SAIKEET, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr("ilmari_ui.keskustelu.OLETUS", hak)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
+        return client.get(polku, headers=OTSAKKEET)
+
+
+def kentat(r):
+    return [k.get("name") for k in BeautifulSoup(r.text, "html.parser").find_all(["textarea", "select", "input"])
+            if k.get("type") != "hidden"]
+
+
+def test_ilmari_vastaa_sivu_odottaa_ilman_kenttaa_ja_paivittyy(tmp_path, monkeypatch):
+    """Eliaksen viesti on uusin ja alle 3 min vanha: tilarivi, päivitys 5 s välein, ei yhtään tekstikenttää (ei
+    viestiä eikä säikeen nimeä tai kansiota), ja linkki kirjoitustilaan vakioparametrilla."""
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 600), ("elias", 20)))
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert r.status_code == 200 and r.headers["refresh"] == "5" and kentat(r) == []
+    tila = sivu.find(attrs={"role": "status"})
+    assert "Ilmari vastaa…" in tila.get_text() and tila.find("span", class_="dot--live")
+    assert tila.find("a", string="Kirjoita lisää")["href"] == "/hub/keskustelu?kirjoita=1#viesti"
+    assert sivu.find("a", string="↓ Kirjoita")["href"] == "/hub/keskustelu?kirjoita=1#viesti"
+    assert "Säikeen asetukset" not in r.text and "Päivitä" not in r.text and "päivittyy itsestään" not in r.text
+    assert 'action="https://tyoasema.test/ilmari/viesti"' not in r.text
+    assert 'action="https://tyoasema.test/ilmari/saie/1/valitse"' in r.text   # säikeen vaihto (napit) toimii yhä
+
+
+def test_kirjoitustila_nayttaa_kentan_eika_paivity(tmp_path, monkeypatch):
+    """Sama odotustila parametrilla kirjoita=1: kenttä näkyy, ei päivitystä, Päivitä-linkki vie takaisin."""
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("elias", 20)), polku="/keskustelu?kirjoita=1")
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert r.status_code == 200 and "refresh" not in r.headers and "teksti" in kentat(r)
+    assert sivu.find("a", string="Päivitä")["href"] == "/hub/keskustelu" and "Ilmari vastaa" not in r.text
+    assert "Säikeen asetukset" in r.text and sivu.find("a", string="↓ Kirjoita")["href"] == "#viesti"
+
+
+@pytest.mark.parametrize("kysely", ["kirjoita=0", "kirjoita=", "kirjoita=1x", "kirjoita=%3Cb%3E", "Kirjoita=1"])
+def test_vain_vakioarvo_avaa_kirjoitustilan(tmp_path, monkeypatch, kysely):
+    """Kielletty suunta: muu arvo ei avaa kirjoitustilaa, eikä parametria kaiuteta sivulle."""
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("elias", 20)), polku="/keskustelu?" + kysely)
+    assert r.headers["refresh"] == "5" and kentat(r) == []
+    assert "<b>" not in r.text and "%3Cb" not in r.text and "1x" not in r.text
+
+
+@pytest.mark.parametrize("lista,odottaa", [
+    ((("elias", 170),), True),                     # alle 3 min: Ilmari vastaa vielä
+    ((("elias", 190),), False),                    # yli 3 min: vastausta ei enää odoteta
+    ((("elias", 20), ("ilmari", 5)), False),       # Ilmari vastasi
+    ((("ilmari", 5),), False),
+    ((), False),                                   # tyhjä säie
+    ((("elias", -30),), True),                     # kellon pieni ero
+    ((("elias", -600),), False),                   # tulevaisuuteen merkitty viesti ei jätä sivua odottamaan
+])
+def test_odotustila_vain_tuoreelle_eliaksen_viestille(tmp_path, monkeypatch, lista, odottaa):
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(*lista))
+    assert r.status_code == 200
+    if odottaa:
+        assert r.headers["refresh"] == "5" and kentat(r) == [] and "Ilmari vastaa…" in r.text
+    else:
+        assert "refresh" not in r.headers and "teksti" in kentat(r) and "Ilmari vastaa" not in r.text
+        assert BeautifulSoup(r.text, "html.parser").find("a", string="Päivitä")["href"] == "/hub/keskustelu"
+    assert "15 s" not in r.text and "Sivu päivittyy itsestään" not in r.text
+
+
+def test_rikkinainen_aika_ei_jata_odottamaan(tmp_path, monkeypatch):
+    lista = viestit(("elias", 20))
+    for n, aika in enumerate(("", "eilen", "2026-11-19T20:00:00")):   # puuttuva, kelvoton, ilman aikavyöhykettä
+        lista[0]["aika"] = aika
+        r = keskustelusivu(tmp_path, monkeypatch, lista, nimi=f"k{n}")
+        assert "viesti 1" in r.text and "refresh" not in r.headers and "teksti" in kentat(r)
