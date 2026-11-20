@@ -91,7 +91,8 @@ def test_haku(tmp_path):
 
 def test_esimerkkiaineisto_kelpaa():
     k = lue_dokumentit(ESIMERKKI, omistaja=None)
-    assert k.tila == "ready" and len(k.dokumentit) == 3
+    assert k.tila == "ready" and [d["tunniste"] for d in k.dokumentit] == [
+        "arkkitehtuuri", "tilanne", "saannot", "agents", "adr-0099-esimerkki"]
 
 
 # --- Rajattu Markdown (siirretty peruskirjan lukijasta 18.11.2026): käsin kirjoitetut odotetut rakenteet --------------

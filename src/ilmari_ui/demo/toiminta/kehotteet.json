@@ -1,0 +1,54 @@
+{
+ "versio": 1,
+ "aika": "2026-11-19T16:05:00+02:00",
+ "kehotteet": [
+  {
+   "tunniste": "jarjestelma",
+   "ryhma": "Ilmari",
+   "otsikko": "Systemprompti",
+   "kuvaus": "Ilmarin perusohje: mukana jokaisessa keskustelussa ja vuorossa. Perään tulevat päivämäärä, pysyvät ohjeesi ja tavoitteesi.",
+   "lahde": "src/aiops/ceo_masterprompt.md",
+   "teksti": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti: mitä tein, mikä toimii, mitä tarvitsen sinulta.\nTeksti, jossa on <script>alert(1)</script>, näytetään tekstinä.",
+   "oletus": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti.",
+   "muokattu": "2026-11-19T15:40:00+02:00",
+   "muokattava": true,
+   "enint": 6000
+  },
+  {
+   "tunniste": "vuoro",
+   "ryhma": "Ilmari",
+   "otsikko": "Vuoron ohje",
+   "kuvaus": "Yöajon ja työvuoron alussa annettava tehtävä. Raportin otsikot pitää säilyttää. Työvuorossa ensimmäisen kappaleen tilalla on työvuoron oma alku.",
+   "lahde": "src/aiops/yoajo_ohje.md",
+   "teksti": "Yöajo (esimerkki). Elias nukkuu.\n\nKierros:\n1. Rästit.\n2. Itsearviointi.\n3. Tutkimus.\n4. Aamuraportti: Tehty · Hinta · Opittu · Seuraavaksi · Tarvitsen sinulta · Peruminen.",
+   "oletus": null,
+   "muokattu": null,
+   "muokattava": true,
+   "enint": 6000
+  },
+  {
+   "tunniste": "tyokalut",
+   "ryhma": "Ilmari",
+   "otsikko": "Työkalut",
+   "kuvaus": "Työkalujen nimet, kuvaukset ja kentät sellaisina kuin malli ne saa joka kutsussa.",
+   "lahde": "src/aiops/ceo.py ja src/aiops/rekisteri/kyvyt/",
+   "teksti": "aja\nTee työ käsillä (esimerkki).\n  tehtava (pakollinen): Itsenäinen tehtävänanto.\n\nkirjaa\nKirjaa merkittävä teko tekolokiin.\n  mita (pakollinen): Mitä teit.",
+   "oletus": null,
+   "muokattu": null,
+   "muokattava": false,
+   "enint": 6000
+  },
+  {
+   "tunniste": "tyon_alku",
+   "ryhma": "Ilmarin kädet",
+   "otsikko": "Työn alku",
+   "kuvaus": "Jokaisen käsille annetun työn alussa ennen tehtävänantoa.",
+   "lahde": "images/dsh/aiops-dsh-tyo",
+   "teksti": "Tänään on {päivä}. Työskentelet git-repossa {hakemisto} haarassa {haara} (esimerkki).\n\nTehtävä:\n{tehtävänanto}",
+   "oletus": null,
+   "muokattu": null,
+   "muokattava": false,
+   "enint": 6000
+  }
+ ]
+}

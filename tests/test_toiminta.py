@@ -452,8 +452,8 @@ def test_tuotannossa_asetukset_lomakkeet_gatewaylle(tmp_path, monkeypatch):
     assert raja.find("details", class_="fold").summary.get_text() == "Kaikki kohdat (2)"
     assert not sivu.find_all("script") and "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
     muut = {a.get_text(): a["href"] for a in sivu.find("section", attrs={"aria-labelledby": "h-muut"}).find_all("a")}
-    assert muut == {"Dokumentit ja säännöt": "/hub/dokumentit", "Kaikki työt (raaka lista)": f"https://{RP}/tyot",
-                    "Puhelimen passkey": f"https://{RP}/passkey"}
+    assert muut == {"Promptit ja säännöt": "/hub/kehotteet", "Dokumentit": "/hub/dokumentit",
+                    "Kaikki työt (raaka lista)": f"https://{RP}/tyot", "Puhelimen passkey": f"https://{RP}/passkey"}
 
 
 @pytest.mark.parametrize("hakemisto", ["ei", "suhteellinen"])

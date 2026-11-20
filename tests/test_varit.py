@@ -24,7 +24,7 @@ VARIT = (("paperi", "Paperi", "vaalea, lämmin", "#f1ead9", "light"),
 TUNNISTEET = [v[0] for v in VARIT]
 # Kehitystila: sivut, työn sivu ja virhesivu (kaikki käyttävät base.html:ää)
 SIVUT = ("/hub", "/hub/keskustelu", "/hub/kehita", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit",
-         "/hub/dokumentit/arkkitehtuuri", "/hub/ei-ole")
+         "/hub/dokumentit/arkkitehtuuri", "/hub/kehotteet", "/hub/kehotteet/jarjestelma", "/hub/ei-ole")
 KELVOTTOMAT = ("", "PAPERI", "Fosfori", "musta", "paperi2", "data-vari", '"><script>alert(1)</script>',
                "fosfori\" onload=\"x", "<b>liitu</b>")
 CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; script-src 'none'; "

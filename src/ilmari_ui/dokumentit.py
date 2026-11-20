@@ -42,7 +42,9 @@ SARAKERAJA = 12
 HAKU_MAX = 100
 OSUMIA_MAX = 50
 _TUNNISTE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}\Z")
-_POLKU = re.compile(r"docs/[A-Za-z0-9._/-]{1,200}\.md\Z")
+# docs/ ja repon juuren AGENTS.md (tekoälyavustajien ohjeet, 21.11.2026). src/aiops/: vanha julkaisu vei sinne
+# Ilmarin masterpromptin (ryhmä promptit); se hylättiin tässä, jolloin koko Dokumentit-sivu jäi tyhjäksi.
+_POLKU = re.compile(r"(?:(?:docs|src/aiops)/[A-Za-z0-9._/-]{1,200}|AGENTS)\.md\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 VIESTIT = {
     "wrong_owner": "Dokumentit eivät ole asennuksen tekemiä (omistaja ei ole root).",
