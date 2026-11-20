@@ -46,6 +46,7 @@ def test_luettelo_esimerkkitilassa():
     assert rivit["/hub/asetukset?demo=1#tavoitteet"].find("small").get_text() == "3\u00a0kpl"
     assert rivit["/hub/dokumentit/saannot?demo=1"].a.get_text() == "Esimerkkisäännöt: kuka päättää mistä"
     assert "<form" not in r.text and "<textarea" not in r.text               # luettelossa ei ole lomakkeita
+    assert "Ravintopolun ja Hahmon omat promptit ovat niiden omissa asetuksissa." in r.text
     assert not any(sana in r.text for sana in ("gateway", "dsh", "ADR"))     # ei jargonia
 
 
@@ -93,7 +94,7 @@ def test_tuntematon_ja_kelvoton_tunniste_404():
 def test_ilman_esimerkkitilaa_lahdetta_ei_ole():
     r = asiakas().get("/hub/kehotteet")
     assert r.status_code == 200 and "Promptit eivät ole saatavilla tässä ympäristössä." in r.text
-    assert dom(r).select("h2.label") == [] and "Hahmon promptit" not in r.text
+    assert dom(r).select("h2.label") == [] and "omissa asetuksissa" not in r.text
 
 
 def test_asetuksissa_linkki_ja_aktiivinen_valikko():
