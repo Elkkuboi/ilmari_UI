@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 from . import dokumentit as dokumentit_lukija
 from . import jarjestelma as jarjestelma_lukija
 from . import kehitys
+from . import kehotteet as kehotteet_lukija
 from . import keskustelu as keskustelu_lukija
 from . import mallit as mallit_lukija
 from . import toiminta as toiminta_lukija
@@ -515,7 +516,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/asetukset", response_class=HTMLResponse)
     async def asetukset_sivu(request: Request):
-        """Yöajo, tavoitteet, pysyvät ohjeet, aivot (profiili, roolit, rekisteri), rajatesti, kone ja muut linkit.
+        """Yöajo, tavoitteet, pysyvät ohjeet, aivot (profiili, roolit, rekisteri), rajatesti, kone ja muut linkit
+        (promptit ja säännöt, dokumentit).
         Ei automaattista päivitystä: se tyhjentäisi kesken kirjoitetut lomakkeet."""
         demo = esimerkki(request)
         toiminta, _ = lue_toiminta(demo)
@@ -588,6 +590,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lohkot = lohkot[1:]   # sama otsikko on jo sivun otsikkona
         return render(request, "dokumentti", dokumentti["otsikko"], "asetukset", kokoelma=kokoelma,
                       dokumentti=dokumentti, lohkot=lohkot)
+
+    # --- Promptit ja säännöt (Asetusten alla) -------------------------------------------------------------------
+
+    def lue_kehotteet(request: Request):
+        """Gatewayn julkaisema luettelo kaikista mallille menevistä teksteistä (aiops 21.11.2026)."""
+        if esimerkki(request):
+            return kehotteet_lukija.lue_kehotteet(toiminta_lukija.ESIMERKKI)
+        if settings.identity is not None:
+            return kehotteet_lukija.lue_kehotteet(toiminta_lukija.OLETUS, omistajat=kehitys.sallitut_omistajat())
+        return None
+
+    @app.get("/hub/kehotteet", response_class=HTMLResponse)
+    async def kehotteet_sivu(request: Request):
+        """Promptit ryhmittäin, Eliaksen omat ohjeet (linkit Asetuksiin) ja säännöt (asennetut dokumentit)."""
+        luettelo = lue_kehotteet(request)
+        valmis = luettelo is not None and luettelo.tila == "ready"
+        toiminta, _ = lue_toiminta(esimerkki(request))
+        omat = None
+        if valmis and toiminta is not None and toiminta.tila == "ready":
+            omat = {"ohjeita": len(toiminta.ohjeet) if toiminta.ohjeet is not None else None,
+                    "tavoitteita": len(toiminta.tavoitteet["rivit"]) if toiminta.tavoitteet is not None else None}
+        kokoelma = dokumenttikokoelma(request)
+        saannot = []
+        if kokoelma is not None and kokoelma.tila == "ready":
+            saannot = [d for d in (dokumentit_lukija.etsi(kokoelma, t) for t in kehotteet_lukija.SAANTODOKUMENTIT) if d]
+        return render(request, "kehotteet", "Promptit ja säännöt", "asetukset", luettelo=luettelo, omat=omat,
+                      ryhmat=kehotteet_lukija.ryhmittain(luettelo) if valmis else [], saannot=saannot)
+
+    @app.get("/hub/kehotteet/{tunniste}", response_class=HTMLResponse)
+    async def kehote_sivu(request: Request, tunniste: str):
+        """Yksi prompti: teksti sellaisena kuin malli sen saa. Muokattavalla lomake gatewaylle (paluu=hub)."""
+        luettelo = lue_kehotteet(request)
+        k = kehotteet_lukija.etsi(luettelo, tunniste) if luettelo is not None and luettelo.tila == "ready" else None
+        if k is None:
+            return virhe(request, 404, "Promptia ei löydy", "Tällaista promptia ei ole.")
+        return render(request, "kehote", k["otsikko"], "asetukset", k=k, korkeus=kehotteet_lukija.korkeus(k["teksti"]))
 
     # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
 

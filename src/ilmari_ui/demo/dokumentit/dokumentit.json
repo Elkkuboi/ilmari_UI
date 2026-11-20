@@ -21,6 +21,24 @@
    "teksti": "# Esimerkkitilanne\n\n| Osa | Tila |\n| --- | --- |\n| Hub | esimerkki |\n| Gateway | esimerkki |\n"
   },
   {
+   "tunniste": "saannot",
+   "polku": "docs/saannot.md",
+   "ryhma": "perus",
+   "otsikko": "Esimerkkisäännöt: kuka päättää mistä",
+   "tila": "",
+   "paiva": "",
+   "teksti": "# Esimerkkisäännöt: kuka päättää mistä\n\nTämä on synteettinen esimerkkidokumentti.\n\n1. **Vain konteissa.**\n2. **Ei salaisuuksia.**\n"
+  },
+  {
+   "tunniste": "agents",
+   "polku": "AGENTS.md",
+   "ryhma": "perus",
+   "otsikko": "Esimerkkiohjeet tekoälyavustajille",
+   "tila": "",
+   "paiva": "",
+   "teksti": "# Esimerkkiohjeet tekoälyavustajille\n\nTämä on synteettinen esimerkkidokumentti. Vastaa suomeksi.\n"
+  },
+  {
    "tunniste": "adr-0099-esimerkki",
    "polku": "docs/adr/0099-esimerkki.md",
    "ryhma": "adr",

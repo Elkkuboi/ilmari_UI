@@ -1,4 +1,23 @@
-# ilmari_UI: tämän repositorion tilanne 19.11.2026
+# ilmari_UI: tämän repositorion tilanne 21.11.2026
+
+## Päivitys 21.11.2026: Promptit ja säännöt, haara `promptit-ja-saannot`
+
+- Uusi sivu **Promptit ja säännöt** `/hub/kehotteet` Asetusten alla (Asetukset → Muut): jokainen teksti, jonka aiops
+  antaa malleille ohjeeksi, ryhmittäin (Ilmari, Ilmarin kädet), linkit pysyviin ohjeisiin ja tavoitteisiin sekä
+  säännöt (asennetut dokumentit `saannot` ja `agents`, jos ne on asennettu). Promptin sivu `/hub/kehotteet/{tunniste}`
+  näyttää tekstin sellaisena kuin malli sen saa. Lähde: gatewayn tiedosto `toiminta/kehotteet.json`
+  (`src/ilmari_ui/kehotteet.py`: tarkat kentät, sama turvallinen lukija ja omistajatarkistus kuin muulla toiminnalla).
+- Muokattavalla promptilla (systemprompti, vuoron ohje) on lomake gatewaylle: `POST /ilmari/kehote/{tunniste}`
+  (`teksti`, `paluu=hub`) ja muokatulla lisäksi `POST /ilmari/kehote/{tunniste}/oletus` (Palauta alkuperäinen). Kiinteällä
+  tekstillä ei ole lomaketta. Hub ei kirjoita mitään. Sivut eivät päivity itsestään.
+- Korjaus: Dokumentit-sivu oli tuotannossa tyhjä ("Dokumentin polku ei kelpaa"), koska aiops julkaisi masterpromptin
+  polusta `src/aiops/…`, jota lukija ei hyväksynyt. Lukija hyväksyy nyt polut `docs/…`, `src/aiops/…` ja `AGENTS.md`.
+- Asetusten linkki "Dokumentit ja säännöt" on nyt kaksi linkkiä: "Promptit ja säännöt" ja "Dokumentit".
+- Esimerkkiaineisto: `demo/toiminta/kehotteet.json` ja kaksi esimerkkidokumenttia (`saannot`, `agents`).
+- Asennusjärjestys: Hub ensin (Dokumentit-sivu korjaantuu heti), sitten aiops (luettelo ja lomakereitit). Ennen
+  aiopsin asennusta sivu näyttää rivin "Prompteja ei ole vielä tallennettu."
+- Testit: 710 passed, 43 skipped (ilman selainryhmää ja shellcheckiä).
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`.
 
 ## Päivitys 19.11.2026 (ilta): päivitys ei hävitä viestiä, versioidut kuvakkeet, haara `paivitys-ja-kuvakkeet`
 

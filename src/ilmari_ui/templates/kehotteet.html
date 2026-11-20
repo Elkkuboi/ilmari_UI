@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block sisalto %}
+<a class="back" href="{{ url('/hub/asetukset') }}">Asetukset</a>
+<section aria-labelledby="h-kehotteet">
+  <h1 id="h-kehotteet" class="label">Promptit ja säännöt</h1>
+{% if luettelo is none %}
+  <p class="empty">Promptit eivät ole saatavilla tässä ympäristössä.</p>
+{% elif luettelo.tila != 'ready' %}
+  <p class="empty">{{ luettelo.viesti }}</p>
+{% else %}
+  <p class="muted small">Jokainen teksti, jonka Ilmari ja sen kädet saavat ohjeeksi.</p>
+{% endif %}
+</section>
+{% for ryhma, rivit in ryhmat %}
+<section aria-labelledby="h-ryhma-{{ loop.index }}">
+  <h2 id="h-ryhma-{{ loop.index }}" class="label">{{ ryhma }}</h2>
+  <ul class="rows">{% for k in rivit %}<li><a href="{{ url('/hub/kehotteet/' ~ k.tunniste) }}">{{ k.otsikko }}</a>{% if k.muokattu %} <span class="tag warn">muokattu</span>{% elif k.muokattava %} <span class="tag">muokattava</span>{% endif %}<br><small class="muted">{{ k.kuvaus }}</small></li>{% endfor %}</ul>
+</section>
+{% endfor %}
+{% if omat is not none %}
+<section aria-labelledby="h-omat">
+  <h2 id="h-omat" class="label">Sinun ohjeesi</h2>
+  <ul class="rows"><li><a href="{{ url('/hub/asetukset') }}#ohjeet">Pysyvät ohjeet</a>{% if omat.ohjeita is not none %} <small class="muted">{{ omat.ohjeita }}&nbsp;kpl</small>{% endif %}<br><small class="muted">Korjauksesi, jotka Ilmari on tallentanut. Mukana joka kutsussa.</small></li><li><a href="{{ url('/hub/asetukset') }}#tavoitteet">Tavoitteet</a>{% if omat.tavoitteita is not none %} <small class="muted">{{ omat.tavoitteita }}&nbsp;kpl</small>{% endif %}<br><small class="muted">Mukana joka kutsussa ja vuoron ohjeen perässä.</small></li></ul>
+</section>
+{% endif %}
+{% if saannot %}
+<section aria-labelledby="h-saannot">
+  <h2 id="h-saannot" class="label">Säännöt</h2>
+  <ul class="rows">{% for d in saannot %}<li><a href="{{ url('/hub/dokumentit/' ~ d.tunniste) }}">{{ d.otsikko }}</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% if luettelo is not none and luettelo.tila == 'ready' %}
+<p class="muted small">Hahmon promptit ovat Hahmon omissa asetuksissa. Ravintopolun omat promptit ovat toistaiseksi vain sen koodissa.</p>
+{% endif %}
+{% endblock %}

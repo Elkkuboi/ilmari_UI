@@ -23,7 +23,8 @@ from ilmari_ui.config import parse_config
 
 # (osoite, otsikko, aktiivinen valikkolinkki)
 SIVUT = (("/hub", "Nyt", "Nyt"), ("/hub/keskustelu", "Keskustelu", "Keskustelu"), ("/hub/kehita", "Työt", "Työt"),
-         ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"))
+         ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"),
+         ("/hub/kehotteet", "Promptit ja säännöt", "Asetukset"))
 VALIKKO = [("Nyt", "/hub"), ("Keskustelu", "/hub/keskustelu"), ("Työt", "/hub/kehita"), ("Asetukset", "/hub/asetukset")]
 # (kohde, ankkuri): kysely säilyy ja ankkuri tulee sen perään (vanha gateway palaa /hub/mallit-osoitteeseen)
 VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": ("/hub/asetukset", "#aivot"), "/hub/jarjestelma": ("/hub/asetukset", "#kone"),
@@ -139,7 +140,8 @@ def test_kayttoliittyman_teksteissa_ei_jargonia(demo_client, tmp_path):
         # esimerkkitilan sivut (myös työt, dokumentti ja haku): data (tulosteet, dokumentit, koodi) ei ole
         # käyttöliittymän tekstiä, joten se jätetään pois
         for p in [p for p, _, _ in SIVUT] + ["/hub/kehita/98", "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/43",
-                                             "/hub/kehita/40", "/hub/dokumentit/arkkitehtuuri", "/hub/dokumentit?q=ilmari"]:
+                                             "/hub/kehita/40", "/hub/dokumentit/arkkitehtuuri", "/hub/dokumentit?q=ilmari",
+                                             "/hub/kehotteet/jarjestelma", "/hub/kehotteet/tyokalut"]:
             vastaukset.append(demo_client.get(p + ("&" if "?" in p else "?") + "demo=1"))
     for r in vastaukset:
         dom = soup(r)
@@ -241,7 +243,9 @@ def test_esimerkkitila_vaatii_kyselyn(demo_client):
 
 @pytest.mark.parametrize("polku,paivitys", [("/hub?demo=1", "30"), ("/hub", None), ("/hub/kehita?demo=1", "15"),
                                             ("/hub/kehita", None), ("/hub/asetukset?demo=1", None),
-                                            ("/hub/keskustelu?demo=1", None), ("/hub/dokumentit?demo=1", None)])
+                                            ("/hub/keskustelu?demo=1", None), ("/hub/dokumentit?demo=1", None),
+                                            ("/hub/kehotteet?demo=1", None),
+                                            ("/hub/kehotteet/jarjestelma?demo=1", None)])
 def test_automaattinen_paivitys_vain_kun_jotain_on_kaynnissa(demo_client, polku, paivitys):
     """Esimerkissä työvuoro ja työ 42 ovat käynnissä. Asetukset ei päivity koskaan (tyhjentäisi lomakkeet); keskustelu
     päivittyy vain, kun Ilmari vastaa vielä (test_keskustelu)."""
@@ -264,7 +268,8 @@ def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
     työ päivittyvät ilman kenttiä; Työt seuraa työtä 42 ilman toivekenttää, kirjoitustilassa kenttä ilman päivitystä."""
     tulokset = {}
     for polku in ("/hub", "/hub/keskustelu", "/hub/kehita", "/hub/kehita?kirjoita=1", "/hub/kehita?toive=x",
-                  "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit"):
+                  "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit",
+                  "/hub/kehotteet", "/hub/kehotteet/jarjestelma", "/hub/kehotteet/tyokalut"):
         r = demo_client.get(polku + ("&" if "?" in polku else "?") + "demo=1")
         kentat = [k for k in soup(r).find_all(["textarea", "select", "input"]) if k.get("type") != "hidden"]
         assert not ("refresh" in r.headers and kentat), polku
@@ -273,12 +278,15 @@ def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
     assert tulokset["/hub/kehita"] == (True, False) and tulokset["/hub/kehita?kirjoita=1"] == (False, True)
     assert tulokset["/hub/kehita?toive=x"] == (False, True) and tulokset["/hub/keskustelu"] == (False, True)
     assert tulokset["/hub/kehita/98"] == (False, True)
+    assert tulokset["/hub/kehotteet"] == (False, False) and tulokset["/hub/kehotteet/jarjestelma"] == (False, True)
+    assert tulokset["/hub/kehotteet/tyokalut"] == (False, False)
 
 
 # --- Raja (kehitystila): vain luku, oma alkuperä, Unix-soketti ----------------------------------------------------
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"])
-@pytest.mark.parametrize("path", ["/hub", "/hub/keskustelu", "/hub/asetukset", "/hub/static/app.css"])
+@pytest.mark.parametrize("path", ["/hub", "/hub/keskustelu", "/hub/asetukset", "/hub/kehotteet",
+                                  "/hub/kehotteet/jarjestelma", "/hub/static/app.css"])
 def test_all_mutating_or_unneeded_methods_fail_closed(demo_client, method, path):
     response = demo_client.request(method, path, content='{"approve":true}')
     assert response.status_code == 403

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
+{% block sisalto %}
+<a class="back" href="{{ url('/hub/kehotteet') }}">Promptit ja säännöt</a>
+<section aria-labelledby="h-kehote">
+  <h1 id="h-kehote" class="label">{{ k.otsikko }}{% if k.muokattu %} <span class="aside warn">muokattu {{ lyhyt_aika(k.muokattu) }}</span>{% endif %}</h1>
+  <p class="muted small">{{ k.kuvaus }}</p>
+{% if k.muokattava and (gateway_url or demo) %}
+  {% call lomake('/ilmari/kehote/' ~ k.tunniste) %}<label class="sr-only" for="teksti">{{ k.otsikko }}</label><textarea id="teksti" name="teksti" rows="{{ korkeus }}" maxlength="{{ k.enint }}" required>{{ k.teksti }}</textarea>
+  <div class="form-row"><span class="muted small">Voimaan seuraavasta vuorosta. Enintään {{ k.enint }} merkkiä.</span><button type="submit">Tallenna</button></div>{% endcall %}
+  {% if k.oletus is not none %}
+  <details class="fold"><summary>Alkuperäinen teksti</summary>
+    <div class="stack"><div class="sheet pre">{{ k.oletus }}</div>
+    {% call lomake('/ilmari/kehote/' ~ k.tunniste ~ '/oletus', 'actions') %}<button class="btn--quiet" type="submit">Palauta alkuperäinen</button>{% endcall %}</div>
+  </details>
+  {% endif %}
+  <p class="muted small">Alkuperäinen: <code>{{ k.lahde }}</code></p>
+{% else %}
+  <div class="sheet pre">{{ k.teksti }}</div>
+  <p class="muted small">{% if k.muokattava %}Alkuperäinen: <code>{{ k.lahde }}</code>{% else %}Kiinteä teksti koodissa: <code>{{ k.lahde }}</code>. Muutosta voi pyytää Työt-sivulla.{% endif %}</p>
+{% endif %}
+</section>
+{% endblock %}
