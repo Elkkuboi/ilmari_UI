@@ -16,6 +16,8 @@
 - Esimerkkiaineisto: `demo/toiminta/kehotteet.json` ja kaksi esimerkkidokumenttia (`saannot`, `agents`).
 - Asennusjärjestys: Hub ensin (Dokumentit-sivu korjaantuu heti), sitten aiops (luettelo ja lomakereitit). Ennen
   aiopsin asennusta sivu näyttää rivin "Prompteja ei ole vielä tallennettu."
+- Sivun alarivi kertoo, että Ravintopolun ja Hahmon omat promptit ovat niiden omissa asetuksissa (Ravintopolku
+  PR #12, 21.11.).
 - Testit: 710 passed, 43 skipped (ilman selainryhmää ja shellcheckiä).
 - Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`.
 
