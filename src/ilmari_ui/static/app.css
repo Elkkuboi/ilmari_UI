@@ -139,7 +139,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .toimirivi { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; }
 .toimirivi > span { flex: 1 1 10rem; }
 .varaus > * + * { margin-top: .2rem; }
-.versiot pre.diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.versiot pre.diff { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto; }
+/* Diffin rivi omana lohkonaan: rivittyvä jatko sisennetään merkin (+, −, välilyönti) alle, eikä se näytä uudelta riviltä */
+.versiot pre.diff > span { display: block; padding-left: 1ch; text-indent: -1ch; min-height: 1.5em; }
 .nowrap { white-space: nowrap; }
 button.taittuva { white-space: normal; text-align: left; }   /* pitkä napin teksti 320 px:n puhelimessa */
 a.row { display: grid; grid-template-columns: 4.5ch 1fr auto; gap: .2rem 1.2ch; text-decoration: none; }

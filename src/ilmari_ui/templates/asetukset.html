@@ -41,7 +41,7 @@
 {% endif %}
 <section id="aivot" aria-labelledby="h-aivot">
   <h2 id="h-aivot" class="label">Aivot{% if vapaa_ram_gb is not none %} <span class="aside">vapaa RAM {{ vapaa_ram_gb }} Gt</span>{% endif %}</h2>
-  <p><a href="{{ url('/hub/aivot') }}">Aivojen koodi</a> <small class="muted">Ilmarin oma koodi, lukko ja palautus</small></p>
+  <div class="rows" id="aivokoodi"><a href="{{ url('/hub/aivot') }}">Aivojen koodi<br><small class="muted">Ilmarin oma koodi, lukko ja palautus</small></a></div>
 {% if mallit is none %}
   <p class="empty">Mallit eivät ole saatavilla tässä ympäristössä.</p>
 {% elif mallit.tila != 'ready' %}
