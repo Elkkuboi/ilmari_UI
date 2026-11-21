@@ -1,5 +1,24 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 21.11.2026 (ilta): keskustelu rullaa laatikossa, haara `keskustelu-rullaa`
+
+- Keskustelu täyttää ruudun, eikä sivu enää kasva viestien mukana: vain viestilaatikko vierii, uusin viesti on
+  alhaalla ja vanhemmat ylempänä (CSS `flex-direction: column-reverse`, ei skriptiä). Kirjoituskenttä pysyy
+  näkyvissä. Hyvin matalalla ruudulla laatikko pitää 9rem:n korkeuden ja sivu vierii vähän. Vain tällä sivulla
+  viewport-vihje `interactive-widget=resizes-content` (Android pienentää sivun näppäimistön yläpuolelle).
+- "+ Uusi keskustelu" (`POST /ilmari/saie`, reitti oli jo gatewayssa) ja linkki "Keskustelut (N)" näkyvät aina, myös
+  kun Ilmari vastaa: lomakkeessa on vain piilokenttä, joten 5 s:n päivitys toimii.
+- Lista `/hub/keskustelu?lista=1` (vain arvo 1 kelpaa): keskustelut kansioittain; nykyisen keskustelun kansio ja
+  kansiottomat auki, muut kansiot (yöajot, Telegram) ja arkisto kiinni; nykyinen keskustelu on linkki takaisin.
+  Osio "Tämä keskustelu": nimi, kansio ja arkistointi. Lista ei päivity koskaan.
+- Sana "säie" pois näkyvistä (myös varanimi on nyt "Keskustelu N"). Laatikon alussa "Näkyvissä 50 uusinta viestiä,
+  kaikkiaan N", kun gateway ei julkaise kaikkia.
+- AGENTS.md: urakoitsija saa pushata, tehdä PR:n, yhdistää ja asentaa tilatun työn, jos istunnon oikeudet sallivat.
+- Testit: 732 passed, 50 skipped (ilman selainryhmää ja shellcheckiä). Uusi selaintesti (vieritys alkaa alimmasta
+  viestistä 320, 390 ja 1280 px:n leveydellä) ohittuu ilman Playwrightia; sama mitattu Chromella käsin.
+- Tarkistamatta: Safari (iPhone) ja Firefox. Katso puhelimella asennuksen jälkeen.
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`. Gateway ei muutu.
+
 ## Päivitys 21.11.2026: Promptit ja säännöt, haara `promptit-ja-saannot`
 
 - Uusi sivu **Promptit ja säännöt** `/hub/kehotteet` Asetusten alla (Asetukset → Muut): jokainen teksti, jonka aiops
