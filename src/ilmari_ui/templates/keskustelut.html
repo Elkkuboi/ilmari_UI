@@ -2,7 +2,8 @@
 {% from 'macros.html' import lomake with context %}
 {# Keskustelujen lista (/hub/keskustelu?lista=1, 21.11.2026). Ei päivity koskaan: päivitys sulkisi avatun kansion ja
    tyhjentäisi nimen. Vain nykyisen keskustelun kansio ja keskustelut ilman kansiota ovat auki; muut kansiot (yöajot,
-   Telegram) ovat kiinni. Jokainen lomake palaa gatewaylta keskusteluun (paluu=hub). #}
+   Telegram) ovat kiinni. Jokainen lomake palaa gatewaylta keskusteluun (paluu=hub). Kansion nimi on dataa:
+   "Kansio:"-alku erottaa sen omista ryhmistä (Ilman kansiota, Arkisto). #}
 {% block sisalto %}
 {% set k = keskustelu if keskustelu and keskustelu.tila == 'ready' else none %}
 {% set saie = k.saie if k else none %}
@@ -20,7 +21,7 @@
 {% endif %}
   <div class="threads">
 {% for kansio, rivit in k.kansiot %}
-    <details class="fold"{% if not kansio or rivit|selectattr('id', 'equalto', k.aktiivinen)|list %} open{% endif %}><summary class="folder">{{ kansio or 'Ilman kansiota' }} ({{ rivit|length }})</summary>
+    <details class="fold"{% if not kansio or rivit|selectattr('id', 'equalto', k.aktiivinen)|list %} open{% endif %}><summary class="folder">{% if kansio %}Kansio: {{ kansio }}{% else %}Ilman kansiota{% endif %} ({{ rivit|length }})</summary>
 {% for s in rivit %}
 {% if s.id == k.aktiivinen %}
       <a class="thread" href="{{ url('/hub/keskustelu') }}" aria-current="true"><span>{{ s.nimi }}</span><small>{{ s.viesteja }}&nbsp;viestiä{% if s.viimeisin %} · {{ lyhyt_aika(s.viimeisin) }}{% endif %}</small></a>

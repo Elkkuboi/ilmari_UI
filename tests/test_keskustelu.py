@@ -298,13 +298,15 @@ def kansiot_auki(r) -> dict[str, bool]:
 def test_lista_avaa_vain_nykyisen_keskustelun_kansion(tmp_path, monkeypatch):
     """Nykyisen keskustelun kansio ja keskustelut ilman kansiota ovat auki; muut kansiot ja arkisto ovat kiinni."""
     r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 20)), polku="/keskustelu?lista=1")
-    assert kansiot_auki(r) == {"Ilman kansiota (1)": True, "beta (1)": False, "Ravintopolku (1)": True, "Arkisto (1)": False}
+    assert kansiot_auki(r) == {"Ilman kansiota (1)": True, "Kansio: beta (1)": False, "Kansio: Ravintopolku (1)": True,
+                               "Arkisto (1)": False}
     # toinen suunta: kun nykyinen keskustelu on kansiossa beta, Ravintopolku on kiinni
     beta = {**SAIKEET, "aktiivinen": 3}
     saie = {k: v for k, v in SAIKEET["saikeet"][1].items() if k not in ("viesteja", "viimeisin")}
     r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 20)), polku="/keskustelu?lista=1", nimi="k2",
                        saikeet=beta, saie=saie)
-    assert kansiot_auki(r) == {"Ilman kansiota (1)": True, "beta (1)": True, "Ravintopolku (1)": False, "Arkisto (1)": False}
+    assert kansiot_auki(r) == {"Ilman kansiota (1)": True, "Kansio: beta (1)": True, "Kansio: Ravintopolku (1)": False,
+                               "Arkisto (1)": False}
     sivu = BeautifulSoup(r.text, "html.parser")
     assert sivu.select_one(".threads [aria-current='true']").get_text().startswith("b-kansio")
     assert sivu.find("form", action="https://tyoasema.test/ilmari/saie/2/valitse") is not None
@@ -410,4 +412,17 @@ def test_viestilaatikon_rakenne_jota_vieritys_vaatii():
     assert re.search(r"@media \(max-height: 40rem\) \{[^@]*body\.chat-sivu main \{ padding: \.5rem 0; \}", css)
     assert re.search(r"\.kirjoitus \{ display: flex;", css) and re.search(r"\.kirjoitus textarea \{ flex: 1 1 auto; min-width: 0; \}", css)
     assert re.search(r"\.chat-head \.label \.aside \{ order: 3; flex-basis: 100%; \}", css)   # kansio nimen alle
+
+
+def test_kansion_nimi_ei_nayta_omalta_ryhmalta(tmp_path, monkeypatch):
+    """Kansion nimi on dataa (Ilmarin nimiehdotus voi asettaa sen). Kansio nimeltä Arkisto tai Ilman kansiota näkyy
+    muodossa "Kansio: ...", joten se ei näytä listan omalta arkistolta eikä kansiottomien ryhmältä."""
+    saikeet = json.loads(json.dumps(SAIKEET))
+    saikeet["saikeet"][1]["kansio"] = "Arkisto"
+    saikeet["saikeet"].append({**SAIKEET["saikeet"][1], "id": 5, "kansio": "Ilman kansiota"})
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 20)), polku="/keskustelu?lista=1", saikeet=saikeet)
+    otsikot = list(kansiot_auki(r))
+    assert otsikot == ["Ilman kansiota (1)", "Kansio: Arkisto (1)", "Kansio: Ilman kansiota (1)",
+                       "Kansio: Ravintopolku (1)", "Arkisto (1)"]
+    assert otsikot.count("Arkisto (1)") == 1 and otsikot.count("Ilman kansiota (1)") == 1
 
