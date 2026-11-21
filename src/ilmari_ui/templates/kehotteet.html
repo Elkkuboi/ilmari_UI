@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'macros.html' import lukkorivi with context %}
 {% block sisalto %}
 <a class="back" href="{{ url('/hub/asetukset') }}">Asetukset</a>
 <section aria-labelledby="h-kehotteet">
@@ -10,11 +11,13 @@
 {% else %}
   <p class="muted small">Jokainen teksti, jonka Ilmari ja sen kädet saavat ohjeeksi.</p>
 {% endif %}
+  {#- Lukko näkyy myös, kun luettelo on rikki (silloin sitä tarvitaan). Vanhalla gatewaylla ei riviä. #}
+  {% if luettelo is not none and luettelo.lukittu is not none %}{{ lukkorivi(luettelo.lukittu) }}{% endif %}
 </section>
 {% for ryhma, rivit in ryhmat %}
 <section aria-labelledby="h-ryhma-{{ loop.index }}">
   <h2 id="h-ryhma-{{ loop.index }}" class="label">{{ ryhma }}</h2>
-  <ul class="rows">{% for k in rivit %}<li><a href="{{ url('/hub/kehotteet/' ~ k.tunniste) }}">{{ k.otsikko }}</a>{% if k.muokattu %} <span class="tag warn">muokattu</span>{% elif k.muokattava %} <span class="tag">muokattava</span>{% endif %}<br><small class="muted">{{ k.kuvaus }}</small></li>{% endfor %}</ul>
+  <ul class="rows">{% for k in rivit %}<li><a href="{{ url('/hub/kehotteet/' ~ k.tunniste) }}">{{ k.otsikko }}</a>{% if k.muokattu %} <span class="tag warn">{{ 'Ilmari muokkasi' if k.voimassa and k.voimassa.kuka == 'ilmari' else 'muokattu' }}</span>{% elif k.muokattava %} <span class="tag">muokattava</span>{% endif %}<br><small class="muted">{{ k.kuvaus }}</small></li>{% endfor %}</ul>
 </section>
 {% endfor %}
 {% if omat is not none %}

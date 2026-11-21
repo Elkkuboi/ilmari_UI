@@ -32,6 +32,12 @@
 {% elif tilarivi.toihin and varattu %}
   <p class="muted small">{% if m.dsh_tyo and rajatesti_kaynnissa %}Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään.{% else %}Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</p>
 {% endif %}
+  {#- Ilmarin itse varaamat työvuorot (ADR-0033 pala 6): Hubin oma lause ja Peru samalla rivillä, Ilmarin perustelu
+      omalla rivillään merkittynä (dataa, koodattuna), jotta se ei näytä Hubin tekstiltä. #}
+  {% for v in varaukset %}
+  <div class="varaus">{% call lomake('/ilmari/vuoro/varaus/peru', 'toimirivi') %}<span>Ilmari on varannut työvuoron: {{ lyhyt_aika(v.alkaa) }}–{{ kello(v.loppuu) }}, {{ v.minuutit }}&nbsp;min.</span><input type="hidden" name="id" value="{{ v.id }}"><button class="btn--quiet" type="submit">Peru</button>{% endcall %}
+  {%- if v.miksi is none %}<p class="muted small">Miksi: ei voi näyttää (kielletty merkki).</p>{% elif v.miksi %}<p class="muted small">Miksi: {{ v.miksi }}</p>{% endif %}</div>
+  {% endfor %}
 {% endif %}
 </section>
 {% if odottaa %}

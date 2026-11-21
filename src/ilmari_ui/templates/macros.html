@@ -5,6 +5,12 @@
 {%- elif demo %}{% if luokka %}<div class="{{ luokka }}">{{ caller() }}</div>{% else %}{{ caller() }}{% endif %}{% endif %}
 {%- endmacro %}
 
+{# Lukko (aiops ADR-0033 pala 6): estää vain Ilmarin omat muokkaukset; Eliaksen lomakkeet toimivat aina. Gateway palaa
+   Promptit ja säännöt -sivulle. #}
+{% macro lukkorivi(lukittu) -%}
+{% call lomake('/ilmari/kehote/lukko', 'toimirivi') %}<span id="lukko">{{ 'Lukittu: vain sinä muokkaat.' if lukittu else 'Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan.' }}</span><input type="hidden" name="lukittu" value="{{ '0' if lukittu else '1' }}"><button class="btn--quiet" type="submit">{{ 'Avaa lukko' if lukittu else 'Lukitse' }}</button>{% endcall %}
+{%- endmacro %}
+
 {% macro piste(savy, kaynnissa=false) -%}
 <span class="dot{% if kaynnissa %} dot--live{% elif savy == 'success' %} dot--ok{% elif savy == 'warning' %} dot--warn{% elif savy == 'danger' %} dot--stop{% endif %}" aria-hidden="true"></span>
 {%- endmacro %}

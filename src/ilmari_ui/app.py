@@ -175,12 +175,16 @@ def production_rejection(request: Request, identity: HubConfig) -> tuple[int, st
     return None
 
 
+SITOVA = chr(0xA0)   # sitova välilyönti: aika ei katkea kahdelle riville (merkki ei näy lähdekoodissa)
+
+
 def _aika(value: Any) -> datetime | None:
+    """Aikavyöhykkeellinen aika Helsingin aikana tai None. Vuosi 1 tai 9999 ei mahdu Suomen aikaan: None, ei kaatumista."""
     try:
         parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.astimezone(HELSINKI) if parsed.tzinfo is not None else None
     except (ValueError, TypeError, OverflowError):
         return None
-    return parsed.astimezone(HELSINKI) if parsed.tzinfo is not None else None
 
 
 def format_time(value: Any) -> str:
@@ -207,10 +211,10 @@ def lyhyt_aika(value: Any) -> str:
     parsed = _aika(value)
     if parsed is None:
         return ""
-    kellonaika = f"klo {parsed.strftime('%H.%M')}"
+    kellonaika = f"klo{SITOVA}{parsed.strftime('%H.%M')}"
     if parsed.date() == datetime.now(HELSINKI).date():
         return kellonaika
-    return f"{parsed.day}.{parsed.month}. {kellonaika}"
+    return f"{parsed.day}.{parsed.month}.{SITOVA}{kellonaika}"
 
 
 def koneen_ika(kone: Any) -> str:
@@ -224,7 +228,7 @@ def koneen_ika(kone: Any) -> str:
         return f"päivitetty {ika // 60} min sitten"
     if ika < 86400:
         return f"päivitetty {ika // 3600} h sitten"
-    return f"päivitetty {paiva(kone.paivitetty)} klo {kello(kone.paivitetty)}"
+    return f"päivitetty {paiva(kone.paivitetty)}{SITOVA}klo{SITOVA}{kello(kone.paivitetty)}"
 
 
 def kohtaa(n: int) -> str:
@@ -426,7 +430,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub", response_class=HTMLResponse)
     async def nyt_sivu(request: Request):
-        """Ilmarin tila ja ohjaus (Töihin nyt, Seis, Jatka), mitä odottaa Eliasta, viimeisin raportti ja teot.
+        """Ilmarin tila ja ohjaus (Töihin nyt, Seis, Jatka, Ilmarin varaamien vuorojen peruminen), mitä odottaa
+        Eliasta, viimeisin raportti ja teot.
         Lomakkeet menevät gatewaylle (paluu=hub); gateway palaa tänne ?toihin=rajatesti, kun Töihin nyt ajaa ensin
         rajatestin. Päivittyy itsestään vain, kun vuoro tai työ on käynnissä."""
         demo = esimerkki(request)
@@ -441,6 +446,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request, "nyt", "Nyt", "nyt", toiminta=toiminta, tilarivi=tilarivi, malli=malli,
             asetukset=toiminta.asetukset if valmis else None,
             raportti=toiminta.raportti if valmis else None,
+            varaukset=(toiminta.varaukset or ()) if valmis and tilarivi is not None else (),
             rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, dsh_tyo),
             toihin_rajatesti=request.query_params.get("toihin") == "rajatesti",
             odottaa=odottaa_sinua(toiminta, tyot, lahde, osoitteet(demo)),
@@ -615,7 +621,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/kehotteet", response_class=HTMLResponse)
     async def kehotteet_sivu(request: Request):
-        """Promptit ryhmittäin, Eliaksen omat ohjeet (linkit Asetuksiin) ja säännöt (asennetut dokumentit)."""
+        """Promptit ryhmittäin, lukko (saako Ilmari muokata käsikirjaansa), Eliaksen omat ohjeet (linkit Asetuksiin) ja
+        säännöt (asennetut dokumentit)."""
         luettelo = lue_kehotteet(request)
         valmis = luettelo is not None and luettelo.tila == "ready"
         toiminta, _ = lue_toiminta(esimerkki(request))
@@ -632,12 +639,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/kehotteet/{tunniste}", response_class=HTMLResponse)
     async def kehote_sivu(request: Request, tunniste: str):
-        """Yksi prompti: teksti sellaisena kuin malli sen saa. Muokattavalla lomake gatewaylle (paluu=hub)."""
+        """Yksi prompti: teksti sellaisena kuin malli sen saa. Muokattavalla lomake gatewaylle (paluu=hub) ja aiemmat
+        versiot palautusnappeineen."""
         luettelo = lue_kehotteet(request)
         k = kehotteet_lukija.etsi(luettelo, tunniste) if luettelo is not None and luettelo.tila == "ready" else None
         if k is None:
             return virhe(request, 404, "Promptia ei löydy", "Tällaista promptia ei ole.")
-        return render(request, "kehote", k["otsikko"], "asetukset", k=k, korkeus=kehotteet_lukija.korkeus(k["teksti"]))
+        return render(request, "kehote", k["otsikko"], "asetukset", k=k, lukittu=luettelo.lukittu,
+                      korkeus=kehotteet_lukija.korkeus(k["teksti"] or ""))
 
     # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
 
