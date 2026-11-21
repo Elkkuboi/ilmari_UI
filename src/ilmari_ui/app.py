@@ -243,6 +243,11 @@ def kirjoitus(request: Request) -> bool:
     return request.query_params.get("kirjoita") == "1"
 
 
+def listanakyma(request: Request) -> bool:
+    """Keskustelujen lista (lista=1): vain vakioarvo kelpaa, eikä arvoa näytetä sivulla."""
+    return request.query_params.get("lista") == "1"
+
+
 def odottaa_vastausta(k: Any, nyt: datetime) -> bool:
     """Aktiivisen säikeen viimeisin viesti on Eliaksen ja alle 10 minuuttia vanha: Ilmari ei ole vielä vastannut."""
     if k is None or k.tila != "ready" or not k.viestit or k.viestit[-1]["lahettaja"] != "elias":
@@ -455,10 +460,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/hub/keskustelu", response_class=HTMLResponse)
     async def keskustelu_sivu(request: Request):
         """Gatewayn julkaisema keskustelu; lomakkeet menevät gatewaylle samassa alkuperässä (paluu=hub). Kun Ilmari
-        vastaa vielä, sivu odottaa ilman viestikenttää ja päivittyy itsestään; muuten kenttä näkyy eikä sivu päivity."""
+        vastaa vielä, sivu odottaa ilman viestikenttää ja päivittyy itsestään; muuten kenttä näkyy eikä sivu päivity.
+
+        Keskustelu täyttää ruudun, ja vain viestilaatikko vierii (21.11.2026). Uusi keskustelu ja linkki listaan
+        näkyvät aina, myös odottaessa. Lista (lista=1) näyttää keskustelut kansioittain sekä nykyisen keskustelun
+        nimen, kansion ja arkistoinnin; se ei päivity koskaan, joten päivitys ei sulje avattua kansiota."""
         k = lue_keskustelu(esimerkki(request))
+        if listanakyma(request):
+            return render(request, "keskustelut", "Keskustelut", "keskustelu", keskustelu=k)
         odottaa = odottaa_vastausta(k, datetime.now(timezone.utc)) and not kirjoitus(request)
-        response = render(request, "keskustelu", "Keskustelu", "keskustelu", keskustelu=k, odottaa=odottaa)
+        response = render(request, "keskustelu", "Keskustelu", "keskustelu", keskustelu=k, odottaa=odottaa,
+                          runko="chat-sivu")
         if odottaa:
             paivity(response, KESKUSTELU_PAIVITYS)
         return response

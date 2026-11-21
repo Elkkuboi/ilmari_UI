@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="fi" data-vari="{{ vari }}">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1{% if runko == 'chat-sivu' %}, interactive-widget=resizes-content{% endif %}">
 <meta name="color-scheme" content="{{ 'dark' if ulkoasu.tumma else 'light' }}"><meta name="theme-color" content="{{ ulkoasu.tausta }}">
 <title>{{ otsikko }} · Ilmari</title>
 <link rel="icon" href="/hub/static/favicon-v2.svg" type="image/svg+xml">
@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="/hub/static/icon-192-v2.png">
 <link rel="stylesheet" href="/hub/static/app.css">
 </head>
-<body><a class="skip-link" href="#main">Siirry sisältöön</a>
+<body{% if runko %} class="{{ runko }}"{% endif %}><a class="skip-link" href="#main">Siirry sisältöön</a>
 <header class="top"><div class="wrap"><a class="brand" href="{{ url('/hub') }}">ILMARI</a><nav class="nav" aria-label="Päävalikko">{% for avain, polku, nimi in valikko %}<a href="{{ url(polku) }}"{% if aktiivinen == avain %} aria-current="page"{% endif %}>{{ nimi }}</a>{% endfor %}</nav></div></header>
 <main id="main"><div class="wrap">
 {% if demo %}<p class="note">Esimerkkitila: keksitty aineisto, napit eivät tee mitään.</p>{% endif %}

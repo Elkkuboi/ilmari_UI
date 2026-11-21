@@ -69,6 +69,21 @@ class Keskustelu:
     def kansionimet(self) -> list[str]:
         return sorted({s["kansio"] for s in self.saikeet if s["kansio"]}, key=str.casefold)
 
+    @property
+    def avoimia(self) -> int:
+        """Arkistoimattomien säikeiden määrä (linkki keskustelujen listaan)."""
+        return sum(1 for s in self.saikeet if s["arkistoitu"] is None)
+
+    @property
+    def kaikkiaan(self) -> int:
+        """Aktiivisen säikeen kaikki viestit säielistan mukaan; gateway julkaisee niistä vain uusimmat. Ilman listaa
+        tai jos lista on jäljessä, näkyvien määrä."""
+        if self.saie is not None:
+            for s in self.saikeet:
+                if s["id"] == self.saie["id"]:
+                    return max(s["viesteja"], len(self.viestit))
+        return len(self.viestit)
+
 
 def _virhe(viesti: str) -> None:
     raise ReadFailure("invalid", viesti)
@@ -86,7 +101,7 @@ def _saie(s: Any, *, vaadi_lista: bool) -> dict[str, Any]:
         _virhe("Säikeen kentät eivät vastaa muotoa.")
     if vaadi_lista and set(s) != SAIE_KENTAT:
         _virhe("Säikeen kentät eivät vastaa muotoa.")
-    nimi = _siisti(s.get("nimi"), NIMI_MAX) or f"Säie {s['id']}"
+    nimi = _siisti(s.get("nimi"), NIMI_MAX) or f"Keskustelu {s['id']}"
     return {"id": s["id"], "nimi": nimi, "kansio": _siisti(s.get("kansio"), KANSIO_MAX),
             "nimen_lahde": _siisti(s.get("nimen_lahde"), 10), "luotu": _siisti(s.get("luotu"), 40),
             "arkistoitu": None if s.get("arkistoitu") is None else _siisti(s.get("arkistoitu"), 40),
