@@ -104,11 +104,13 @@ def in_view(locator) -> bool:
     return locator.evaluate("e => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 1; }")
 
 
-@pytest.mark.parametrize("width,height,page_fits", [(390, 844, True), (1280, 900, True), (320, 568, False)])
+@pytest.mark.parametrize("width,height,page_fits", [(390, 844, True), (1280, 900, True), (320, 568, True),
+                                                     (390, 450, False)])
 def test_conversation_scrolls_inside_its_box_newest_at_bottom(page, tmp_path, monkeypatch, width, height, page_fits):
     """21.11.2026: 40 messages do not lengthen the page. Only the message box scrolls, it starts at the newest
-    message (column-reverse, no script), and the writing box stays in view. A very short screen may scroll the page
-    a little, but the box still starts at the bottom."""
+    message (column-reverse, no script), and the writing box stays in view. Lähetä sits beside the field, so it is in
+    view whenever the field is, also with the keyboard open (390x450, where the demo note may scroll the page a little).
+    On a narrow phone the two actions share one row."""
     demo = tmp_path / "keskustelu"
     demo.mkdir()
     source = ESIMERKKI
@@ -135,6 +137,14 @@ def test_conversation_scrolls_inside_its_box_newest_at_bottom(page, tmp_path, mo
         "(e) => { const r = e.getBoundingClientRect(), b = e.closest('.chat-scroll').getBoundingClientRect();"
         " return r.bottom > b.top; }")                                 # the oldest is above, reached by scrolling up
     assert_no_overflow(page)
+    field, send = page.locator("#viesti"), page.get_by_role("button", name="Lähetä", exact=True)
+    rect = "e => { const r = e.getBoundingClientRect(); return [r.top, r.bottom]; }"
+    (field_top, field_bottom), (send_top, send_bottom) = field.evaluate(rect), send.evaluate(rect)
+    assert send_top < field_bottom and send_bottom > field_top        # same row: visible together
+    new, listing = page.get_by_text("+ Uusi keskustelu"), page.get_by_role("link", name="Keskustelut")
+    assert abs(new.evaluate(rect)[0] - listing.evaluate(rect)[0]) <= 1
     if page_fits:
         assert page.evaluate("document.documentElement.scrollHeight <= innerHeight + 1")
-        assert in_view(page.locator("#viesti")) and in_view(last) and in_view(page.get_by_text("+ Uusi keskustelu"))
+        assert in_view(field) and in_view(last) and in_view(new) and in_view(send)
+    field.scroll_into_view_if_needed()                                 # what the browser does when the field is focused
+    assert in_view(field) and in_view(send)

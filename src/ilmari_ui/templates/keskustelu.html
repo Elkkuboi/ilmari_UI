@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% from 'macros.html' import lomake, piste with context %}
 {# Keskustelu ruudun korkuisena (21.11.2026): vain viestilaatikko vierii, uusin viesti alhaalla (app.css, chat-sivu).
-   Uusi keskustelu ja linkki listaan näkyvät myös odottaessa: lomakkeessa on vain piilokenttä, joten päivitys toimii. #}
+   Uusi keskustelu ja linkki listaan näkyvät myös odottaessa: lomakkeessa on vain piilokenttä, joten päivitys toimii.
+   Lähetä on kentän vieressä, joten se näkyy aina, kun kenttä näkyy (näppäimistö). #}
 {% block sisalto %}
 {% set k = keskustelu if keskustelu and keskustelu.tila == 'ready' else none %}
 {% set saie = k.saie if k else none %}
@@ -32,13 +33,10 @@
 {% if gateway_url or demo %}
 <section class="composer" aria-label="Uusi viesti">
 {% if odottaa %}
-  <div class="form-row" role="status"><span class="actions">{{ piste('', true) }}Ilmari vastaa…</span><a class="small" href="{{ url('/hub/keskustelu', kirjoita=1) }}">Kirjoita lisää</a></div>
+  <div class="form-row" role="status"><span class="actions">{{ piste('', true) }}Ilmari vastaa…</span><a class="small" href="{{ url('/hub/keskustelu', kirjoita=1) }}">Selaa tai kirjoita rauhassa</a></div>
 {% else %}
-  {% call lomake('/ilmari/viesti') %}<label for="viesti" class="sr-only">Viesti Ilmarille</label><textarea id="viesti" name="teksti" rows="2" maxlength="8000" required placeholder="Kirjoita Ilmarille…"></textarea>
-  <div class="form-row"><span class="muted small">{% if k and k.malli.tila != 'running' %}Malli ei ole käynnissä; viesti käynnistää sen. {% endif %}<a href="{{ url('/hub/keskustelu') }}">Päivitä</a></span><button class="btn--primary" type="submit">Lähetä</button></div>{% endcall %}
-{% if k and k.malli.tila != 'running' %}
-  {% call lomake('/kehita/malli', 'form-row') %}<input type="hidden" name="toiminto" value="kaynnista"><button type="submit">Käynnistä malli</button>{% endcall %}
-{% endif %}
+  {% call lomake('/ilmari/viesti') %}<label for="viesti" class="sr-only">Viesti Ilmarille</label><div class="kirjoitus"><textarea id="viesti" name="teksti" rows="2" maxlength="8000" required placeholder="Kirjoita Ilmarille…"></textarea><button class="btn--primary" type="submit">Lähetä</button></div>{% endcall %}
+  <div class="form-row"><span class="muted small">{% if k and k.malli.tila != 'running' %}Malli ei ole käynnissä; viesti käynnistää sen. {% endif %}<a href="{{ url('/hub/keskustelu') }}">Päivitä</a></span>{% if k and k.malli.tila != 'running' %}{% call lomake('/kehita/malli') %}<input type="hidden" name="toiminto" value="kaynnista"><button type="submit">Käynnistä malli</button>{% endcall %}{% endif %}</div>
 {% endif %}
 </section>
 {% endif %}

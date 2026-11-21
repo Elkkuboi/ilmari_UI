@@ -197,7 +197,8 @@ def test_ilmari_vastaa_sivu_odottaa_ilman_kenttaa_ja_paivittyy(tmp_path, monkeyp
     assert r.status_code == 200 and r.headers["refresh"] == "5" and kentat(r) == []
     tila = sivu.find(attrs={"role": "status"})
     assert "Ilmari vastaa…" in tila.get_text() and tila.find("span", class_="dot--live")
-    assert tila.find("a", string="Kirjoita lisää")["href"] == "/hub/keskustelu?kirjoita=1"
+    # päivitys vie laatikon takaisin uusimpaan viestiin; tällä linkillä päivitys loppuu ja historiaa voi selata
+    assert tila.find("a", string="Selaa tai kirjoita rauhassa")["href"] == "/hub/keskustelu?kirjoita=1"
     assert "↓ Kirjoita" not in r.text and "#viesti" not in r.text
     assert "Päivitä" not in r.text and "päivittyy itsestään" not in r.text
     assert 'action="https://tyoasema.test/ilmari/viesti"' not in r.text
@@ -348,7 +349,7 @@ def test_kirjoituskentta_pysyy_nakyvissa_vain_viestilaatikko_vierii():
     assert "flex-direction: column-reverse" in saanto(".chat-scroll") and "overflow-y: auto" in saanto(".chat-scroll")
     assert "min-height: 0" in saanto(".chat-scroll")
     assert "height: 100dvh" in saanto("body.chat-sivu") and "display: flex" in saanto("body.chat-sivu")
-    assert "min-height: 9rem" in saanto("body.chat-sivu main > .wrap > .chat-box")
+    assert "min-height: 6rem" in saanto("body.chat-sivu main > .wrap > .chat-box")
     c = TestClient(create_app(Settings(demo_enabled=True)), base_url="http://ilmari.local", client=None)
     chat = BeautifulSoup(c.get("/hub/keskustelu?demo=1").text, "html.parser")
     assert chat.body["class"] == ["chat-sivu"] and chat.select_one(".chat-scroll")["tabindex"] == "0"
@@ -369,3 +370,44 @@ def test_keskustelujen_maarat_ja_varanimi(tmp_path):
     assert [s["nimi"] for s in k.saikeet if s["id"] == 3] == ["Keskustelu 3"]
     k2 = lue_keskustelu(julkaise(tmp_path / "k2", data=V2), omistajat=frozenset({UID}))
     assert k2.avoimia == 0 and k2.kaikkiaan == 1   # ilman säielistaa näkyvien määrä
+
+
+# --- Katselmoinnin korjaukset (21.11.2026) ------------------------------------------------------------------------
+
+def test_kirjoituskentta_ja_laheta_samalla_rivilla(tmp_path, monkeypatch):
+    """Lähetä on kentän vieressä, joten se näkyy aina, kun kenttä näkyy (matala ruutu, näppäimistö auki). Käynnistä
+    malli on edelleen oma lomakkeensa, ei viestilomakkeen sisällä."""
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 20)))
+    sivu = BeautifulSoup(r.text, "html.parser")
+    rivi = sivu.select_one("form[action='https://tyoasema.test/ilmari/viesti'] .kirjoitus")
+    assert [lapsi.name for lapsi in rivi.find_all(recursive=False)] == ["textarea", "button"]
+    assert rivi.textarea["id"] == "viesti" and rivi.button.get_text() == "Lähetä" and rivi.button["type"] == "submit"
+    pois = json.loads(json.dumps(V2))
+    pois["viestit"][0]["aika"] = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
+    hak = julkaise(tmp_path / "pois", data=pois)
+    monkeypatch.setattr("ilmari_ui.keskustelu.OLETUS", hak)
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
+        sivu = BeautifulSoup(client.get("/keskustelu", headers=OTSAKKEET).text, "html.parser")
+    viesti = sivu.find("form", action="https://tyoasema.test/ilmari/viesti")
+    malli = sivu.find("form", action="https://tyoasema.test/kehita/malli")
+    assert malli is not None and malli.find("button", string="Käynnistä malli") is not None
+    assert malli.find_parent("form") is None and viesti.find("form") is None   # lomakkeet eivät ole sisäkkäin
+    assert viesti.find("button", string="Käynnistä malli") is None
+
+
+def test_viestilaatikon_rakenne_jota_vieritys_vaatii():
+    """column-reverse aloittaa lopusta vain, kun viestit ovat yhden kääreen sisällä: chat-box > chat-scroll > div > ol.
+    Tämä vartija toimii ilman selainta (selaintesti ohittuu ilman Playwrightia)."""
+    c = TestClient(create_app(Settings(demo_enabled=True)), base_url="http://ilmari.local", client=None)
+    sivu = BeautifulSoup(c.get("/hub/keskustelu?demo=1").text, "html.parser")
+    laatikko = sivu.select_one("main section.chat-box > div.chat-scroll")
+    assert laatikko is not None and len(laatikko.find_all(recursive=False)) == 1
+    assert laatikko.select_one(":scope > div > ol.chat > li.msg") is not None
+    assert sivu.select_one("main section.chat-box + section.composer") is not None   # kenttä heti laatikon alla
+    css = re.sub(r"\s+", " ", (PACKAGE_DIR / "static" / "app.css").read_text(encoding="utf-8"))
+    assert re.search(r"@media \(max-height: 40rem\) \{[^@]*body\.chat-sivu main \{ padding: \.5rem 0; \}", css)
+    assert re.search(r"\.kirjoitus \{ display: flex;", css) and re.search(r"\.kirjoitus textarea \{ flex: 1 1 auto; min-width: 0; \}", css)
+    assert re.search(r"\.chat-head \.label \.aside \{ order: 3; flex-basis: 100%; \}", css)   # kansio nimen alle
+
