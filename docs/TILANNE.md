@@ -4,28 +4,31 @@
 
 - aiops ADR-0033 pala 6, osa 2: Ilmari muokkaa itse käsikirjaansa (systemprompti) ja vuoron ohjettaan ja varaa
   työvuoron. Hub näyttää ja Elias ohjaa lomakkeilla gatewaylle (paluu=hub); Hub ei kirjoita mitään.
-- Promptin sivu `/hub/kehotteet/{tunniste}` (muokattava rivi): rivi "Voimassa: versio N · kuka · aika" ja
-  muokkauslomakkeen alla **Aiemmat versiot** uusin ensin: numero, kuka (Elias, Ilmari tai alkuperäinen), aika,
-  perustelu ja teksti taitettuna. Palauta lähettää kentän `n` osoitteeseen `POST /ilmari/kehote/{tunniste}/versio`.
-  Voimassa olevaa tai samaa tekstiä ei tarjota palautettavaksi (merkintä [voimassa] tai [sama kuin voimassa]).
+- Promptin sivu `/hub/kehotteet/{tunniste}` (muokattava rivi): lukkorivi, rivi "Voimassa: versio N · kuka · aika ·
+  versiot" (linkki versioihin) ja muokkauslomakkeen alla **Versiot** uusin ensin: numero, kuka (Elias, Ilmari,
+  alkuperäinen tai aiempi alkuperäinen), aika, perustelu ja taitettuna muuttuneet rivit edellisestä versiosta sekä koko
+  teksti. Palauta lähettää kentän `n` osoitteeseen `POST /ilmari/kehote/{tunniste}/versio`. Voimassa olevaa tai samaa
+  tekstiä ei tarjota palautettavaksi. Kun vanhin näkyvä versio on yli 1, "Vanhemmat versiot 1–M eivät näy tässä.
+  Palauta numerolla:" ja numerokenttä samaan osoitteeseen (gateway julkaisee vain uusimmat, säilyttää 30).
 - `/hub/kehotteet`: lukkorivi "Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan." ja Lukitse, tai "Lukittu: vain
-  sinä muokkaat." ja Avaa (`POST /ilmari/kehote/lukko`, `lukittu`=1 tai 0).
-- Nyt: tilan alla jokaisesta varauksesta "Ilmari on varannut työvuoron: klo HH.MM, N min. perustelu" ja Peru
-  (`POST /ilmari/vuoro/varaus/peru`, `id`). Ei varauksia: ei mitään. Muu kuin tämän päivän aika näkyy päivän kanssa.
+  sinä muokkaat." ja Avaa lukko (`POST /ilmari/kehote/lukko`, `lukittu`=1 tai 0). Lukko näkyy myös, kun luettelo on
+  rikki. Rivin tagi "Ilmari muokkasi", kun voimassa on Ilmarin versio.
+- Nyt: tilan alla jokaisesta varauksesta "Ilmari on varannut työvuoron: klo HH.MM–HH.MM, N min." ja Peru
+  (`POST /ilmari/vuoro/varaus/peru`, `id`), perustelu omalla rivillään "Miksi: …". Ei varauksia: ei mitään.
 - Lukija `kehotteet.py`: uusi muoto (tiedostossa `lukittu`, jokaisella rivillä `versiot`: enintään 10, kentät
   täsmälleen `n`, `aika`, `kuka`, `miksi`, `teksti`; kiinteällä rivillä tyhjä) ja vanha muoto ilman näitä kelpaavat,
-  sekamuoto ei. Rikkinäinen versiolista ei piilota riviä: teksti ja muokkaus näkyvät, ja kohdassa lukee "Aiempia
-  versioita ei voi nyt näyttää." Raja `enint` enintään 20 000 (gateway ilmoittaa 12 000).
-- Lukija `toiminta.py`: uusi tiedosto `varaukset.json` (`versio`, `aika`, `varaukset`: `id`, `alkaa`, `minuutit`
-  30–240, `miksi`), aikaisin ensin. Puuttuva tiedosto = ei varauksia. Kelvoton tiedosto ei kaada sivua: varaukset
-  jäävät pois ja Odottaa sinua -listassa on lukuvirherivi kuten muillakin tilan tiedostoilla.
-- Ilmarin teksti (perustelu, versio) on dataa: koodattuna, ei Markdownia, ja lukija hylkää samat merkit kuin gateway
-  (ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet; emojin ZWJ sallitaan).
+  sekamuoto ei. Version aika ei saa olla tiedoston aikaa uudempi (10 min vara). Rikkinäinen versiolista ei piilota
+  riviä: teksti ja muokkaus näkyvät, ja kohdassa lukee "Versioita ei voi nyt näyttää." Raja `enint` enintään 20 000.
+- Ilmarin teksti on dataa: koodattuna, ei Markdownia. Uudessa muodossa myös muokattavan rivin voimassa oleva teksti
+  on Ilmarin tekstiä. Kielletty merkki (ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet;
+  emojin ZWJ sallitaan; perustelussa myös tyhjältä näyttävät kirjaimet kuten U+3164) piilottaa vain sen tekstin ("ei
+  voi näyttää"), ei riviä, varausta, lukkoa eikä palautusnappeja.
+- Aika, joka ei mahdu Suomen aikaan (vuosi 1 tai 9999), ei enää kaada sivua (ennen 500).
 - Esimerkkiaineisto: `kehotteet.json` uudessa muodossa (systempromptilla 4 versiota) ja `varaukset.json` (2 varausta).
 - Asennusjärjestys: **Hub ensin**, sitten aiops. Nykyinen Hub hylkää uuden gatewayn `kehotteet.json`:n (kentät eivät
   vastaa muotoa), jolloin Promptit-sivu näyttää virheen; tämä Hub lukee molempia.
-- Testit: 856 passed, 51 skipped (ilman selainryhmää ja shellcheckiä). Puhelinkuvat 390x844 ja 320 px
-  chrome-headless-shellillä (Paperi ja Terminaali); ei vaakavieritystä 320 eikä 390 px leveydellä.
+- Testit: 915 passed, 51 skipped (ilman selainryhmää ja shellcheckiä). Puhelinkuvat 390x844 ja 320 px
+  chrome-headless-shellillä (Paperi ja Terminaali); ei vaakavieritystä 320 eikä 390 px leveydellä taitot auki.
 - Tarkistamatta: Safari (iPhone), Firefox ja oikea gateway.
 - Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`. Jos uusi gateway on
   jo asennettu, peru se ensin: vanha Hub ei lue sen promptiluetteloa.
