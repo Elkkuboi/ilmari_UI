@@ -1,17 +1,25 @@
 {% extends 'base.html' %}
-{% from 'macros.html' import lomake with context %}
+{% from 'macros.html' import lomake, lukkorivi with context %}
 {% block sisalto %}
+{% set kielletty = 'Tekstiä ei voi näyttää: siinä on kielletty merkki.' %}
+{#- Versiot (ADR-0033 pala 6) vain uudella gatewaylla; vanhalla sivu on ennallaan. #}
+{% set versiot_osio = k.muokattava and (gateway_url or demo) and (k.versiot or k.versiot_virhe) %}
 <a class="back" href="{{ url('/hub/kehotteet') }}">Promptit ja säännöt</a>
 <section aria-labelledby="h-kehote">
   <h1 id="h-kehote" class="label">{{ k.otsikko }}{% if k.muokattu %} <span class="aside warn">muokattu {{ lyhyt_aika(k.muokattu) }}</span>{% endif %}</h1>
   <p class="muted small">{{ k.kuvaus }}</p>
 {% if k.muokattava and (gateway_url or demo) %}
-  {#- Versiot (ADR-0033 pala 6): kuka kirjoitti voimassa olevan tekstin. Vanhalla gatewaylla (ei versioita) ei riviä. #}
+  {% if lukittu is not none %}{{ lukkorivi(lukittu) }}{% endif %}
+  {#- Kuka kirjoitti voimassa olevan tekstin, ja linkki versioihin (ne ovat pitkän muokkauskentän alla). #}
   {% if k.versiot is not none or k.versiot_virhe %}
-  <p class="small" id="voimassa">Voimassa: {% if k.voimassa %}versio {{ k.voimassa.n }} · {{ k.voimassa.tekija }} · {{ lyhyt_aika(k.voimassa.aika) }}{% elif k.oletus is none %}alkuperäinen teksti{% else %}muokattu teksti{% endif %}</p>
+  <p class="small" id="voimassa">Voimassa: {% if k.voimassa %}versio {{ k.voimassa.n }} · {{ k.voimassa.tekija }} · {{ lyhyt_aika(k.voimassa.aika) }}{% elif k.oletus is none and not k.teksti_virhe %}alkuperäinen teksti{% else %}muokattu teksti{% endif %}{% if versiot_osio %} · <a href="#h-versiot">versiot</a>{% endif %}</p>
   {% endif %}
+  {% if k.teksti_virhe %}
+  <p class="empty">{{ kielletty }} Palauta alkuperäinen tai aiempi versio.</p>
+  {% else %}
   {% call lomake('/ilmari/kehote/' ~ k.tunniste) %}<label class="sr-only" for="teksti">{{ k.otsikko }}</label><textarea id="teksti" name="teksti" rows="{{ korkeus }}" maxlength="{{ k.enint }}" required>{{ k.teksti }}</textarea>
   <div class="form-row"><span class="muted small">Voimaan seuraavasta vuorosta. Enintään {{ k.enint }} merkkiä.</span><button type="submit">Tallenna</button></div>{% endcall %}
+  {% endif %}
   {% if k.oletus is not none %}
   <details class="fold"><summary>Alkuperäinen teksti</summary>
     <div class="stack"><div class="sheet pre">{{ k.oletus }}</div>
@@ -20,24 +28,34 @@
   {% endif %}
   <p class="muted small">Alkuperäinen: <code>{{ k.lahde }}</code></p>
 {% else %}
-  <div class="sheet pre">{{ k.teksti }}</div>
+  {% if k.teksti_virhe %}<p class="empty">{{ kielletty }}</p>{% else %}<div class="sheet pre">{{ k.teksti }}</div>{% endif %}
   <p class="muted small">{% if k.muokattava %}Alkuperäinen: <code>{{ k.lahde }}</code>{% else %}Kiinteä teksti koodissa: <code>{{ k.lahde }}</code>. Muutosta voi pyytää Työt-sivulla.{% endif %}</p>
 {% endif %}
 </section>
-{% if k.muokattava and (gateway_url or demo) and (k.versiot or k.versiot_virhe) %}
+{% if versiot_osio %}
 <section aria-labelledby="h-versiot">
-  <h2 id="h-versiot" class="label">Aiemmat versiot</h2>
+  <h2 id="h-versiot" class="label">Versiot</h2>
 {% if k.versiot_virhe %}
-  <p class="empty">Aiempia versioita ei voi nyt näyttää.</p>
+  <p class="empty">Versioita ei voi nyt näyttää.</p>
 {% else %}
   {#- Ilmarin teksti (perustelu ja versio) on dataa: koodattuna, ei Markdownia. Voimassa olevaa tai samaa tekstiä ei
-      tarjota palautettavaksi: palautus ei muuttaisi mitään. #}
+      tarjota palautettavaksi (palautus ei muuttaisi mitään), eikä tekstiä, jota ei voi näyttää. #}
   <ol class="rows versiot">{% for v in k.versiot %}<li>
     <div class="toimirivi"><span>Versio {{ v.n }} · {{ v.tekija }} · <time datetime="{{ v.aika }}">{{ lyhyt_aika(v.aika) }}</time>{% if v.voimassa %} <span class="tag ok">voimassa</span>{% elif v.sama %} <span class="tag">sama kuin voimassa</span>{% endif %}</span>
-    {%- if not v.sama %}{% call lomake('/ilmari/kehote/' ~ k.tunniste ~ '/versio') %}<input type="hidden" name="n" value="{{ v.n }}"><button class="btn--quiet" type="submit">Palauta</button>{% endcall %}{% endif %}</div>
-    {% if v.miksi %}<p class="muted small">Miksi: {{ v.miksi }}</p>{% endif %}
-    <details class="fold"><summary>Teksti ({{ v.teksti|length }} merkkiä)</summary><div class="sheet pre">{{ v.teksti }}</div></details>
+    {%- if not v.sama and v.teksti is not none %}{% call lomake('/ilmari/kehote/' ~ k.tunniste ~ '/versio') %}<input type="hidden" name="n" value="{{ v.n }}"><button class="btn--quiet" type="submit">Palauta</button>{% endcall %}{% endif %}</div>
+    {% if v.miksi is none %}<p class="muted small">Miksi: ei voi näyttää (kielletty merkki).</p>{% elif v.miksi %}<p class="muted small">Miksi: {{ v.miksi }}</p>{% endif %}
+    {% if v.teksti is none %}<p class="muted small">{{ kielletty }}</p>
+    {% else %}{% set m = v.muutokset %}<details class="fold"><summary>Teksti ({{ v.teksti|length }} merkkiä{% if m %}, +{{ m.lisatty }} −{{ m.poistettu }} riviä{% endif %})</summary><div class="stack">
+      {%- if m and m.rivit %}<p class="muted small">Muutokset versiosta {{ m.verrattu }}:</p><pre class="code diff">{% for laji, rivi in m.rivit %}<span class="{{ laji }}">{{ '+ ' if laji == 'add' else '- ' }}{{ rivi }}</span>
+{% endfor %}{% if m.leikattu %}<span class="hunk">[… muita muutoksia …]</span>{% endif %}</pre>{% endif -%}
+      <div class="sheet pre">{{ v.teksti }}</div></div></details>{% endif %}
   </li>{% endfor %}</ol>
+  {#- Gateway julkaisee vain uusimmat versiot; vanhemman voi palauttaa numerolla (numero näkyy Teot-listassa). #}
+  {% set vanhin = k.versiot|map(attribute='n')|min %}
+  {% if vanhin > 1 %}
+  <p class="muted small" id="vanhemmat">Vanhemmat versiot 1–{{ vanhin - 1 }} eivät näy tässä. Palauta numerolla:</p>
+  {% call lomake('/ilmari/kehote/' ~ k.tunniste ~ '/versio', 'actions') %}<label class="sr-only" for="vanha-n">Version numero</label><input id="vanha-n" type="number" name="n" min="1" max="{{ vanhin - 1 }}" inputmode="numeric" required><button class="btn--quiet" type="submit">Palauta</button>{% endcall %}
+  {% endif %}
 {% endif %}
 </section>
 {% endif %}

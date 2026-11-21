@@ -175,12 +175,16 @@ def production_rejection(request: Request, identity: HubConfig) -> tuple[int, st
     return None
 
 
+SITOVA = chr(0xA0)   # sitova välilyönti: aika ei katkea kahdelle riville (merkki ei näy lähdekoodissa)
+
+
 def _aika(value: Any) -> datetime | None:
+    """Aikavyöhykkeellinen aika Helsingin aikana tai None. Vuosi 1 tai 9999 ei mahdu Suomen aikaan: None, ei kaatumista."""
     try:
         parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.astimezone(HELSINKI) if parsed.tzinfo is not None else None
     except (ValueError, TypeError, OverflowError):
         return None
-    return parsed.astimezone(HELSINKI) if parsed.tzinfo is not None else None
 
 
 def format_time(value: Any) -> str:
@@ -207,10 +211,10 @@ def lyhyt_aika(value: Any) -> str:
     parsed = _aika(value)
     if parsed is None:
         return ""
-    kellonaika = f"klo {parsed.strftime('%H.%M')}"
+    kellonaika = f"klo{SITOVA}{parsed.strftime('%H.%M')}"
     if parsed.date() == datetime.now(HELSINKI).date():
         return kellonaika
-    return f"{parsed.day}.{parsed.month}. {kellonaika}"
+    return f"{parsed.day}.{parsed.month}.{SITOVA}{kellonaika}"
 
 
 def koneen_ika(kone: Any) -> str:
@@ -224,7 +228,7 @@ def koneen_ika(kone: Any) -> str:
         return f"päivitetty {ika // 60} min sitten"
     if ika < 86400:
         return f"päivitetty {ika // 3600} h sitten"
-    return f"päivitetty {paiva(kone.paivitetty)} klo {kello(kone.paivitetty)}"
+    return f"päivitetty {paiva(kone.paivitetty)}{SITOVA}klo{SITOVA}{kello(kone.paivitetty)}"
 
 
 def kohtaa(n: int) -> str:
@@ -641,7 +645,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         k = kehotteet_lukija.etsi(luettelo, tunniste) if luettelo is not None and luettelo.tila == "ready" else None
         if k is None:
             return virhe(request, 404, "Promptia ei löydy", "Tällaista promptia ei ole.")
-        return render(request, "kehote", k["otsikko"], "asetukset", k=k, korkeus=kehotteet_lukija.korkeus(k["teksti"]))
+        return render(request, "kehote", k["otsikko"], "asetukset", k=k, lukittu=luettelo.lukittu,
+                      korkeus=kehotteet_lukija.korkeus(k["teksti"] or ""))
 
     # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
 
