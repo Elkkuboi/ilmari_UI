@@ -24,7 +24,8 @@ from ilmari_ui.config import parse_config
 # (osoite, otsikko, aktiivinen valikkolinkki)
 SIVUT = (("/hub", "Nyt", "Nyt"), ("/hub/keskustelu", "Keskustelu", "Keskustelu"), ("/hub/kehita", "Työt", "Työt"),
          ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"),
-         ("/hub/kehotteet", "Promptit ja säännöt", "Asetukset"))
+         ("/hub/kehotteet", "Promptit ja säännöt", "Asetukset"),
+         ("/hub/keskustelu?lista=1", "Keskustelut", "Keskustelu"))
 VALIKKO = [("Nyt", "/hub"), ("Keskustelu", "/hub/keskustelu"), ("Työt", "/hub/kehita"), ("Asetukset", "/hub/asetukset")]
 # (kohde, ankkuri): kysely säilyy ja ankkuri tulee sen perään (vanha gateway palaa /hub/mallit-osoitteeseen)
 VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": ("/hub/asetukset", "#aivot"), "/hub/jarjestelma": ("/hub/asetukset", "#kone"),
@@ -33,6 +34,11 @@ VANHAT = {"/hub/ilmari": "/hub", "/hub/mallit": ("/hub/asetukset", "#aivot"), "/
           "/hub/ideat": "/hub"}
 KIELLETYT_SANAT = ("gateway", "julkaisu", "julkais", "dsh", "adr", "kontti", "politiikka", "main")
 FONTIT = ("IBMPlexMono-Regular.woff2", "IBMPlexMono-Italic.woff2", "IBMPlexMono-Medium.woff2", "IBMPlexMono-SemiBold.woff2")
+
+
+def osoite(polku: str, kysely: str) -> str:
+    """Sivu ja lisäkysely (?demo=1); jos sivulla on jo kysely (?lista=1), lisäys tulee sen perään &-merkillä."""
+    return polku + (kysely.replace("?", "&", 1) if kysely and "?" in polku else kysely)
 
 
 def local_client(settings: Settings | None = None) -> TestClient:
@@ -54,7 +60,7 @@ def demo_client():
 @pytest.mark.parametrize("polku,otsikko,aktiivinen", SIVUT)
 def test_jokainen_sivu_toimii_kehitys_ja_esimerkkitilassa(demo_client, polku, otsikko, aktiivinen):
     for kysely in ("", "?demo=1"):
-        r = demo_client.get(polku + kysely)
+        r = demo_client.get(osoite(polku, kysely))
         dom = soup(r)
         assert r.status_code == 200 and dom.html["lang"] == "fi" and dom.find("main", id="main") is not None
         assert dom.html["data-vari"] == "paperi"   # oletusvärit ilman evästettä (tests/test_varit.py)
@@ -72,7 +78,7 @@ def test_jokainen_sivu_toimii_kehitys_ja_esimerkkitilassa(demo_client, polku, ot
 @pytest.mark.parametrize("polku,otsikko,aktiivinen", SIVUT)
 def test_valikossa_on_tasan_nelja_linkkia(demo_client, polku, otsikko, aktiivinen):
     for kysely, perassa in (("", ""), ("?demo=1", "?demo=1")):
-        dom = soup(demo_client.get(polku + kysely))
+        dom = soup(demo_client.get(osoite(polku, kysely)))
         linkit = dom.select("header.top nav.nav a")
         assert [(a.get_text(), a["href"]) for a in linkit] == [(n, h + perassa) for n, h in VALIKKO]
         assert [a.get_text() for a in linkit if a.get("aria-current") == "page"] == [aktiivinen]
@@ -83,7 +89,7 @@ def test_valikossa_on_tasan_nelja_linkkia(demo_client, polku, otsikko, aktiivine
 
 def test_esimerkkitila_kulkee_sisaisissa_linkeissa(demo_client):
     for polku, _, _ in SIVUT:
-        for a in soup(demo_client.get(polku + "?demo=1")).select("a[href^='/hub']"):
+        for a in soup(demo_client.get(osoite(polku, "?demo=1"))).select("a[href^='/hub']"):
             assert parse_qs(urlsplit(a["href"]).query).get("demo") == ["1"], (polku, a["href"])
 
 
@@ -112,7 +118,7 @@ def test_vanhat_osoitteet_eivat_ota_vastaan_muuta_kuin_lukua(demo_client, metodi
 def test_poistetut_osat_eivat_nay(demo_client):
     for polku, _, _ in SIVUT:
         for kysely in ("", "?demo=1"):
-            r = demo_client.get(polku + kysely)
+            r = demo_client.get(osoite(polku, kysely))
             dom = soup(r)
             assert not dom.find("svg") and not dom.select(".sidebar, .bottom-nav, .mobile-menu, .demo-banner, .panel")
             assert "skin" not in r.text and "data-skin" not in r.text and "themes.css" not in r.text
@@ -156,7 +162,7 @@ def test_kayttoliittyman_teksteissa_ei_jargonia(demo_client, tmp_path):
 def test_ei_skripteja_tyyleja_eika_tapahtumakasittelijoita(demo_client):
     for polku, _, _ in SIVUT:
         for kysely in ("", "?demo=1"):
-            dom = soup(demo_client.get(polku + kysely))
+            dom = soup(demo_client.get(osoite(polku, kysely)))
             assert not dom.find_all(["script", "style", "iframe", "object", "embed"])
             assert not [a for t in dom.find_all(True) for a in t.attrs if a.lower().startswith("on") or a == "style"]
 
@@ -243,7 +249,8 @@ def test_esimerkkitila_vaatii_kyselyn(demo_client):
 
 @pytest.mark.parametrize("polku,paivitys", [("/hub?demo=1", "30"), ("/hub", None), ("/hub/kehita?demo=1", "15"),
                                             ("/hub/kehita", None), ("/hub/asetukset?demo=1", None),
-                                            ("/hub/keskustelu?demo=1", None), ("/hub/dokumentit?demo=1", None),
+                                            ("/hub/keskustelu?demo=1", None), ("/hub/keskustelu?demo=1&lista=1", None),
+                                            ("/hub/dokumentit?demo=1", None),
                                             ("/hub/kehotteet?demo=1", None),
                                             ("/hub/kehotteet/jarjestelma?demo=1", None)])
 def test_automaattinen_paivitys_vain_kun_jotain_on_kaynnissa(demo_client, polku, paivitys):
@@ -267,7 +274,8 @@ def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
     """Jokainen sivu ja tila esimerkissä: joko päivitys tai muokattava kenttä, ei molempia. Nyt ja käynnissä oleva
     työ päivittyvät ilman kenttiä; Työt seuraa työtä 42 ilman toivekenttää, kirjoitustilassa kenttä ilman päivitystä."""
     tulokset = {}
-    for polku in ("/hub", "/hub/keskustelu", "/hub/kehita", "/hub/kehita?kirjoita=1", "/hub/kehita?toive=x",
+    for polku in ("/hub", "/hub/keskustelu", "/hub/keskustelu?lista=1", "/hub/kehita", "/hub/kehita?kirjoita=1",
+                  "/hub/kehita?toive=x",
                   "/hub/kehita/41", "/hub/kehita/42", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit",
                   "/hub/kehotteet", "/hub/kehotteet/jarjestelma", "/hub/kehotteet/tyokalut"):
         r = demo_client.get(polku + ("&" if "?" in polku else "?") + "demo=1")
@@ -277,7 +285,7 @@ def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
     assert tulokset["/hub"] == (True, False) and tulokset["/hub/kehita/42"] == (True, False)
     assert tulokset["/hub/kehita"] == (True, False) and tulokset["/hub/kehita?kirjoita=1"] == (False, True)
     assert tulokset["/hub/kehita?toive=x"] == (False, True) and tulokset["/hub/keskustelu"] == (False, True)
-    assert tulokset["/hub/kehita/98"] == (False, True)
+    assert tulokset["/hub/kehita/98"] == (False, True) and tulokset["/hub/keskustelu?lista=1"] == (False, True)
     assert tulokset["/hub/kehotteet"] == (False, False) and tulokset["/hub/kehotteet/jarjestelma"] == (False, True)
     assert tulokset["/hub/kehotteet/tyokalut"] == (False, False)
 
@@ -285,7 +293,7 @@ def test_paivittyvalla_sivulla_ei_ole_tekstikenttaa(demo_client):
 # --- Raja (kehitystila): vain luku, oma alkuperä, Unix-soketti ----------------------------------------------------
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"])
-@pytest.mark.parametrize("path", ["/hub", "/hub/keskustelu", "/hub/asetukset", "/hub/kehotteet",
+@pytest.mark.parametrize("path", ["/hub", "/hub/keskustelu", "/hub/keskustelu?lista=1", "/hub/asetukset", "/hub/kehotteet",
                                   "/hub/kehotteet/jarjestelma", "/hub/static/app.css"])
 def test_all_mutating_or_unneeded_methods_fail_closed(demo_client, method, path):
     response = demo_client.request(method, path, content='{"approve":true}')

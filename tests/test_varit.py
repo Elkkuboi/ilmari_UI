@@ -23,8 +23,8 @@ VARIT = (("paperi", "Paperi", "vaalea, lämmin", "#f1ead9", "light"),
          ("fosfori", "Fosfori", "tumma, vihreä", "#0e1411", "dark"))
 TUNNISTEET = [v[0] for v in VARIT]
 # Kehitystila: sivut, työn sivu ja virhesivu (kaikki käyttävät base.html:ää)
-SIVUT = ("/hub", "/hub/keskustelu", "/hub/kehita", "/hub/kehita/98", "/hub/asetukset", "/hub/dokumentit",
-         "/hub/dokumentit/arkkitehtuuri", "/hub/kehotteet", "/hub/kehotteet/jarjestelma", "/hub/ei-ole")
+SIVUT = ("/hub", "/hub/keskustelu", "/hub/keskustelu?lista=1", "/hub/kehita", "/hub/kehita/98", "/hub/asetukset",
+         "/hub/dokumentit", "/hub/dokumentit/arkkitehtuuri", "/hub/kehotteet", "/hub/kehotteet/jarjestelma", "/hub/ei-ole")
 KELVOTTOMAT = ("", "PAPERI", "Fosfori", "musta", "paperi2", "data-vari", '"><script>alert(1)</script>',
                "fosfori\" onload=\"x", "<b>liitu</b>")
 CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; manifest-src 'self'; script-src 'none'; "
@@ -34,6 +34,11 @@ OTSAKKEET = {"content-security-policy": CSP, "cache-control": "no-store", "refer
              "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()"}
 VUOSI = "31536000"
 SERVE = {"x-forwarded-host": "tyoasema.test", "tailscale-user-login": "elias@github"}
+
+
+def osoite(polku: str, kysely: str) -> str:
+    """Sivu ja lisäkysely (?demo=1); jos sivulla on jo kysely (?lista=1), lisäys tulee sen perään &-merkillä."""
+    return polku + (kysely.replace("?", "&", 1) if kysely and "?" in polku else kysely)
 
 
 def local_client() -> TestClient:
@@ -93,7 +98,7 @@ def test_oletus_ilman_evastetta():
     with local_client() as c:
         for polku in SIVUT:
             for kysely in ("", "?demo=1"):
-                assert sivun_varit(c.get(polku + kysely)) == ("paperi", "light", "#f1ead9"), polku + kysely
+                assert sivun_varit(c.get(osoite(polku, kysely))) == ("paperi", "light", "#f1ead9"), polku + kysely
 
 
 @pytest.mark.parametrize("tunniste,nimi,kuvaus,tausta,teema", VARIT)
@@ -102,7 +107,7 @@ def test_jokainen_vari_asettaa_sivun_varit(tunniste, nimi, kuvaus, tausta, teema
         c.cookies.set("ilmari_vari", tunniste)
         for polku in SIVUT:
             for kysely in ("", "?demo=1"):
-                assert sivun_varit(c.get(polku + kysely)) == (tunniste, teema, tausta), polku + kysely
+                assert sivun_varit(c.get(osoite(polku, kysely))) == (tunniste, teema, tausta), polku + kysely
 
 
 @pytest.mark.parametrize("arvo", KELVOTTOMAT)
