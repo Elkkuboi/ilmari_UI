@@ -93,10 +93,13 @@ def test_lukija_v2_ja_saikeet(tmp_path):
     # v2 ilman säielistaa (vanhempi julkaisu tai lista puuttuu): keskustelu näkyy silti
     k2 = lue_keskustelu(julkaise(tmp_path / "k2", data=V2), omistajat=frozenset({UID}))
     assert k2.tila == "ready" and k2.saie["id"] == 2 and k2.saikeet == () and k2.aktiivinen == 2
-    # rikkinäinen säielista ei kaada keskustelua; v1 ilman säiettä toimii kuten ennen
+    # rikkinäinen säielista ei kaada keskustelua (21.11.2026): viestit näkyvät, lista ei; v1 ilman säiettä toimii
     hak3 = julkaise(tmp_path / "k3", data=V2)
     (hak3 / "saikeet.json").write_text("{ei", encoding="utf-8")
-    assert lue_keskustelu(hak3, omistajat=frozenset({UID})).tila == "error"
+    k3 = lue_keskustelu(hak3, omistajat=frozenset({UID}))
+    assert k3.tila == "ready" and k3.saikeet == () and k3.lista_virhe == "Keskustelujen listaa ei voi nyt näyttää."
+    assert [v["teksti"] for v in k3.viestit] == ["hei"] and k3.saie["id"] == 2 and k3.aktiivinen == 2
+    assert k2.lista_virhe is None   # puuttuva lista ei ole virhe
     k4 = lue_keskustelu(julkaise(tmp_path / "k4"), omistajat=frozenset({UID}))
     assert k4.tila == "ready" and k4.saie is None and k4.kansiot == []
     # kielletyt suunnat: v2 ilman saie-kenttää, viesti ilman säiettä v2:ssa, v1 jossa saie
@@ -414,6 +417,120 @@ def test_viestilaatikon_rakenne_jota_vieritys_vaatii():
     assert re.search(r"\.chat-head \.label \.aside \{ order: 3; flex-basis: 100%; \}", css)   # kansio nimen alle
 
 
+def lukuvirhe(tmp_path, monkeypatch, nimi, viestit_raaka=None, saikeet_raaka=None, polku="/keskustelu"):
+    hak = julkaise(tmp_path / nimi, data=V2, raaka=viestit_raaka)
+    if saikeet_raaka is not None:
+        (hak / "saikeet.json").write_bytes(saikeet_raaka)
+    monkeypatch.setattr("ilmari_ui.keskustelu.OLETUS", hak)
+    monkeypatch.setattr("ilmari_ui.kehitys.sallitut_omistajat", lambda: frozenset({UID}))
+    config = parse_config({"hub": {"rp_id": "tyoasema.test", "julkaisut": str(tmp_path / "ajot"),
+                                   "kayttajat": {"elias@github": "elias"}}})
+    with TestClient(create_app(Settings(identity=config)), base_url="http://localhost", client=None) as client:
+        return client.get(polku, headers=OTSAKKEET)
+
+
+def uusi_lomake(r):
+    lomake = BeautifulSoup(r.text, "html.parser").find("form", action="https://tyoasema.test/ilmari/saie")
+    if lomake is None:
+        return None
+    assert [(i["name"], i["value"], i["type"]) for i in lomake.find_all("input")] == [("paluu", "hub", "hidden")]
+    return lomake.find("button", string="+ Uusi keskustelu")
+
+
+@pytest.mark.parametrize("polku", ["/keskustelu", "/keskustelu?lista=1"])
+def test_uusi_keskustelu_nakyy_vaikka_keskustelua_ei_voi_lukea(tmp_path, monkeypatch, polku):
+    """Uuden keskustelun lomake ei tarvitse tiedostoista mitään, joten se näkyy myös virhetilassa. Virhetila ei
+    päivity eikä näytä vaihtoa, nimeä tai arkistointia (niille ei ole tietoja)."""
+    for nimi, raaka in (("rikki", b"{ei"), ("iso", b'"' + b"a" * (1024 * 1024 + 10) + b'"'),
+                        ("muoto", json.dumps({**V2, "muoto": "x"}).encode())):
+        r = lukuvirhe(tmp_path, monkeypatch, nimi, viestit_raaka=raaka, polku=polku)
+        assert r.status_code == 200 and "refresh" not in r.headers and "viesti 1" not in r.text
+        assert uusi_lomake(r) is not None, nimi
+        assert "/valitse" not in r.text and "/nimea" not in r.text and "/arkistoi" not in r.text
+    # kielletty suunta: kehitystilassa ilman gatewayta ja esimerkkiä lomaketta ei ole
+    c = TestClient(create_app(Settings()), base_url="http://ilmari.local", client=None)
+    r = c.get("/hub" + polku)
+    assert r.status_code == 200 and "<form" not in r.text and "+ Uusi keskustelu" not in r.text
+
+
+def test_rikkinainen_lista_ei_kaada_keskustelua(tmp_path, monkeypatch):
+    """Rikkinäinen, liian suuri tai liian pitkä lista: viestit, uusi keskustelu ja tämän keskustelun asetukset näkyvät;
+    listan kohdalla kerrotaan selkokielellä, ettei sitä voi näyttää."""
+    liikaa = json.loads(json.dumps(SAIKEET))
+    liikaa["saikeet"] = [{**SAIKEET["saikeet"][1], "id": n} for n in range(1, 202)]
+    for nimi, raaka in (("rikki", b"{ei"), ("kentat", json.dumps({"id": 2}).encode()),
+                        ("liikaa", json.dumps(liikaa).encode()), ("iso", b" " * (1024 * 1024 + 1))):
+        r = lukuvirhe(tmp_path, monkeypatch, nimi, saikeet_raaka=raaka)
+        sivu = BeautifulSoup(r.text, "html.parser")
+        assert r.status_code == 200 and "hei" in sivu.select_one(".chat-scroll").get_text(), nimi
+        assert uusi_lomake(r) is not None and sivu.find("a", string="Keskustelut")["href"] == "/hub/keskustelu?lista=1"
+        lista = lukuvirhe(tmp_path, monkeypatch, nimi + "-l", saikeet_raaka=raaka, polku="/keskustelu?lista=1")
+        teksti = BeautifulSoup(lista.text, "html.parser").main.get_text(" ", strip=True)
+        assert "Keskustelujen listaa ei voi nyt näyttää." in teksti and "Muita keskusteluja ei ole" not in teksti
+        assert uusi_lomake(lista) is not None and 'action="https://tyoasema.test/ilmari/saie/2/nimea"' in lista.text
+        assert "/valitse" not in lista.text and not re.search(r"säi[ek]|json", teksti, re.IGNORECASE)
+
+
+def test_vieras_tai_linkitetty_lista_kaataa_sivun_kuten_ennen(tmp_path, monkeypatch):
+    """Kielletty suunta: lista, jonka omistaja on väärä tai joka on symbolinen linkki, ei ole gatewayn. Sitä ei näytetä,
+    sivu kertoo virheen selkokielellä (ei sanaa säie), ja uusi keskustelu on silti tarjolla."""
+    import ilmari_ui.keskustelu as km
+    hak = julkaise(tmp_path / "linkki", data=V2)
+    (tmp_path / "muu.json").write_text(json.dumps(SAIKEET), encoding="utf-8")
+    (hak / "saikeet.json").symlink_to(tmp_path / "muu.json")
+    assert lue_keskustelu(hak, omistajat=frozenset({UID})).tila == "error"
+
+    class VierasLista:
+        def __getattr__(self, nimi):
+            return getattr(os, nimi)
+
+        def stat(self, polku, **kw):
+            tiedot = os.stat(polku, **kw)
+            if polku == km.SAIKEET_TIEDOSTO:
+                return type("Tiedot", (), {"st_uid": UID + 1, "st_mode": tiedot.st_mode})()
+            return tiedot
+
+    hak2 = julkaise(tmp_path / "vieras", data=V2)
+    (hak2 / "saikeet.json").write_text(json.dumps(SAIKEET), encoding="utf-8")
+    monkeypatch.setattr(km, "os", VierasLista())
+    k = lue_keskustelu(hak2, omistajat=frozenset({UID}))
+    assert k.tila == "error" and k.viesti == "Keskustelujen listan omistaja on väärä." and k.saikeet == ()
+    for polku in ("/keskustelu", "/keskustelu?lista=1"):
+        r = lukuvirhe(tmp_path, monkeypatch, "vieras-" + polku[-1], saikeet_raaka=json.dumps(SAIKEET).encode(), polku=polku)
+        teksti = BeautifulSoup(r.text, "html.parser").main.get_text(" ", strip=True)
+        assert "Keskustelujen listan omistaja on väärä." in teksti and "Kuvareitti" not in teksti
+        assert uusi_lomake(r) is not None and not re.search(r"säi[ek]", teksti, re.IGNORECASE)
+
+
+def test_lukijan_virheet_selkokielella():
+    """Sivulle näkyvät lukijan viestit eivät käytä sanaa säie eivätkä tiedostonimiä."""
+    lahde = (PACKAGE_DIR / "keskustelu.py").read_text(encoding="utf-8")
+    viestit = re.findall(r'(?:_virhe\(|ReadFailure\("[a-z_]+", |Keskustelu\("(?:error|not_published)", )f?"([^"]+)"', lahde)
+    assert len(viestit) >= 10 and "Keskustelujen listaa ei voi nyt näyttää." in lahde
+    for viesti in viestit:
+        assert not re.search(r"säi[ek]|json", viesti, re.IGNORECASE), viesti
+
+
+def test_nykyinen_keskustelu_on_sama_kuin_sivulla(tmp_path, monkeypatch):
+    """Lista voi olla hetken jäljessä viestit.json:sta (gateway kirjoittaa sen ensin). Nykyinen keskustelu, sen kansio ja
+    Tämä keskustelu -lomakkeet seuraavat sivulla näkyvää keskustelua, ei listan aktiivista."""
+    jaljessa = {**SAIKEET, "aktiivinen": 3}   # viestit.json: keskustelu 2 (Ravintopolku); lista: vielä 3 (beta)
+    hak = julkaise(tmp_path / "k", data=V2)
+    (hak / "saikeet.json").write_text(json.dumps(jaljessa, ensure_ascii=False), encoding="utf-8")
+    assert lue_keskustelu(hak, omistajat=frozenset({UID})).aktiivinen == 2
+    r = keskustelusivu(tmp_path, monkeypatch, viestit(("ilmari", 20)), polku="/keskustelu?lista=1", nimi="k2",
+                       saikeet=jaljessa)
+    sivu = BeautifulSoup(r.text, "html.parser")
+    assert sivu.select_one(".threads [aria-current='true']").get_text().startswith("Kuvareitti uusiksi")
+    assert sivu.find("form", action="https://tyoasema.test/ilmari/saie/3/valitse") is not None
+    assert sivu.find("form", action="https://tyoasema.test/ilmari/saie/2/valitse") is None
+    assert kansiot_auki(r)["Kansio: Ravintopolku (1)"] and not kansiot_auki(r)["Kansio: beta (1)"]
+    # v1-muodossa ilman säiettä listan aktiivinen pätee kuten ennen
+    v1 = julkaise(tmp_path / "v1")
+    (v1 / "saikeet.json").write_text(json.dumps(jaljessa, ensure_ascii=False), encoding="utf-8")
+    assert lue_keskustelu(v1, omistajat=frozenset({UID})).aktiivinen == 3
+
+
 def test_kansion_nimi_ei_nayta_omalta_ryhmalta(tmp_path, monkeypatch):
     """Kansion nimi on dataa (Ilmarin nimiehdotus voi asettaa sen). Kansio nimeltä Arkisto tai Ilman kansiota näkyy
     muodossa "Kansio: ...", joten se ei näytä listan omalta arkistolta eikä kansiottomien ryhmältä."""
@@ -425,4 +542,3 @@ def test_kansion_nimi_ei_nayta_omalta_ryhmalta(tmp_path, monkeypatch):
     assert otsikot == ["Ilman kansiota (1)", "Kansio: Arkisto (1)", "Kansio: Ilman kansiota (1)",
                        "Kansio: Ravintopolku (1)", "Arkisto (1)"]
     assert otsikot.count("Arkisto (1)") == 1 and otsikot.count("Ilman kansiota (1)") == 1
-

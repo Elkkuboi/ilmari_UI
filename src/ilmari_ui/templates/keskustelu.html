@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% from 'macros.html' import lomake, piste with context %}
 {# Keskustelu ruudun korkuisena (21.11.2026): vain viestilaatikko vierii, uusin viesti alhaalla (app.css, chat-sivu).
-   Uusi keskustelu ja linkki listaan näkyvät myös odottaessa: lomakkeessa on vain piilokenttä, joten päivitys toimii.
-   Lähetä on kentän vieressä, joten se näkyy aina, kun kenttä näkyy (näppäimistö). #}
+   Uusi keskustelu ja linkki listaan näkyvät aina, myös odottaessa ja kun keskustelua ei voi lukea: lomakkeessa on vain
+   piilokenttä, joten päivitys toimii. Lähetä on kentän vieressä, joten se näkyy aina, kun kenttä näkyy (näppäimistö). #}
 {% block sisalto %}
 {% set k = keskustelu if keskustelu and keskustelu.tila == 'ready' else none %}
 {% set saie = k.saie if k else none %}
 <section class="chat-head" aria-labelledby="h-saie">
   <h1 id="h-saie" class="label">{{ saie.nimi if saie else 'Keskustelu' }}{% if saie and saie.kansio %} <span class="aside">{{ saie.kansio }}</span>{% endif %}</h1>
-{% if saie %}
-  <div class="actions">{% call lomake('/ilmari/saie') %}<button class="btn--quiet" type="submit">+ Uusi keskustelu</button>{% endcall %}<a class="btn btn--quiet" href="{{ url('/hub/keskustelu', lista=1) }}">Keskustelut{% if k.saikeet %} ({{ k.avoimia }}){% endif %}</a></div>
+{% if gateway_url or demo %}
+  <div class="actions">{% call lomake('/ilmari/saie') %}<button class="btn--quiet" type="submit">+ Uusi keskustelu</button>{% endcall %}<a class="btn btn--quiet" href="{{ url('/hub/keskustelu', lista=1) }}">Keskustelut{% if k and k.saikeet %} ({{ k.avoimia }}){% endif %}</a></div>
 {% endif %}
 </section>
 <section class="chat-box" aria-label="Viestit">

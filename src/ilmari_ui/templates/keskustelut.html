@@ -2,21 +2,23 @@
 {% from 'macros.html' import lomake with context %}
 {# Keskustelujen lista (/hub/keskustelu?lista=1, 21.11.2026). Ei päivity koskaan: päivitys sulkisi avatun kansion ja
    tyhjentäisi nimen. Vain nykyisen keskustelun kansio ja keskustelut ilman kansiota ovat auki; muut kansiot (yöajot,
-   Telegram) ovat kiinni. Jokainen lomake palaa gatewaylta keskusteluun (paluu=hub). Kansion nimi on dataa:
-   "Kansio:"-alku erottaa sen omista ryhmistä (Ilman kansiota, Arkisto). #}
+   Telegram) ovat kiinni. Jokainen lomake palaa gatewaylta keskusteluun (paluu=hub). Uusi keskustelu näkyy aina, myös
+   kun listaa ei voi lukea. Kansion nimi on dataa: "Kansio:"-alku erottaa sen omista ryhmistä (Ilman kansiota, Arkisto). #}
 {% block sisalto %}
 {% set k = keskustelu if keskustelu and keskustelu.tila == 'ready' else none %}
 {% set saie = k.saie if k else none %}
 <a class="back" href="{{ url('/hub/keskustelu') }}">Keskustelu</a>
 <section aria-labelledby="h-lista">
   <h1 id="h-lista" class="label">Keskustelut{% if k and k.saikeet %} <span class="aside">{{ k.avoimia }}&nbsp;avoinna</span>{% endif %}</h1>
+  {% call lomake('/ilmari/saie', 'actions') %}<button class="btn--quiet" type="submit">+ Uusi keskustelu</button>{% endcall %}
 {% if keskustelu is none %}
   <p class="empty">Keskustelut eivät ole saatavilla tässä ympäristössä.</p>
 {% elif not k %}
   <p class="empty">{{ keskustelu.viesti or 'Keskusteluja ei voi näyttää.' }}</p>
 {% else %}
-  {% call lomake('/ilmari/saie', 'actions') %}<button class="btn--quiet" type="submit">+ Uusi keskustelu</button>{% endcall %}
-{% if not k.saikeet %}
+{% if k.lista_virhe %}
+  <p class="empty">{{ k.lista_virhe }}</p>
+{% elif not k.saikeet %}
   <p class="empty">Muita keskusteluja ei ole.</p>
 {% endif %}
   <div class="threads">
