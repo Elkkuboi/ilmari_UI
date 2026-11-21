@@ -82,7 +82,7 @@ def test_sivu_esimerkkitilassa():
     ajat = [lyhyt_aika(f"2026-11-{p}:00+02:00") for p in ("19T11:24", "19T10:51", "19T10:00", "18T10:31", "18T10:00")]
     assert [r.find("div").get_text(" ", strip=True) for r in rivit] == [
         f"{ajat[0]} · asennus · Ilmari käytössä", f"{ajat[1]} · asennus · Ilmari hylätty",
-        f"{ajat[2]} · asennus · Ilmari ei käytössä", f"{ajat[3]} · vahti poisti käytöstä hylätty",
+        f"{ajat[2]} · asennus · Ilmari edellinen", f"{ajat[3]} · vahti poisti käytöstä hylätty",
         f"{ajat[4]} · asennus · Ilmari hylätty myöhemmin"]
     uusin, hylatty = rivit[0], rivit[1]
     assert [li.get_text(" ", strip=True) for li in uusin.find("ul").find_all("li")] == [

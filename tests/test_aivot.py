@@ -105,7 +105,7 @@ def test_asentajan_kirjoittama_tiedosto_kelpaa(tmp_path):
     assert a.vahti["syy"] == "palvelu on kaatunut (failed)" and a.vahti["uudelleen_ok"]
     assert None not in a.versiot and None not in a.pyynnot
     assert [(v["tila"], v["teko"]) for v in a.versiot] == [
-        ("käytössä", "asennus"), ("hylätty", "asennus"), ("ei käytössä", "asennus"), ("hylätty", "vahti poisti käytöstä"),
+        ("käytössä", "asennus"), ("hylätty", "asennus"), ("edellinen", "asennus"), ("hylätty", "vahti poisti käytöstä"),
         ("hylätty myöhemmin", "asennus")]
     assert all(v["syy"] and v["diff"] and v["muutokset_taydet"] and v["muutokset"] for v in a.versiot)
     assert [p["tulos"] for p in a.pyynnot] == ["asennettu", "hylatty", "peruttu", "asennettu", "avattu", "asennettu"]
@@ -156,6 +156,24 @@ def test_vain_uusin_rivi_samasta_versiosta_on_kaytossa(tmp_path):
     assert [(v["tila"], v["tekija"], v["teko"]) for v in a.versiot] == [
         ("käytössä", "Elias", "palautus"), ("ei käytössä", "Ilmari", "asennus"), ("palautettu", "Elias", "palautus")]
     assert a.versiot[2]["tehdas"] and a.versiot[2]["diff_rivit"] == () and a.versiot[2]["muutokset"] == []
+
+
+def test_edellinen_merkitaan_vain_uusimmalle_rivilleen(tmp_path):
+    """Versio, jonka Palauta edellinen toisi takaisin, on "edellinen" uusimmalla rivillään; hylättyä ei merkitä."""
+    vanhempi = VERSIO_A | {"versio": C_ID, "aika": "2026-11-21T09:00:00+02:00"}
+    uudempi = vanhempi | {"aika": "2026-11-21T10:00:00+02:00", "kuka": "elias", "tulos": "palautettu"}
+    a = lue(tmp_path, tila(versiot=[VERSIO_A, uudempi, vanhempi]))
+    assert [v["tila"] for v in a.versiot] == ["käytössä", "edellinen", "ei käytössä"]
+    a = lue(tmp_path, tila(edellinen=B_ID, versiot=[VERSIO_A, VERSIO_B, vanhempi]))
+    assert [v["tila"] for v in a.versiot] == ["käytössä", "hylätty", "ei käytössä"]
+    a = lue(tmp_path, tila(edellinen=None, versiot=[VERSIO_A, vanhempi]))
+    assert [v["tila"] for v in a.versiot] == ["käytössä", "ei käytössä"]
+
+
+def test_kelvoton_uusin_rivi_ei_vie_merkintaa(tmp_path):
+    """Käytössä olevan version uusin rivi on kelvoton (aika): se piilotetaan, ja seuraava rivi on käytössä."""
+    a = lue(tmp_path, tila(versiot=[VERSIO_A | {"aika": "eilen"}, VERSIO_A | {"syy": 5}, VERSIO_A]))
+    assert a.versiot[:2] == (None, None) and a.versiot[2]["tila"] == "käytössä"
 
 
 def test_katkaistu_ja_karsittu_diff(tmp_path):

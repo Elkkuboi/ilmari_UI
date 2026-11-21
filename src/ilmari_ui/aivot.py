@@ -309,9 +309,11 @@ def _tiedostot(arvo: Any) -> tuple[dict[str, Any], ...]:
     return tuple(tulos)
 
 
-def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]:
-    """Yksi versiohistorian rivi. kaytossa on käytössä olevan version tunniste (tai None); vain uusin rivi, jolla se
-    on, merkitään käytössä olevaksi (nahty: uudemmilla riveillä jo nähdyt versiot)."""
+def _versiorivi(v: Any, kaytossa: str | None, edellinen: str | None, nahty: set[str]) -> dict[str, Any]:
+    """Yksi versiohistorian rivi. kaytossa on käytössä olevan ja edellinen edellisen version tunniste (tai None);
+    vain uusin rivi, jolla versio on, merkitään käytössä olevaksi tai edelliseksi (nahty: uudemmilla riveillä jo
+    nähdyt versiot). Rivi tarkistetaan kokonaan ennen kuin versio merkitään nähdyksi, joten kelvoton rivi ei vie
+    merkintää vanhemmalta riviltä."""
     _olio(v, VERSIO_KENTAT, "versio")
     versio = _versio(v["versio"])
     if v["kuka"] not in (*TEKIJAT, "?") or v["tulos"] not in TEOT:
@@ -324,7 +326,9 @@ def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]
     diff = _nakyva_teksti(v["diff"], DIFF_MAX, rivinvaihdot=True)
     if diff is not None:
         diff = nakyviksi(diff)
+    aika, syy = _aika(v["aika"]), _rivi(v["syy"], SYY_MAX)
     on_kaytossa = versio == kaytossa and versio not in nahty
+    on_edellinen = versio == edellinen and versio not in nahty
     nahty.add(versio)
     tulos, hylatty = v["tulos"], v["hylatty"]
     if on_kaytossa:
@@ -335,6 +339,8 @@ def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]
         tila, savy = "hylätty myöhemmin", "stop"
     elif tulos == "virhe":
         tila, savy = "virhe", "stop"
+    elif on_edellinen:                 # Palauta edellinen tuo tämän takaisin
+        tila, savy = "edellinen", ""
     elif tulos == "palautettu":
         tila, savy = "palautettu", ""
     else:
@@ -343,10 +349,10 @@ def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]
     koot = {t["polku"]: t for t in tiedostot if t["polku"] is not None}
     muutokset = [m | {"koko_teksti": koot[m["polku"]]["koko_teksti"] if m["polku"] in koot and m["laji"] != "poistettu"
                       else None} for m in (osat["tiedostot"] if osat else [])]
-    return {"versio": versio, "tehdas": versio == TEHDAS, "lyhyt": lyhyt(versio), "aika": _aika(v["aika"]),
+    return {"versio": versio, "tehdas": versio == TEHDAS, "lyhyt": lyhyt(versio), "aika": aika,
             "kuka": v["kuka"], "tekija": TEKIJAT.get(v["kuka"], "tuntematon"), "teko": TEOT[tulos], "tulos": tulos,
             "tila": tila, "savy": savy, "kaytossa": on_kaytossa, "hylatty": hylatty,
-            "syy": _rivi(v["syy"], SYY_MAX), "syy_tarkea": tulos in ("peruttu", "vahti", "virhe"),
+            "syy": syy, "syy_tarkea": tulos in ("peruttu", "vahti", "virhe"),
             "tiedostot": tiedostot, "diff": diff, "diff_katkaistu": v["diff_katkaistu"],
             "varastossa": v["varastossa"], "diff_rivit": osat["rivit"] if osat else (),
             "diff_leikattu": bool(osat and osat["leikattu"]), "lisatty": osat["lisatty"] if osat else 0,
@@ -354,7 +360,8 @@ def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]
             "muutokset_taydet": diff is not None and not v["diff_katkaistu"]}
 
 
-def _versiot(arvo: Any, aktiivinen: dict[str, Any] | None) -> tuple[dict[str, Any] | None, ...]:
+def _versiot(arvo: Any, aktiivinen: dict[str, Any] | None,
+             edellinen: str | None) -> tuple[dict[str, Any] | None, ...]:
     if type(arvo) is not list or len(arvo) > VERSIOITA_MAX:
         _virhe("Versiolista ei kelpaa.")
     kaytossa = aktiivinen["versio"] if aktiivinen is not None else None
@@ -362,7 +369,7 @@ def _versiot(arvo: Any, aktiivinen: dict[str, Any] | None) -> tuple[dict[str, An
     tulos: list[dict[str, Any] | None] = []
     for v in arvo:
         try:
-            tulos.append(_versiorivi(v, kaytossa, nahty))
+            tulos.append(_versiorivi(v, kaytossa, edellinen, nahty))
         except ReadFailure:
             tulos.append(None)   # vain tämä rivi piiloon
     return tuple(tulos)
@@ -418,7 +425,7 @@ def tarkista(data: Any) -> Aivot:
         edellinen, edellinen_virhe = None, True
     asennukset, _ = osa(lambda: _asennukset(data))
     vahti, vahti_virhe = osa(lambda: _vahti(data["vahti"]))
-    versiot, _ = osa(lambda: _versiot(data["versiot"], aktiivinen))
+    versiot, _ = osa(lambda: _versiot(data["versiot"], aktiivinen, edellinen))
     pyynnot, _ = osa(lambda: _pyynnot(data["pyynnot"]))
     edellinen_hylatty = edellinen is not None and any(v is not None and v["versio"] == edellinen and v["hylatty"]
                                                       for v in versiot or ())
