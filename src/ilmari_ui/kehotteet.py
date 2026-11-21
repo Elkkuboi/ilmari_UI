@@ -6,9 +6,9 @@ aiopsin koodi käyttää, joten teksti on se, minkä malli saa. Hub vain näytt�
 (POST /ilmari/kehote/{tunniste}, paluu=hub) ja palautus /ilmari/kehote/{tunniste}/oletus. Muokattavia ovat ne rivit,
 joilla muokattava on tosi (järjestelmäkehote ja vuoron ohje); muut ovat aiopsin koodin vakioita.
 
-Käsikirjan versiot (aiops ADR-0033 pala 6): Ilmari saa muokata systemprompaansa ja vuoron ohjettaan itse. Uusi gateway
-lisää tiedostoon kentän lukittu (Elias on estänyt Ilmarin muokkaukset) ja jokaiselle riville kentän versiot: enintään
-10 uusinta versiota (numero, aika, kuka, miksi ja teksti; muilla kuin muokattavilla riveillä tyhjä lista). Vanha
+Käsikirjan versiot (aiops ADR-0033 pala 6): Ilmari saa muokata itse käsikirjaansa (systemprompti) ja vuoron
+ohjettaan. Uusi gateway lisää tiedostoon kentän lukittu (Elias on estänyt Ilmarin muokkaukset) ja jokaiselle riville
+kentän versiot: enintään 10 uusinta versiota (numero, aika, kuka, miksi ja teksti; muilla kuin muokattavilla riveillä tyhjä lista). Vanha
 muoto ilman näitä kenttiä kelpaa yhä, koska Hub asennetaan ennen gatewayta; silloin versioita ja lukkoa ei näytetä.
 Palautus on gatewayn lomake /ilmari/kehote/{tunniste}/versio (n) ja lukko /ilmari/kehote/lukko (lukittu=1|0).
 Rikkinäinen versiolista ei piilota riviä: rivin teksti näkyy, ja versioiden kohdalla lukee, ettei niitä voi näyttää.

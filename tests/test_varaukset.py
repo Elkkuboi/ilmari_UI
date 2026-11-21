@@ -135,6 +135,7 @@ def test_nyt_esimerkkitilassa_varaukset_ilman_lomakkeita():
         "Ilmari on varannut työvuoron: 19.11. klo 18.30, 90 min. Työt 42 ja 43 jäivät kesken; jatkan niitä ennen yöajoa.",
         "Ilmari on varannut työvuoron: 20.11. klo 09.00, 60 min. Aamun raportti ja testien korjaus."]
     assert [[b.get_text() for b in x.find_all("button")] for x in rivit] == [["Peru"], ["Peru"]]
+    assert all(f"0{chr(0xA0)}min." in x.span.get_text() for x in rivit)    # kesto ei katkea kahdelle riville
     assert "<form" not in r.text and r.headers.get("Refresh") == "30"        # piilokenttä ei estä päivitystä
 
 

@@ -34,7 +34,7 @@
 {% endif %}
   {#- Ilmarin itse varaamat työvuorot (ADR-0033 pala 6): perustelu on Ilmarin tekstiä, koodattuna #}
   {% for v in varaukset %}
-  {% call lomake('/ilmari/vuoro/varaus/peru', 'toimirivi varaus') %}<span>Ilmari on varannut työvuoron: {{ lyhyt_aika(v.alkaa) }}, {{ v.minuutit }} min.{% if v.miksi %} {{ v.miksi }}{% endif %}</span><input type="hidden" name="id" value="{{ v.id }}"><button class="btn--quiet" type="submit">Peru</button>{% endcall %}
+  {% call lomake('/ilmari/vuoro/varaus/peru', 'toimirivi varaus') %}<span>Ilmari on varannut työvuoron: {{ lyhyt_aika(v.alkaa) }}, {{ v.minuutit }}&nbsp;min.{% if v.miksi %} {{ v.miksi }}{% endif %}</span><input type="hidden" name="id" value="{{ v.id }}"><button class="btn--quiet" type="submit">Peru</button>{% endcall %}
   {% endfor %}
 {% endif %}
 </section>
