@@ -516,11 +516,12 @@ def test_teot_ilman_raakoja_tunnisteita_ja_paiva_vaihtuu():
     assert [p.get_text() for p in sivu.select(".log p.day")] == ["19.11.", "18.11."]
 
 
-def test_tuotannossa_rajatesti_pois_kaytosta_kun_tyo_kesken(tmp_path, monkeypatch):
+def test_tuotannossa_rajatesti_kaytossa_vaikka_tyo_kesken(tmp_path, monkeypatch):
+    """aiops ADR-0033 pala 4: rajatesti ei odota käsien töitä (gateway kieltäytyy vain toisesta rajatestistä)."""
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"), keskustelu={"dsh_tyo": 44, "tila": "running"},
                  polku="/asetukset")
-    assert BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/rajatesti").button.has_attr("disabled")
-    assert "Rajatestin voi ajaa, kun työ 44 on valmis." in r.text
+    nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/rajatesti").button
+    assert not nappi.has_attr("disabled") and "Rajatestin voi ajaa, kun työ" not in r.text
 
 
 def test_asetukset_esimerkkitilassa_ja_ilman_lahdetta():
@@ -650,24 +651,25 @@ def test_tekolokin_tyolinkki_vain_tyoriveille(tmp_path, monkeypatch):
 
 
 def test_tuotannossa_toihin_nyt(tmp_path, monkeypatch):
-    """Sallittu: lomake gatewaylle (paluu=hub), kun Ilmari ei ole seis-tilassa eikä vuoroa ole. Käynnissä oleva työ tai
-    yöajo näyttää napin harmaana ja yhden rivin syyn (gateway kieltäytyy joka tapauksessa)."""
+    """Sallittu: lomake gatewaylle (paluu=hub), kun Ilmari ei ole seis-tilassa eikä vuoroa ole; käynnissä oleva käsien
+    työ ei lukitse nappia (aiops ADR-0033 pala 4). Kielletty: yöajon aikana nappi on harmaa ja syy on yhdellä rivillä."""
     r = tuotanto(tmp_path, monkeypatch, julkaise(tmp_path / "a"))
     nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button
     assert "Töihin nyt" in nappi.get_text() and not nappi.has_attr("disabled") and "Töihin nyt toimii" not in r.text
-    for n, (malli, syy) in enumerate((({"dsh_tyo": 44, "tila": "running"}, "Töihin nyt toimii, kun työ 44 on valmis."),
+    for n, (malli, syy) in enumerate((({"dsh_tyo": 44, "tila": "running"}, None),
                                       ({"yoajo": True, "tila": "running"}, "Töihin nyt toimii, kun yöajo on päättynyt."))):
         (tmp_path / str(n)).mkdir()
         r = tuotanto(tmp_path / str(n), monkeypatch, julkaise(tmp_path / "a"), keskustelu=malli)
-        assert BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
-        assert syy in r.text
+        nappi = BeautifulSoup(r.text, "html.parser").find("form", action=f"https://{RP}/ilmari/vuoro").button
+        assert nappi.has_attr("disabled") is (syy is not None)
+        assert (syy in r.text) if syy else ("Töihin nyt toimii" not in r.text)
 
 
 def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
     """Gateway palaa osoitteeseen ?toihin=rajatesti (vanha /hub/ilmari ohjautuu juureen kysely mukana), kun Töihin nyt
     ajaa ensin rajatestin: sivu kertoo yhdellä rivillä, että vuoro alkaa itsestään. Käynnissä oleva rajatesti (tekolokin
-    uusin gatewayn rajatesti-rivi) näkyy ilman linkkiä, koska sitä ei julkaista Työt-sivulle. Kielletty: kehitystyö saa
-    linkin ja oman syyn, eikä ilmoitusta näytetä ilman paluuparametria."""
+    uusin gatewayn rajatesti-rivi) näkyy ilman linkkiä, koska sitä ei julkaista Työt-sivulle, ja lukitsee napin.
+    Kehitystyö saa linkin eikä lukitse nappia (aiops ADR-0033 pala 4); ilmoitusta ei näytetä ilman paluuparametria."""
     teot = rivit(teko(1, laji="rajatesti", tyo=57, miksi="työvuoron rajatesti: Elias painoi Töihin nyt (elias@github)"))
     for n, (dsh, polku) in enumerate(((57, "/?toihin=rajatesti"), (57, "/"), (58, "/"))):
         (tmp_path / str(n)).mkdir()
@@ -677,7 +679,7 @@ def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
         teksti = " ".join(sivu.get_text().split())
         linkit = {a["href"].split("?")[0] for a in sivu.find_all("a", href=True) if "/kehita/" in a["href"]}
         assert ("Rajatesti ajetaan ensin (noin minuutti). Työvuoro alkaa sen jälkeen itsestään." in teksti) is (n == 0)
-        assert sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled")
+        assert sivu.find("form", action=f"https://{RP}/ilmari/vuoro").button.has_attr("disabled") is (dsh == 57)
         assert r.headers.get("Refresh") == "30"   # työ käynnissä: sivu päivittyy, kunnes vuoro alkaa
         tila = sivu.find("p", class_="state-word")
         assert tila.find("span", class_="dot dot--live") and "Vapaa" not in tila.get_text()   # ei "Vapaa" työn aikana
@@ -688,7 +690,7 @@ def test_tuotannossa_toihin_nyt_rajatesti_ensin(tmp_path, monkeypatch):
         else:
             assert "/hub/kehita/58" in linkit and "rajatesti käynnissä" not in teksti.lower()
             assert " ".join(tila.get_text().split()) == "Työ 58 kesken" and tila.a["href"] == "/hub/kehita/58"
-            assert "Töihin nyt toimii, kun työ 58 on valmis." in teksti
+            assert "Töihin nyt toimii" not in teksti
     # Osoite ei lukitse nappia: vanha ?toihin=rajatesti ilman käynnissä olevaa työtä jättää Töihin nyt käyttöön, ja
     # tuntematon arvo ei näytä ilmoitusta. (Vanhan osoitteen /hub/ilmari ohjaus: test_production.)
     for n, (polku, ilmoitus) in enumerate((("/?toihin=rajatesti", True), ("/?toihin=muu", False))):
