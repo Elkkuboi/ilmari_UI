@@ -1,5 +1,8 @@
 """Promptit ja säännöt -sivut (Asetusten alla): luettelo, yksittäinen prompti, muokkauslomake gatewaylle, escapetus
-ja 404. Hub ei kirjoita mitään: lomake on gatewayn (paluu=hub), ja kiinteällä tekstillä ei ole lomaketta."""
+ja 404. Hub ei kirjoita mitään: lomake on gatewayn (paluu=hub), ja kiinteällä tekstillä ei ole lomaketta.
+
+Käsikirjan versiot ja lukko (aiops ADR-0033 pala 6): aiemmat versiot palautusnapein, voimassa olevan tekstin
+kirjoittaja ja lukko luettelossa. Vanha muoto ilman versioita näyttää sivut ennallaan."""
 
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from fastapi.testclient import TestClient
 from ilmari_ui import dokumentit
 from ilmari_ui.app import Settings, create_app
 from test_dokumentit import julkaise as julkaise_dokumentit
-from test_kehotteet import AIKA, KADET, KIINTEA, MUOKATTU, RIVI, kirjoita, luettelo
+from test_kehotteet import AIKA, KADET, KIINTEA, MUOKATTU, RIVI, V1, V2, V3, kirjoita, luettelo, uusi
 from test_toiminta import RP, julkaise, lomakkeet, tuotanto
 
 
@@ -59,10 +62,11 @@ def test_muokattava_prompti_esimerkkitilassa():
     assert h1.find(string=True, recursive=False).strip() == "Systemprompti"
     assert h1.find("span", class_="aside").get_text() == "muokattu 19.11.\u00a0klo\u00a015.40"
     kentta = sivu.find("textarea", attrs={"name": "teksti"})
-    assert kentta["maxlength"] == "6000" and kentta.has_attr("required") and int(kentta["rows"]) >= 10
+    assert kentta["maxlength"] == "12000" and kentta.has_attr("required") and int(kentta["rows"]) >= 10
     assert kentta.get_text().startswith("Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti: mitä tein")
     assert "<script>alert(1)</script>" not in r.text and "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
-    assert [b.get_text() for b in sivu.find_all("button")] == ["Tallenna", "Palauta alkuperäinen"]
+    assert [b.get_text() for b in sivu.find_all("button")] == ["Tallenna", "Palauta alkuperäinen", "Palauta", "Palauta",
+                                                               "Palauta"]
     assert sivu.find("form") is None                                        # esimerkkitilassa napit eivät tee mitään
     alkuperainen = sivu.find("details", class_="fold")
     assert alkuperainen.summary.get_text() == "Alkuperäinen teksti"
@@ -166,6 +170,126 @@ def test_esimerkkitiedosto_on_samaa_muotoa_kuin_gatewayn(tmp_path):
     """Esimerkkiaineiston kentät ovat täsmälleen ne, jotka lukija vaatii (ei erkaannu oikeasta muodosta)."""
     data = json.loads((Path(__file__).resolve().parents[1] / "src" / "ilmari_ui" / "demo" / "toiminta" /
                        "kehotteet.json").read_text(encoding="utf-8"))
-    assert set(data) == {"versio", "aika", "kehotteet"} and data["aika"] != AIKA
+    assert list(data) == ["versio", "aika", "lukittu", "kehotteet"] and data["aika"] != AIKA
     assert all(list(r) == ["tunniste", "ryhma", "otsikko", "kuvaus", "lahde", "teksti", "oletus", "muokattu",
-                           "muokattava", "enint"] for r in data["kehotteet"])
+                           "muokattava", "enint", "versiot"] for r in data["kehotteet"])
+    assert all(list(v) == ["n", "aika", "kuka", "miksi", "teksti"] for r in data["kehotteet"] for v in r["versiot"])
+
+
+# --- Käsikirjan versiot ja lukko (aiops ADR-0033 pala 6) ---------------------------------------------------------
+
+def kaikki_lomakkeet(r) -> list[tuple[str, dict[str, str]]]:
+    """[(polku, {kenttä: arvo})] sivun järjestyksessä: samaan osoitteeseen voi olla monta lomaketta (versiot)."""
+    tulos = []
+    for f in dom(r).find_all("form"):
+        assert f["method"] == "post" and f["action"].startswith(f"https://{RP}/ilmari/")
+        tulos.append((f["action"][len(f"https://{RP}"):],
+                      {k["name"]: (k.get("value") or k.get_text()) for k in f.find_all(["input", "textarea", "select"])}))
+    return tulos
+
+
+def versiorivit(sivu: BeautifulSoup) -> list[str]:
+    osio = sivu.find("section", attrs={"aria-labelledby": "h-versiot"})
+    return [" ".join(li.find("div", class_="toimirivi").get_text(" ").split()) for li in osio.select("ol.versiot > li")]
+
+
+def test_versiot_esimerkkitilassa():
+    sivu = dom(asiakas().get("/hub/kehotteet/jarjestelma?demo=1"))
+    assert " ".join(sivu.find(id="voimassa").get_text().split()).startswith("Voimassa: versio 4 · Ilmari · ")
+    osio = sivu.find("section", attrs={"aria-labelledby": "h-versiot"})
+    assert osio.find("h2").get_text() == "Aiemmat versiot"
+    rivit = versiorivit(sivu)
+    assert [r.split(" · ")[:2] for r in rivit] == [["Versio 4", "Ilmari"], ["Versio 3", "Elias"], ["Versio 2", "Ilmari"],
+                                                  ["Versio 1", "alkuperäinen"]]
+    assert rivit[0].endswith(" voimassa") and not any("voimassa" in r for r in rivit[1:])
+    assert [r.endswith("Palauta") for r in rivit] == [False, True, True, True]   # voimassa olevaa ei palauteta
+    kohdat = osio.select("ol.versiot > li")
+    assert kohdat[0].find("p").get_text() == "Miksi: Raportit venyivät; lisäsin, mitä raporttiin kuuluu."
+    assert kohdat[3].find("p") is None                                       # tyhjä perustelu: ei riviä
+    teksti = kohdat[0].find("details", class_="fold")
+    assert teksti.summary.get_text() == "Teksti (179 merkkiä)" and not teksti.find("div", class_="pre").find_all(True)
+    assert osio.find("form") is None and [i["value"] for i in osio.find_all("input")] == ["3", "2", "1"]
+    vuoro = dom(asiakas().get("/hub/kehotteet/vuoro?demo=1"))           # ei versioita: alkuperäinen voimassa, ei osiota
+    assert vuoro.find(id="voimassa").get_text() == "Voimassa: alkuperäinen teksti"
+    assert vuoro.find("section", attrs={"aria-labelledby": "h-versiot"}) is None
+    kiintea = dom(asiakas().get("/hub/kehotteet/tyokalut?demo=1"))
+    assert kiintea.find(id="voimassa") is None and kiintea.find("section", attrs={"aria-labelledby": "h-versiot"}) is None
+
+
+def test_lukko_esimerkkitilassa():
+    r = asiakas().get("/hub/kehotteet?demo=1")
+    lukko = dom(r).find(id="lukko").parent
+    assert lukko.find(id="lukko").get_text() == "Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan."
+    assert [b.get_text() for b in lukko.find_all("button")] == ["Lukitse"] and "<form" not in r.text
+
+
+def test_tuotannossa_versioiden_palautus_ja_lukko_gatewaylle(tmp_path, monkeypatch):
+    hak = kirjoita(julkaise(tmp_path / "toiminta"),
+                   uusi(MUOKATTU | {"versiot": [V2, V1]}, KIINTEA, KADET, lukittu=False))
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet/jarjestelma")
+    assert r.status_code == 200 and "Refresh" not in r.headers
+    assert kaikki_lomakkeet(r) == [
+        ("/ilmari/kehote/jarjestelma", {"paluu": "hub", "teksti": "Olet Ilmari. Vastaa lyhyesti."}),
+        ("/ilmari/kehote/jarjestelma/oletus", {"paluu": "hub"}),
+        ("/ilmari/kehote/jarjestelma/versio", {"paluu": "hub", "n": "1"})]
+    sivu = dom(r)
+    assert " ".join(sivu.find(id="voimassa").get_text().split()).startswith("Voimassa: versio 2 · Ilmari · ")
+    assert [x.split(" · ")[:2] for x in versiorivit(sivu)] == [["Versio 2", "Ilmari"], ["Versio 1", "alkuperäinen"]]
+    lista = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet")
+    assert kaikki_lomakkeet(lista) == [("/ilmari/kehote/lukko", {"paluu": "hub", "lukittu": "1"})]
+    assert dom(lista).find(id="lukko").get_text() == "Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan."
+    assert [b.get_text() for b in dom(lista).find_all("button")] == ["Lukitse"]
+    kiintea = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet/tyokalut")
+    assert kaikki_lomakkeet(kiintea) == [] and "Aiemmat versiot" not in kiintea.text
+
+
+def test_tuotannossa_lukittu_ja_sama_teksti(tmp_path, monkeypatch):
+    """Lukittu: Avaa lähettää 0. Alkuperäinen voimassa (versio 3): sitä eikä samaa versiota 1 tarjota palautettavaksi."""
+    hak = kirjoita(julkaise(tmp_path / "toiminta"), uusi(RIVI | {"versiot": [V3, V2, V1]}, KIINTEA, lukittu=True))
+    lista = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet")
+    assert kaikki_lomakkeet(lista) == [("/ilmari/kehote/lukko", {"paluu": "hub", "lukittu": "0"})]
+    assert dom(lista).find(id="lukko").get_text() == "Lukittu: vain sinä muokkaat."
+    assert [b.get_text() for b in dom(lista).find_all("button")] == ["Avaa"]
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet/jarjestelma")
+    assert [f for f in kaikki_lomakkeet(r) if f[0].endswith("/versio")] == [
+        ("/ilmari/kehote/jarjestelma/versio", {"paluu": "hub", "n": "2"})]
+    rivit = versiorivit(dom(r))
+    assert rivit[0].startswith("Versio 3 · Elias") and rivit[0].endswith(" voimassa")
+    assert rivit[1].startswith("Versio 2 · Ilmari") and rivit[1].endswith("Palauta")
+    assert rivit[2].startswith("Versio 1 · alkuperäinen") and rivit[2].endswith(" sama kuin voimassa")
+    assert " ".join(dom(r).find(id="voimassa").get_text().split()).startswith("Voimassa: versio 3 · Elias · ")
+
+
+def test_tuotannossa_vanha_muoto_ilman_versioita_ja_lukkoa(tmp_path, monkeypatch):
+    hak = kirjoita(julkaise(tmp_path / "toiminta"), luettelo(MUOKATTU, KIINTEA, KADET))
+    for polku in ("/kehotteet", "/kehotteet/jarjestelma"):
+        r = tuotanto(tmp_path, monkeypatch, hak, polku=polku)
+        sivu = dom(r)
+        assert r.status_code == 200 and sivu.find(id="lukko") is None and sivu.find(id="voimassa") is None
+        assert "Aiemmat versiot" not in r.text and not [f for f in kaikki_lomakkeet(r) if "lukko" in f[0] or "versio" in f[0]]
+
+
+def test_tuotannossa_rikkinaiset_versiot_eivat_piilota_tekstia(tmp_path, monkeypatch):
+    """Kielletty suunta: kelvoton versio (bidi-merkki perustelussa) ei näy, mutta teksti ja muokkaus toimivat."""
+    paha = V2 | {"miksi": "suunta" + chr(0x202E) + "käännetty"}
+    hak = kirjoita(julkaise(tmp_path / "toiminta"), uusi(MUOKATTU | {"versiot": [paha, V1]}, KIINTEA))
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet/jarjestelma")
+    sivu = dom(r)
+    assert r.status_code == 200 and chr(0x202E) not in r.text
+    assert sivu.find("textarea").get_text() == MUOKATTU["teksti"]
+    assert "Aiempia versioita ei voi nyt näyttää." in sivu.find("section", attrs={"aria-labelledby": "h-versiot"}).get_text()
+    assert sivu.find(id="voimassa").get_text() == "Voimassa: muokattu teksti"
+    assert [f[0] for f in kaikki_lomakkeet(r)] == ["/ilmari/kehote/jarjestelma", "/ilmari/kehote/jarjestelma/oletus"]
+    lista = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet")
+    assert lista.status_code == 200 and dom(lista).find(id="lukko") is not None
+
+
+def test_ilmarin_teksti_versioissa_koodataan(tmp_path, monkeypatch):
+    paha = V2 | {"miksi": "<b>lihava</b><script>alert(1)</script>",
+                 "teksti": "</textarea></div><script>alert(2)</script><img src=x onerror=alert(3)>"}
+    hak = kirjoita(julkaise(tmp_path / "toiminta"), uusi(MUOKATTU | {"versiot": [paha, V1]}, KIINTEA))
+    r = tuotanto(tmp_path, monkeypatch, hak, polku="/kehotteet/jarjestelma")
+    assert r.status_code == 200 and "<script>" not in r.text and "<img" not in r.text and "<b>lihava" not in r.text
+    assert "&lt;b&gt;lihava&lt;/b&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
+    kohta = dom(r).select("ol.versiot > li")[0]
+    assert kohta.find("div", class_="pre").get_text() == paha["teksti"] and not kohta.find("div", class_="pre").find_all(True)

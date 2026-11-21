@@ -1,6 +1,7 @@
 {
  "versio": 1,
  "aika": "2026-11-19T16:05:00+02:00",
+ "lukittu": false,
  "kehotteet": [
   {
    "tunniste": "jarjestelma",
@@ -12,7 +13,37 @@
    "oletus": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti.",
    "muokattu": "2026-11-19T15:40:00+02:00",
    "muokattava": true,
-   "enint": 6000
+   "enint": 12000,
+   "versiot": [
+    {
+     "n": 4,
+     "aika": "2026-11-19T15:40:00+02:00",
+     "kuka": "ilmari",
+     "miksi": "Raportit venyivät; lisäsin, mitä raporttiin kuuluu.",
+     "teksti": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti: mitä tein, mikä toimii, mitä tarvitsen sinulta.\nTeksti, jossa on <script>alert(1)</script>, näytetään tekstinä."
+    },
+    {
+     "n": 3,
+     "aika": "2026-11-19T08:12:00+02:00",
+     "kuka": "elias",
+     "miksi": "palautettu versio 1",
+     "teksti": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti."
+    },
+    {
+     "n": 2,
+     "aika": "2026-11-18T23:05:00+02:00",
+     "kuka": "ilmari",
+     "miksi": "Yöllä rästit ensin, jotta aamun raportti on lyhyempi.",
+     "teksti": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nYöllä tee ensin rästit, sitten tutkimus.\n\nRaportoi lyhyesti."
+    },
+    {
+     "n": 1,
+     "aika": "2026-11-18T23:05:00+02:00",
+     "kuka": "tehdas",
+     "miksi": "",
+     "teksti": "Olet Ilmari (esimerkki). Tee työt itse loppuun.\n\nRaportoi lyhyesti."
+    }
+   ]
   },
   {
    "tunniste": "vuoro",
@@ -24,7 +55,8 @@
    "oletus": null,
    "muokattu": null,
    "muokattava": true,
-   "enint": 6000
+   "enint": 12000,
+   "versiot": []
   },
   {
    "tunniste": "tyokalut",
@@ -36,7 +68,8 @@
    "oletus": null,
    "muokattu": null,
    "muokattava": false,
-   "enint": 6000
+   "enint": 12000,
+   "versiot": []
   },
   {
    "tunniste": "tyon_alku",
@@ -48,7 +81,8 @@
    "oletus": null,
    "muokattu": null,
    "muokattava": false,
-   "enint": 6000
+   "enint": 12000,
+   "versiot": []
   }
  ]
 }

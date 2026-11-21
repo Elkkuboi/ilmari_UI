@@ -615,7 +615,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/kehotteet", response_class=HTMLResponse)
     async def kehotteet_sivu(request: Request):
-        """Promptit ryhmittäin, Eliaksen omat ohjeet (linkit Asetuksiin) ja säännöt (asennetut dokumentit)."""
+        """Promptit ryhmittäin, lukko (saako Ilmari muokata käsikirjaansa), Eliaksen omat ohjeet (linkit Asetuksiin) ja
+        säännöt (asennetut dokumentit)."""
         luettelo = lue_kehotteet(request)
         valmis = luettelo is not None and luettelo.tila == "ready"
         toiminta, _ = lue_toiminta(esimerkki(request))
@@ -632,7 +633,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub/kehotteet/{tunniste}", response_class=HTMLResponse)
     async def kehote_sivu(request: Request, tunniste: str):
-        """Yksi prompti: teksti sellaisena kuin malli sen saa. Muokattavalla lomake gatewaylle (paluu=hub)."""
+        """Yksi prompti: teksti sellaisena kuin malli sen saa. Muokattavalla lomake gatewaylle (paluu=hub) ja aiemmat
+        versiot palautusnappeineen."""
         luettelo = lue_kehotteet(request)
         k = kehotteet_lukija.etsi(luettelo, tunniste) if luettelo is not None and luettelo.tila == "ready" else None
         if k is None:

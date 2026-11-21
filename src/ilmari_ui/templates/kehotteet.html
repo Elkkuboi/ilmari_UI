@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
 {% block sisalto %}
 <a class="back" href="{{ url('/hub/asetukset') }}">Asetukset</a>
 <section aria-labelledby="h-kehotteet">
@@ -9,6 +10,10 @@
   <p class="empty">{{ luettelo.viesti }}</p>
 {% else %}
   <p class="muted small">Jokainen teksti, jonka Ilmari ja sen kädet saavat ohjeeksi.</p>
+  {#- Lukko (ADR-0033 pala 6): estää vain Ilmarin muokkaukset; Eliaksen lomakkeet toimivat aina. Vanhalla gatewaylla ei riviä. #}
+  {% if luettelo.lukittu is not none %}
+  {% call lomake('/ilmari/kehote/lukko', 'toimirivi') %}<span id="lukko">{{ 'Lukittu: vain sinä muokkaat.' if luettelo.lukittu else 'Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan.' }}</span><input type="hidden" name="lukittu" value="{{ '0' if luettelo.lukittu else '1' }}"><button class="btn--quiet" type="submit">{{ 'Avaa' if luettelo.lukittu else 'Lukitse' }}</button>{% endcall %}
+  {% endif %}
 {% endif %}
 </section>
 {% for ryhma, rivit in ryhmat %}

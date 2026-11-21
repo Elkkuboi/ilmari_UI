@@ -6,6 +6,10 @@
   <h1 id="h-kehote" class="label">{{ k.otsikko }}{% if k.muokattu %} <span class="aside warn">muokattu {{ lyhyt_aika(k.muokattu) }}</span>{% endif %}</h1>
   <p class="muted small">{{ k.kuvaus }}</p>
 {% if k.muokattava and (gateway_url or demo) %}
+  {#- Versiot (ADR-0033 pala 6): kuka kirjoitti voimassa olevan tekstin. Vanhalla gatewaylla (ei versioita) ei riviä. #}
+  {% if k.versiot is not none or k.versiot_virhe %}
+  <p class="small" id="voimassa">Voimassa: {% if k.voimassa %}versio {{ k.voimassa.n }} · {{ k.voimassa.tekija }} · {{ lyhyt_aika(k.voimassa.aika) }}{% elif k.oletus is none %}alkuperäinen teksti{% else %}muokattu teksti{% endif %}</p>
+  {% endif %}
   {% call lomake('/ilmari/kehote/' ~ k.tunniste) %}<label class="sr-only" for="teksti">{{ k.otsikko }}</label><textarea id="teksti" name="teksti" rows="{{ korkeus }}" maxlength="{{ k.enint }}" required>{{ k.teksti }}</textarea>
   <div class="form-row"><span class="muted small">Voimaan seuraavasta vuorosta. Enintään {{ k.enint }} merkkiä.</span><button type="submit">Tallenna</button></div>{% endcall %}
   {% if k.oletus is not none %}
@@ -20,4 +24,21 @@
   <p class="muted small">{% if k.muokattava %}Alkuperäinen: <code>{{ k.lahde }}</code>{% else %}Kiinteä teksti koodissa: <code>{{ k.lahde }}</code>. Muutosta voi pyytää Työt-sivulla.{% endif %}</p>
 {% endif %}
 </section>
+{% if k.muokattava and (gateway_url or demo) and (k.versiot or k.versiot_virhe) %}
+<section aria-labelledby="h-versiot">
+  <h2 id="h-versiot" class="label">Aiemmat versiot</h2>
+{% if k.versiot_virhe %}
+  <p class="empty">Aiempia versioita ei voi nyt näyttää.</p>
+{% else %}
+  {#- Ilmarin teksti (perustelu ja versio) on dataa: koodattuna, ei Markdownia. Voimassa olevaa tai samaa tekstiä ei
+      tarjota palautettavaksi: palautus ei muuttaisi mitään. #}
+  <ol class="rows versiot">{% for v in k.versiot %}<li>
+    <div class="toimirivi"><span>Versio {{ v.n }} · {{ v.tekija }} · <time datetime="{{ v.aika }}">{{ lyhyt_aika(v.aika) }}</time>{% if v.voimassa %} <span class="tag ok">voimassa</span>{% elif v.sama %} <span class="tag">sama kuin voimassa</span>{% endif %}</span>
+    {%- if not v.sama %}{% call lomake('/ilmari/kehote/' ~ k.tunniste ~ '/versio') %}<input type="hidden" name="n" value="{{ v.n }}"><button class="btn--quiet" type="submit">Palauta</button>{% endcall %}{% endif %}</div>
+    {% if v.miksi %}<p class="muted small">Miksi: {{ v.miksi }}</p>{% endif %}
+    <details class="fold"><summary>Teksti ({{ v.teksti|length }} merkkiä)</summary><div class="sheet pre">{{ v.teksti }}</div></details>
+  </li>{% endfor %}</ol>
+{% endif %}
+</section>
+{% endif %}
 {% endblock %}

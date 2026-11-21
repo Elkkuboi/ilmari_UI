@@ -29,6 +29,7 @@ import os
 import re
 import stat
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -83,6 +84,11 @@ RIVEJA_MAX, RIVI_MAX = 20, 200
 KOHTIA_MAX, HAVAINTO_MAX, KOHTA_NIMI_MAX = 40, 200, 120
 TEKO_TEKSTI_MAX = 1000
 RAPORTTI_MAX = 8000                # = Ilmarin viestin enimmäispituus gatewayssa
+MIKSI_MAX = 300                    # Ilmarin perustelu: yksi rivi (varaus, käsikirjan versio)
+# Ilmarin kirjoittamassa tekstissä kielletyt merkit kuten gatewayssa (aiops merkit.forbidden_char): ohjausmerkit,
+# näkymättömät muotoilumerkit (myös bidi-merkit), surrogaatit sekä rivin- ja kappaleenerottimet. Emojien ZWJ sallitaan.
+_KIELLETYT_LUOKAT = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+_ZWJ = chr(0x200D)
 _KELLO = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", re.ASCII)
 VIESTIT = {
     "wrong_owner": "Tiedoston omistaja on väärä.",
@@ -151,6 +157,17 @@ def _teksti(arvo: Any, raja: int, *, tyhja: bool = True, rivinvaihdot: bool = Fa
     if not _kelpaa(arvo.replace("\r\n", "\n"), rivinvaihdot):
         _virhe("Tekstikentässä on kielletty merkki.")
     return arvo
+
+
+def _tarkka_teksti(arvo: Any, raja: int, *, tyhja: bool = True, rivinvaihdot: bool = False) -> str:
+    """Ilmarin kirjoittama teksti (perustelu, käsikirjan versio): kuten _teksti, ja lisäksi ei yhtään näkymätöntä
+    muotoilu- tai ohjausmerkkiä. Gateway hylkää samat merkit tallentaessaan, joten tällainen merkki tiedostossa on
+    virhe, ei Ilmarin tekstiä. Monirivisessä sallitaan rivinvaihto ja sarkain."""
+    teksti = _teksti(arvo, raja, tyhja=tyhja, rivinvaihdot=rivinvaihdot)
+    sallitut = "\n\r\t" if rivinvaihdot else ""
+    if any(c not in sallitut and c != _ZWJ and unicodedata.category(c) in _KIELLETYT_LUOKAT for c in teksti):
+        _virhe("Tekstikentässä on kielletty merkki.")
+    return teksti
 
 
 def _aika(arvo: Any, *, tyhja: bool = False) -> str | None:
