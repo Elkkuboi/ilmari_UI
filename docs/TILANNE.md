@@ -24,10 +24,21 @@
   valesystemd ja valekello), joten muodon muutos aiopsissa näkyy testeissä.
 - Palvelutiedosto: `BindReadOnlyPaths=-/srv/aiops/ilmari/aivot` (miinus: puuttuva hakemisto ei estä käynnistystä).
   `scripts/asenna.sh` asentaa tiedoston sellaisenaan, joten se ei muutu.
-- Asennusjärjestys: Hub ensin. Ennen aiopsin asennusta tiedostoa ei ole, eikä sivulla ole lomakkeita.
-- Testit: 1050 passed, 55 skipped (ilman selainryhmää ja shellcheckiä; `/hub/aivot` lisätty selaintestin sivuihin).
-  Puhelinkuvat 390x844 ja 320 px chrome-headless-shellillä (Paperi ja Terminaali, tuotanto, ei käytössä, rikki,
-  vanha); ei vaakavieritystä 320, 390, 768 eikä 1280 px leveydellä taitot auki.
+- Asennusjärjestys: **aiops ensin, sitten Hub** (`scripts/asenna.sh` käynnistää Hubin uudelleen). Miinus-sidonta
+  tehdään vain Hubin käynnistyessä: jos Hub käynnistyy ennen kuin aiopsin deploy.sh luo `/srv/aiops/ilmari/aivot`,
+  sivu sanoo "ei käytössä" ilman lomakkeita, kunnes Hub käynnistetään uudelleen.
+- Katselmoinnin korjaukset (22.11.): väärän tyyppinen arvo tai jättimäinen hunkin otsake ei enää kaada sivua (ennen
+  500 ilman turvaotsakkeita ja hätäjarrua), ja lukijalla on viimeinen virhetila. Hätäjarru on heti käytössä olevan
+  version alla ennen lukkoa; se näkyy myös vanhassa tai lukukelvottomassa tilassa, mutta ei, kun palautus
+  alkuperäiseen tai vahdin toimi on jo kesken. Avaa lukko ja Palauta edellinen ovat taiton takana (Vahvista-nappi),
+  jotta toinen napautus ei osu vastakkaiseen nappiin. Diffissä kaikki näkymättömät merkit (vaihtelun valitsimet, ZWJ,
+  tagit, hangulin täytemerkit) näkyvät koodeina; yksinäinen CR piilottaa diffin. Katkaistu diff luettelee
+  vertaamatta jääneet tiedostot. Diffin laatikko enintään 70 % näytöstä, rivit sisennetty. Virheen tekninen syy
+  taitettuna ("Miksi"). Asetusten linkki on koko rivin kokoinen.
+- Testit: 1145 passed, 55 skipped (ilman selainryhmää ja shellcheckiä; `/hub/aivot` lisätty selaintestin sivuihin).
+  Puhelinkuvat 390x844 ja 320 px chrome-headless-shellillä (Paperi ja Terminaali, tuotanto, pahin, katkaistu,
+  lukittu, hätäjarrun jälkeen, palautus kesken, asennus kesken, vanha, ei käytössä, rikki); ei vaakavieritystä 320,
+  390, 768 eikä 1280 px leveydellä taitot auki.
 - Tarkistamatta: Safari (iPhone), Firefox, oikea gateway ja oikea asentaja rootina.
 - Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`.
 
