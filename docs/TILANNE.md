@@ -1,5 +1,35 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 21.11.2026 (myöhäisilta): käsikirjan versiot, lukko ja Ilmarin varaamat vuorot, haara `kasikirjan-versiot`
+
+- aiops ADR-0033 pala 6, osa 2: Ilmari muokkaa itse käsikirjaansa (systemprompti) ja vuoron ohjettaan ja varaa
+  työvuoron. Hub näyttää ja Elias ohjaa lomakkeilla gatewaylle (paluu=hub); Hub ei kirjoita mitään.
+- Promptin sivu `/hub/kehotteet/{tunniste}` (muokattava rivi): rivi "Voimassa: versio N · kuka · aika" ja
+  muokkauslomakkeen alla **Aiemmat versiot** uusin ensin: numero, kuka (Elias, Ilmari tai alkuperäinen), aika,
+  perustelu ja teksti taitettuna. Palauta lähettää kentän `n` osoitteeseen `POST /ilmari/kehote/{tunniste}/versio`.
+  Voimassa olevaa tai samaa tekstiä ei tarjota palautettavaksi (merkintä [voimassa] tai [sama kuin voimassa]).
+- `/hub/kehotteet`: lukkorivi "Ilmari saa muokata käsikirjaansa ja vuoron ohjettaan." ja Lukitse, tai "Lukittu: vain
+  sinä muokkaat." ja Avaa (`POST /ilmari/kehote/lukko`, `lukittu`=1 tai 0).
+- Nyt: tilan alla jokaisesta varauksesta "Ilmari on varannut työvuoron: klo HH.MM, N min. perustelu" ja Peru
+  (`POST /ilmari/vuoro/varaus/peru`, `id`). Ei varauksia: ei mitään. Muu kuin tämän päivän aika näkyy päivän kanssa.
+- Lukija `kehotteet.py`: uusi muoto (tiedostossa `lukittu`, jokaisella rivillä `versiot`: enintään 10, kentät
+  täsmälleen `n`, `aika`, `kuka`, `miksi`, `teksti`; kiinteällä rivillä tyhjä) ja vanha muoto ilman näitä kelpaavat,
+  sekamuoto ei. Rikkinäinen versiolista ei piilota riviä: teksti ja muokkaus näkyvät, ja kohdassa lukee "Aiempia
+  versioita ei voi nyt näyttää." Raja `enint` enintään 20 000 (gateway ilmoittaa 12 000).
+- Lukija `toiminta.py`: uusi tiedosto `varaukset.json` (`versio`, `aika`, `varaukset`: `id`, `alkaa`, `minuutit`
+  30–240, `miksi`), aikaisin ensin. Puuttuva tiedosto = ei varauksia. Kelvoton tiedosto ei kaada sivua: varaukset
+  jäävät pois ja Odottaa sinua -listassa on lukuvirherivi kuten muillakin tilan tiedostoilla.
+- Ilmarin teksti (perustelu, versio) on dataa: koodattuna, ei Markdownia, ja lukija hylkää samat merkit kuin gateway
+  (ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet; emojin ZWJ sallitaan).
+- Esimerkkiaineisto: `kehotteet.json` uudessa muodossa (systempromptilla 4 versiota) ja `varaukset.json` (2 varausta).
+- Asennusjärjestys: **Hub ensin**, sitten aiops. Nykyinen Hub hylkää uuden gatewayn `kehotteet.json`:n (kentät eivät
+  vastaa muotoa), jolloin Promptit-sivu näyttää virheen; tämä Hub lukee molempia.
+- Testit: 856 passed, 51 skipped (ilman selainryhmää ja shellcheckiä). Puhelinkuvat 390x844 ja 320 px
+  chrome-headless-shellillä (Paperi ja Terminaali); ei vaakavieritystä 320 eikä 390 px leveydellä.
+- Tarkistamatta: Safari (iPhone), Firefox ja oikea gateway.
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`. Jos uusi gateway on
+  jo asennettu, peru se ensin: vanha Hub ei lue sen promptiluetteloa.
+
 ## Päivitys 21.11.2026 (ilta): keskustelu rullaa laatikossa, haara `keskustelu-rullaa`
 
 - Keskustelu täyttää ruudun, eikä sivu enää kasva viestien mukana: vain viestilaatikko vierii, uusin viesti on
