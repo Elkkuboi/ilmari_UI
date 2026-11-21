@@ -138,6 +138,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 /* Teksti ja yksi nappi samalla rivillä (lukko, varaus, käsikirjan versio): teksti rivittyy napin vieressä puhelimellakin */
 .toimirivi { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; }
 .toimirivi > span { flex: 1 1 10rem; }
+.varaus > * + * { margin-top: .2rem; }
+.versiot pre.diff { white-space: pre-wrap; overflow-wrap: anywhere; }
 a.row { display: grid; grid-template-columns: 4.5ch 1fr auto; gap: .2rem 1.2ch; text-decoration: none; }
 a.row:hover { background: var(--sheet); color: inherit; }
 a.row .row-sub { grid-column: 2 / -1; color: var(--ink-3); font-size: 13px; }

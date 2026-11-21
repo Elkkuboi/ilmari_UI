@@ -33,7 +33,7 @@ import stat
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -99,6 +99,9 @@ MIKSI_MAX = 300                    # Ilmarin perustelu: yksi rivi (varaus, käsi
 # näkymättömät muotoilumerkit (myös bidi-merkit), surrogaatit sekä rivin- ja kappaleenerottimet. Emojien ZWJ sallitaan.
 _KIELLETYT_LUOKAT = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 _ZWJ = chr(0x200D)
+# Perustelussa lisäksi tyhjiltä näyttävät kirjaimet, joita gateway ei vielä hylkää (hangulin täytemerkit, tyhjä
+# pistekirjoitusmerkki, yhdistävä CGJ): niillä perustelu näyttäisi tyhjältä tai tekstissä olisi näkymätöntä täytettä.
+_TYHJAT_KIRJAIMET = frozenset(chr(o) for o in (0x034F, 0x115F, 0x1160, 0x2800, 0x3164, 0xFFA0))
 _KELLO = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", re.ASCII)
 VIESTIT = {
     "wrong_owner": "Tiedoston omistaja on väärä.",
@@ -181,6 +184,24 @@ def _tarkka_teksti(arvo: Any, raja: int, *, tyhja: bool = True, rivinvaihdot: bo
     return teksti
 
 
+def _nakyva_teksti(arvo: Any, raja: int, *, tyhja: bool = True, rivinvaihdot: bool = False) -> str | None:
+    """Ilmarin teksti tarkalla säännöllä, mutta kielletty merkki ei ole koko tiedoston virhe: tulos on None, ja sivu
+    kertoo, ettei tekstiä voi näyttää (varaus, versio ja palautusnapit jäävät näkyviin). Väärä tyyppi tai pituus on
+    virhe kuten ennenkin."""
+    if type(arvo) is not str or len(arvo) > raja or (not tyhja and not arvo.strip()):
+        _virhe("Tekstikenttä puuttuu tai ylittää rajan.")
+    try:
+        return _tarkka_teksti(arvo, raja, tyhja=tyhja, rivinvaihdot=rivinvaihdot)
+    except ReadFailure:
+        return None
+
+
+def _perustelu(arvo: Any) -> str | None:
+    """Ilmarin perustelu (yksi rivi, enintään MIKSI_MAX): None, jos siinä on kielletty tai tyhjältä näyttävä merkki."""
+    teksti = _nakyva_teksti(arvo, MIKSI_MAX)
+    return None if teksti is None or any(c in _TYHJAT_KIRJAIMET for c in teksti) else teksti
+
+
 def _aika(arvo: Any, *, tyhja: bool = False) -> str | None:
     """Aikavyöhykkeellinen ISO-aika merkkijonona (näytetään format_timella) tai None, jos sallittu."""
     if arvo is None and tyhja:
@@ -193,6 +214,10 @@ def _aika(arvo: Any, *, tyhja: bool = False) -> str | None:
         _virhe("Aika ei ole ISO-aika.")
     if aika.tzinfo is None:
         _virhe("Ajasta puuttuu aikavyöhyke.")
+    try:
+        aika.astimezone(HELSINKI)   # vuosi 1 tai 9999 ei mahdu Suomen aikaan: sivu ei saa kaatua sen näyttämiseen
+    except (OverflowError, ValueError):
+        _virhe("Aika ei kelpaa.")
     return arvo
 
 
@@ -309,8 +334,9 @@ def tarkista_raportti(data: Any) -> dict[str, Any]:
 
 
 def tarkista_varaukset(data: Any) -> tuple[dict[str, Any], ...]:
-    """varaukset.json: Ilmarin varaamat työvuorot, jotka eivät ole vielä alkaneet, aikaisin ensin. Perustelu on mallin
-    kirjoittamaa (yksi rivi, ei näkymättömiä merkkejä)."""
+    """varaukset.json: Ilmarin varaamat työvuorot, jotka eivät ole vielä alkaneet, aikaisin ensin, ja kunkin loppuaika.
+    Perustelu on mallin kirjoittamaa (yksi rivi): kielletty tai tyhjältä näyttävä merkki piilottaa vain perustelun
+    (miksi None), ei varausta eikä sen Peru-nappia."""
     _kentat(data, VARAUKSET_KENTAT, VARAUKSET)
     _aika(data["aika"])
     if type(data["varaukset"]) is not list or len(data["varaukset"]) > VARAUKSIA_MAX:
@@ -324,8 +350,13 @@ def tarkista_varaukset(data: Any) -> tuple[dict[str, Any], ...]:
         tunnisteet.add(tunniste)
         if type(v["minuutit"]) is not int or not MINUUTIT_MIN <= v["minuutit"] <= MINUUTIT_MAX:
             _virhe("Varauksen kesto ei kelpaa.")
-        varaukset.append({"id": tunniste, "alkaa": _aika(v["alkaa"]), "minuutit": v["minuutit"],
-                          "miksi": _tarkka_teksti(v["miksi"], MIKSI_MAX)})
+        alkaa = _aika(v["alkaa"])
+        try:
+            loppuu = _aika((datetime.fromisoformat(alkaa) + timedelta(minutes=v["minuutit"])).isoformat())
+        except OverflowError:
+            _virhe("Varauksen aika ei kelpaa.")
+        varaukset.append({"id": tunniste, "alkaa": alkaa, "loppuu": loppuu, "minuutit": v["minuutit"],
+                          "miksi": _perustelu(v["miksi"])})
     return tuple(sorted(varaukset, key=lambda v: datetime.fromisoformat(v["alkaa"])))
 
 
