@@ -167,10 +167,48 @@ pre.code { background: var(--sheet); border: 1px solid var(--rule); padding: .8r
 .msg--ilmari .msg-body { background: var(--sheet); border: 1px solid var(--rule); border-left: 3px solid var(--ink); padding: .7rem .95rem; }
 .msg--elias .msg-body { padding-left: calc(.95rem + 3px); }
 .composer { border-top: 1px solid var(--ink); padding-top: 1rem; }
-.threads .folder { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: .9rem 0 .2rem; }
-.threads button.thread { width: 100%; justify-content: space-between; border: 0; border-bottom: 1px dotted var(--rule); padding: .45rem 0; min-height: 40px; font-weight: 400; text-align: left; white-space: normal; }
-.threads button.thread:hover { background: var(--sheet); color: var(--ink); }
-.threads .thread small { color: var(--ink-3); white-space: nowrap; }
+/* Ruudun korkuinen keskustelu (21.11.2026): sivu ei kasva viestien mukana, vaan vain viestilaatikko vierii. Laatikon
+   column-reverse aloittaa vierityksen lopusta, joten uusin viesti näkyy alhaalla ilman skriptiä ja vanhemmat ovat
+   ylempänä. HTML:ssä viestit ovat aikajärjestyksessä. Kirjoituskenttä pysyy näkyvissä, ja Lähetä on sen vieressä,
+   joten se näkyy aina kentän kanssa (myös näppäimistön ollessa auki). Matalalla ruudulla välit kapenevat; jos tila ei
+   silti riitä, laatikko pitää 6rem:n korkeuden ja sivu vierii. */
+body.chat-sivu { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+body.chat-sivu > .top { flex: none; }
+body.chat-sivu main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 1rem 0 .75rem; }
+body.chat-sivu main > .wrap { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; }
+body.chat-sivu main > .wrap > * { flex: none; }
+body.chat-sivu main > .wrap > * + * { margin-top: .75rem; }
+body.chat-sivu .foot { display: none; }
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.chat-head > * + * { margin-top: 0; }
+.chat-head .label { flex: 1 1 18rem; margin: 0; flex-wrap: wrap; row-gap: .1rem; }
+.chat-head .label .aside { order: 3; flex-basis: 100%; }   /* kansio nimen alle kaikilla leveyksillä: ei katkea kesken sanan */
+body.chat-sivu main > .wrap > .chat-box { flex: 1 1 auto; min-height: 6rem; display: flex; flex-direction: column; }
+.chat-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column-reverse; border-top: 1px dotted var(--rule); padding: .9rem .35rem .9rem 0; }
+.chat-scroll > div > * + * { margin-top: 1.1rem; }
+body.chat-sivu main > .wrap > .composer { margin-top: 0; padding-top: .75rem; }
+body.chat-sivu textarea { max-height: 40vh; }
+.kirjoitus { display: flex; align-items: flex-end; gap: .6rem; }
+.kirjoitus textarea { flex: 1 1 auto; min-width: 0; }
+.kirjoitus button { flex: none; }
+body.chat-sivu .composer .form-row { margin-top: .5rem; align-items: center; row-gap: .5rem; }
+body.chat-sivu .composer .form-row > span { flex: 1 1 12rem; }
+@media (max-width: 25rem) {   /* kapea puhelin: Uusi keskustelu ja Keskustelut samalle riville puoliksi */
+  .chat-head .actions { flex: 1 1 100%; }
+  .chat-head .actions .btn, .chat-head .actions button { flex: 1 1 0; justify-content: center; text-align: center; white-space: normal; }
+}
+@media (max-height: 40rem) {  /* matala ruutu tai näppäimistö auki: kapeammat välit, viesteille enemmän tilaa */
+  body.chat-sivu main { padding: .5rem 0; }
+  body.chat-sivu main > .wrap > * + * { margin-top: .5rem; }
+  body.chat-sivu main > .wrap > .composer { padding-top: .5rem; }
+}
+/* Keskustelujen lista (?lista=1): kansiot taittuvat, nykyinen keskustelu on linkki takaisin */
+.threads .folder { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.threads details.fold > summary.folder { margin: .6rem 0 0; padding: .3rem 0; }
+.threads details.fold[open] > summary.folder { margin-bottom: .2rem; }
+.threads .thread { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: .1rem 1.5ch; border: 0; border-bottom: 1px dotted var(--rule); padding: .45rem 0; min-height: 40px; font: 400 15px/1.35 var(--mono); text-align: left; text-decoration: none; white-space: normal; }
+.threads .thread:hover { background: var(--sheet); color: var(--ink); }
+.threads .thread small { color: var(--ink-3); font-weight: 400; white-space: nowrap; }
 .threads .thread[aria-current="true"] { font-weight: 600; }
 
 /* --- Dokumentin teksti ---------------------------------------------------------------------------------- */
@@ -224,7 +262,9 @@ th:last-child, td:last-child { padding-right: 0; }   /* viimeisen sarakkeen täy
   .log .day { display: block; padding-top: .55rem; font-size: 12px; font-weight: 600; letter-spacing: .1em; color: var(--ink-3); }
   /* kosketuskohteet vähintään 44 px */
   .nav a { padding-top: .7rem; padding-bottom: .7rem; }
-  .btn--quiet, label.inline, .threads button.thread, input:not([type="checkbox"]), select { min-height: 44px; }
+  .btn--quiet, label.inline, .threads .thread, input:not([type="checkbox"]), select { min-height: 44px; }
+  .threads .thread { flex-direction: column; align-items: flex-start; justify-content: center; }
+  .threads details.fold > summary.folder { margin-top: .2rem; padding: .7rem 0; }
   details > summary, .back { padding-top: .7rem; padding-bottom: .7rem; }
   .rows.log > li { padding-top: 0; padding-bottom: 0; }
   input[type="checkbox"] { width: 1.4rem; height: 1.4rem; }

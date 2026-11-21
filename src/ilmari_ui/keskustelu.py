@@ -51,6 +51,7 @@ class Keskustelu:
     saie: dict[str, Any] | None = None                      # aktiivinen säie (v2), None = ei säikeitä
     saikeet: tuple[dict[str, Any], ...] = ()                # kaikki säikeet tuorein ensin (saikeet.json)
     aktiivinen: int | None = None
+    lista_virhe: str | None = None                          # säielista rikki: viestit näkyvät, lista ei
 
     @property
     def kansiot(self) -> list[tuple[str, list[dict[str, Any]]]]:
@@ -69,6 +70,21 @@ class Keskustelu:
     def kansionimet(self) -> list[str]:
         return sorted({s["kansio"] for s in self.saikeet if s["kansio"]}, key=str.casefold)
 
+    @property
+    def avoimia(self) -> int:
+        """Arkistoimattomien säikeiden määrä (linkki keskustelujen listaan)."""
+        return sum(1 for s in self.saikeet if s["arkistoitu"] is None)
+
+    @property
+    def kaikkiaan(self) -> int:
+        """Aktiivisen säikeen kaikki viestit säielistan mukaan; gateway julkaisee niistä vain uusimmat. Ilman listaa
+        tai jos lista on jäljessä, näkyvien määrä."""
+        if self.saie is not None:
+            for s in self.saikeet:
+                if s["id"] == self.saie["id"]:
+                    return max(s["viesteja"], len(self.viestit))
+        return len(self.viestit)
+
 
 def _virhe(viesti: str) -> None:
     raise ReadFailure("invalid", viesti)
@@ -83,10 +99,10 @@ def _siisti(arvo: Any, raja: int, rivinvaihdot: bool = False) -> str:
 def _saie(s: Any, *, vaadi_lista: bool) -> dict[str, Any]:
     """Säikeen tiedot julkaisusta: nimi ja kansio tekstiä, ei valtaa (koodataan näyttäessä)."""
     if type(s) is not dict or type(s.get("id")) is not int or s["id"] <= 0:
-        _virhe("Säikeen kentät eivät vastaa muotoa.")
+        _virhe("Keskustelun tiedot eivät vastaa muotoa.")
     if vaadi_lista and set(s) != SAIE_KENTAT:
-        _virhe("Säikeen kentät eivät vastaa muotoa.")
-    nimi = _siisti(s.get("nimi"), NIMI_MAX) or f"Säie {s['id']}"
+        _virhe("Keskustelun tiedot eivät vastaa muotoa.")
+    nimi = _siisti(s.get("nimi"), NIMI_MAX) or f"Keskustelu {s['id']}"
     return {"id": s["id"], "nimi": nimi, "kansio": _siisti(s.get("kansio"), KANSIO_MAX),
             "nimen_lahde": _siisti(s.get("nimen_lahde"), 10), "luotu": _siisti(s.get("luotu"), 40),
             "arkistoitu": None if s.get("arkistoitu") is None else _siisti(s.get("arkistoitu"), 40),
@@ -97,21 +113,21 @@ def _saie(s: Any, *, vaadi_lista: bool) -> dict[str, Any]:
 
 def _tarkista_saikeet(data: Any) -> tuple[tuple[dict[str, Any], ...], int | None]:
     if not isinstance(data, dict) or set(data) != {"muoto", "paivitetty", "aktiivinen", "saikeet"} or data["muoto"] != SAIKEET_MUOTO:
-        _virhe("saikeet.json:n kentät eivät vastaa muotoa.")
+        _virhe("Keskustelujen lista ei vastaa muotoa.")
     if type(data["saikeet"]) is not list or len(data["saikeet"]) > SAIKEITA_MAX:
-        _virhe("saikeet.json:n säielista ei kelpaa.")
+        _virhe("Keskustelujen lista ei kelpaa.")
     aktiivinen = data["aktiivinen"] if type(data["aktiivinen"]) is int else None
     return tuple(_saie(s, vaadi_lista=True) for s in data["saikeet"]), aktiivinen
 
 
 def _tarkista(data: Any) -> Keskustelu:
     if not isinstance(data, dict) or data.get("muoto") not in MUODOT:
-        _virhe("viestit.json:n kentät eivät vastaa muotoa.")
+        _virhe("Viestien tiedot eivät vastaa muotoa.")
     v2 = data["muoto"] == MUODOT[1]
     if set(data) != (KENTAT_V2 if v2 else KENTAT):
-        _virhe("viestit.json:n kentät eivät vastaa muotoa.")
+        _virhe("Viestien tiedot eivät vastaa muotoa.")
     if type(data["viimeisin"]) is not int or type(data["viestit"]) is not list or len(data["viestit"]) > VIESTEJA_MAX:
-        _virhe("viestit.json:n viestilista ei kelpaa.")
+        _virhe("Viestien lista ei kelpaa.")
     malli_raaka = data["malli"] if isinstance(data["malli"], dict) else {}
     malli = {"tila": _siisti(malli_raaka.get("tila"), 30), "tila_teksti": _siisti(malli_raaka.get("tila_teksti"), 60),
              "tyo": malli_raaka.get("tyo") if type(malli_raaka.get("tyo")) is int else None,
@@ -123,7 +139,7 @@ def _tarkista(data: Any) -> Keskustelu:
     viestit = []
     for v in data["viestit"]:
         if type(v) is not dict or set(v) != (VIESTI_KENTAT_V2 if v2 else VIESTI_KENTAT) or type(v["id"]) is not int:
-            _virhe("Viestin kentät eivät vastaa muotoa.")
+            _virhe("Viestin tiedot eivät vastaa muotoa.")
         lahettaja = _siisti(v["lahettaja"], 20)
         if lahettaja not in LAHETTAJAT:
             _virhe("Viestin lähettäjä on tuntematon.")
@@ -149,23 +165,30 @@ def lue_keskustelu(root: str | Path, *, omistajat: frozenset[int] | None = None,
                 raise ReadFailure("wrong_owner", "Keskustelun omistaja on väärä.")
             data = _lue(hd, TIEDOSTO, tiedot.st_uid if omistajat is not None else None, deadline, RAJA)
             keskustelu = _tarkista(_json(data))
-            # Säielista on valinnainen (vanha gateway ei julkaise sitä); rikkinäinen lista ei kaada keskustelua.
+            # Säielista on valinnainen (vanha gateway ei julkaise sitä). Rikkinäinen tai liian suuri lista ei kaada
+            # keskustelua (21.11.2026): viestit ja uuden keskustelun nappi näkyvät, listan kohdalla kerrotaan, ettei
+            # sitä voi näyttää. Väärä omistaja tai kielletty tiedostotyyppi kaataa sivun kuten ennen.
+            lista_virhe = None
             try:
                 tiedot = os.stat(SAIKEET_TIEDOSTO, dir_fd=hd, follow_symlinks=False)
                 if omistajat is not None and tiedot.st_uid not in omistajat:
-                    raise ReadFailure("wrong_owner", "Säielistan omistaja on väärä.")
+                    raise ReadFailure("wrong_owner", "Keskustelujen listan omistaja on väärä.")
                 lista = _lue(hd, SAIKEET_TIEDOSTO, tiedot.st_uid if omistajat is not None else None, deadline, RAJA)
                 saikeet, aktiivinen = _tarkista_saikeet(_json(lista))
             except FileNotFoundError:
                 saikeet, aktiivinen = (), None
             except ReadFailure as error:
-                if error.code != "not_found":
+                if error.code in ("invalid", "too_large"):
+                    lista_virhe = "Keskustelujen listaa ei voi nyt näyttää."
+                elif error.code != "not_found":
                     raise
                 saikeet, aktiivinen = (), None
-        if keskustelu.saie is not None and aktiivinen is None:
+        # Sivulla näkyvä keskustelu on viestit.json:n säie. Gateway kirjoittaa sen ennen säielistaa, joten lista voi
+        # hetken (tai epäonnistuneen kirjoituksen jälkeen pitempään) osoittaa vanhaan: nykyinen on aina sama kuin sivulla.
+        if keskustelu.saie is not None:
             aktiivinen = keskustelu.saie["id"]
         return Keskustelu(keskustelu.tila, None, keskustelu.paivitetty, keskustelu.viimeisin, keskustelu.malli,
-                          keskustelu.viestit, keskustelu.saie, saikeet, aktiivinen)
+                          keskustelu.viestit, keskustelu.saie, saikeet, aktiivinen, lista_virhe)
     except FileNotFoundError:
         return Keskustelu("not_published", "Keskustelua ei ole vielä.")
     except ReadFailure as error:

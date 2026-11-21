@@ -11,5 +11,5 @@ Käyttäjä on tilannut tämän erillisen, alun perin tyhjän repon toteutuksen 
 - Teema ja esitysmieltymykset ovat GET-parametreja. Ei evästeitä, istuntoja, localStoragea, JavaScriptiä tai pysyvää arkaluonteisen sisällön välimuistia.
 - Säilytä JSON-, tiedosto-, polku- ja kokorajat, tekstin escapetus ja tiukka CSP. Älä lisää mark_safe/safe-, innerHTML- tai eval-polkuja.
 - Aja `UV_CACHE_DIR=/workspace/.cache/uv uv run --frozen pytest -q`. Selaintestit: `uv sync --frozen --group browser`, Chromium järjestelmästä. Testaa onnistuminen ja kielletty suunta; pidä riippumattomat käsin kirjoitetut odotukset.
-- Elias hoitaa commitit, pushit, PR-toimet ja isäntäasennukset, ellei hän valtuuta niitä erikseen. Valmistele tiedostot ja PR-kuvaus. Älä pushaa mainiin.
+- Urakoitsija saa pushata, tehdä PR:n, yhdistää ja asentaa tilatun työn, jos istunnon oikeudet sallivat. Älä pushaa suoraan päähaaraan.
 - Päivitä docs/TILANNE.md samassa toimituksessa. Älä kirjaa aiops-isäntämuutosta tai hyväksy ADR:ää, jota ei ole tehty tai hyväksytty.

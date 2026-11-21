@@ -1,5 +1,33 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 21.11.2026 (ilta): keskustelu rullaa laatikossa, haara `keskustelu-rullaa`
+
+- Keskustelu täyttää ruudun, eikä sivu enää kasva viestien mukana: vain viestilaatikko vierii, uusin viesti on
+  alhaalla ja vanhemmat ylempänä (CSS `flex-direction: column-reverse`, ei skriptiä). Kirjoituskenttä pysyy
+  näkyvissä, ja Lähetä on sen vieressä, joten se näkyy aina kentän kanssa (myös näppäimistön ollessa auki).
+  Matalalla ruudulla välit kapenevat; laatikko pitää vähintään 6rem:n korkeuden. Kansio näkyy nimen alla. Vain tällä
+  sivulla viewport-vihje `interactive-widget=resizes-content` (Android pienentää sivun näppäimistön yläpuolelle).
+- Kun Ilmari vastaa, sivu päivittyy 5 s välein ja laatikko palaa joka kerta uusimpaan viestiin (ilman skriptiä
+  vierityskohtaa ei voi säilyttää). Linkki "Selaa tai kirjoita rauhassa" lopettaa päivityksen; "Päivitä" hakee
+  vastauksen.
+- "+ Uusi keskustelu" (`POST /ilmari/saie`, reitti oli jo gatewayssa) ja linkki "Keskustelut (N)" näkyvät aina, myös
+  kun Ilmari vastaa ja kun keskustelua ei voi lukea: lomakkeessa on vain piilokenttä, joten 5 s:n päivitys toimii.
+- Rikkinäinen tai liian suuri keskustelujen lista ei enää kaada sivua: viestit näkyvät, ja listassa lukee "Keskustelujen
+  listaa ei voi nyt näyttää." Väärä omistaja tai linkki kaataa sivun kuten ennen. Nykyinen keskustelu on aina se, joka
+  sivulla näkyy (viestit.json), vaikka lista olisi hetken jäljessä.
+- Lista `/hub/keskustelu?lista=1` (vain arvo 1 kelpaa): keskustelut kansioittain; nykyisen keskustelun kansio ja
+  kansiottomat auki, muut kansiot (yöajot, Telegram) ja arkisto kiinni; nykyinen keskustelu on linkki takaisin.
+  Kansiot näkyvät muodossa "Kansio: X", jotta kansio nimeltä "Arkisto" ei näytä listan omalta arkistolta.
+  Osio "Tämä keskustelu": nimi, kansio ja arkistointi. Lista ei päivity koskaan.
+- Sana "säie" pois näkyvistä, myös lukijan virheteksteistä (varanimi on nyt "Keskustelu N"). Laatikon alussa
+  "Näkyvissä 50 uusinta viestiä, kaikkiaan N", kun gateway ei julkaise kaikkia.
+- AGENTS.md: urakoitsija saa pushata, tehdä PR:n, yhdistää ja asentaa tilatun työn, jos istunnon oikeudet sallivat.
+- Testit: 741 passed, 51 skipped (ilman selainryhmää ja shellcheckiä). Uusi selaintesti (vieritys alkaa alimmasta
+  viestistä; 320x568, 390x844, 1280x900 ja näppäimistö auki 390x450) ohittuu ilman Playwrightia; samat tarkistukset
+  ajettu Playwrightin chrome-headless-shellillä oikeissa ko'oissa.
+- Tarkistamatta: Safari (iPhone) ja Firefox. Katso puhelimella asennuksen jälkeen.
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`. Gateway ei muutu.
+
 ## Päivitys 21.11.2026: Promptit ja säännöt, haara `promptit-ja-saannot`
 
 - Uusi sivu **Promptit ja säännöt** `/hub/kehotteet` Asetusten alla (Asetukset → Muut): jokainen teksti, jonka aiops
