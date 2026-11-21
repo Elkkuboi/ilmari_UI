@@ -130,7 +130,9 @@ def test_tuotannossa_toivelomake_gatewaylle(tmp_path):
     assert not lomake.button.has_attr("disabled") and "Töitä ei voi lukea." in r.text
 
 
-def test_tuotannossa_toivelomake_pois_kaytosta_kun_tyo_kesken(tmp_path, monkeypatch):
+def test_tuotannossa_toivelomake_kaytossa_vaikka_tyo_kesken(tmp_path, monkeypatch):
+    """aiops ADR-0033 pala 4: käsien töitä voi olla monta yhtä aikaa, joten kesken oleva työ ei lukitse lomaketta
+    (gateway kieltäytyy itse, jos paikat ovat täynnä)."""
     k = tmp_path / "keskustelu"
     k.mkdir()
     (k / "viestit.json").write_text(json.dumps({"muoto": "aiops-keskustelu-v1", "paivitetty": "2026-11-19T01:00:00+00:00",
@@ -140,7 +142,7 @@ def test_tuotannossa_toivelomake_pois_kaytosta_kun_tyo_kesken(tmp_path, monkeypa
     with tuotanto(tmp_path) as client:
         r = client.get("/kehita", headers=OTSAKKEET)
     lomake = BeautifulSoup(r.text, "html.parser").find("form", action="https://tyoasema.test/kehita")
-    assert lomake.button.has_attr("disabled") and "Työ 44 on kesken; yksi työ kerrallaan." in r.text
+    assert not lomake.button.has_attr("disabled") and "yksi työ kerrallaan" not in r.text
 
 
 def test_tuotannossa_toimet_samoilla_linkeilla_ja_lomakkeilla(tmp_path, monkeypatch):

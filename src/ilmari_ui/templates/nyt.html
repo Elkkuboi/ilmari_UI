@@ -10,7 +10,8 @@
 {% if tilarivi is none %}
   <p class="empty">Ilmarin tila ei ole saatavilla tässä ympäristössä.</p>
 {% else %}
-  {% set varattu = m and (m.dsh_tyo or m.yoajo) %}
+  {#- Töihin nyt ei odota käsien töitä (aiops ADR-0033 pala 4): vain vuoro tai käynnissä oleva rajatesti varaa #}
+  {% set varattu = m and (m.yoajo or (m.dsh_tyo and rajatesti_kaynnissa)) %}
   {#- Vapaa, mutta työ on kesken: pääsana kertoo työn, ei "Vapaa" #}
   {% set tyo_kesken = m and m.dsh_tyo and tilarivi.savy == 'success' %}
   <div class="state">
@@ -29,7 +30,7 @@
 {% if toihin_rajatesti and tilarivi.toihin %}
   <p class="note" role="status">Rajatesti ajetaan ensin (noin minuutti). Työvuoro alkaa sen jälkeen itsestään.</p>
 {% elif tilarivi.toihin and varattu %}
-  <p class="muted small">{% if m.dsh_tyo and rajatesti_kaynnissa %}Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään.{% elif m.dsh_tyo %}Töihin nyt toimii, kun työ {{ m.dsh_tyo }} on valmis.{% else %}Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</p>
+  <p class="muted small">{% if m.dsh_tyo and rajatesti_kaynnissa %}Rajatesti on käynnissä. Jos painoit jo Töihin nyt, vuoro alkaa sen jälkeen itsestään.{% else %}Töihin nyt toimii, kun yöajo on päättynyt.{% endif %}</p>
 {% endif %}
 {% endif %}
 </section>

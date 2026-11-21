@@ -13,7 +13,7 @@
   {% set a = asetukset %}
   {% if a is none %}<p class="empty">Asetuksia ei voi lukea; tallennus korvaa ne.</p>{% endif %}
   {% call lomake('/ilmari/asetukset', 'actions') %}<label class="inline"><input type="checkbox" name="yoajo_paalla" value="1"{% if a is none or a.paalla %} checked{% endif %}> Yöajo päällä</label><label class="inline" for="yoajo-kello">Alkaa klo <input id="yoajo-kello" type="time" name="yoajo_kello" value="{{ a.kello if a else '02:00' }}" step="60" required></label><button type="submit">Tallenna</button>{% endcall %}
-  <p class="muted small">Kesto enintään 3 h. Alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten.{% if tilanne and tilanne.yoajo_viimeisin %} Edellinen {{ tilanne.yoajo_viimeisin[8:10]|int }}.{{ tilanne.yoajo_viimeisin[5:7]|int }}.{% endif %}</p>
+  <p class="muted small">Kesto enintään 5 h. Alkaa vain, jos rajatesti on läpäisty alle 26 tuntia sitten.{% if tilanne and tilanne.yoajo_viimeisin %} Edellinen {{ tilanne.yoajo_viimeisin[8:10]|int }}.{{ tilanne.yoajo_viimeisin[5:7]|int }}.{% endif %}</p>
 {% endif %}
 </section>
 {% if toiminta is not none %}
@@ -75,8 +75,7 @@
   {% if r.hylatyt %}<ul class="rows">{% for k in r.hylatyt %}<li><code class="stop">{{ k.nimi }}</code> ({{ k.odotus_teksti }}){% if k.havainto %}<br><small class="muted">{{ k.havainto }}</small>{% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endif %}
 {% if ohjaus and valmis %}
-  <div class="actions">{% call lomake('/ilmari/rajatesti') %}<button type="submit"{% if malli and malli.dsh_tyo %} disabled{% endif %}>Aja rajatesti nyt</button>{% endcall %}</div>
-  {% if malli and malli.dsh_tyo %}<p class="muted small">Rajatestin voi ajaa, kun työ {{ malli.dsh_tyo }} on valmis.</p>{% endif %}
+  <div class="actions">{% call lomake('/ilmari/rajatesti') %}<button type="submit">Aja rajatesti nyt</button>{% endcall %}</div>
 {% endif %}
 {% if tilanne and tilanne.rajatesti and tilanne.rajatesti.kohdat %}
   <details class="fold"><summary>Kaikki kohdat ({{ tilanne.rajatesti.kohdat|length }})</summary>

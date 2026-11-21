@@ -10,10 +10,8 @@
 {% if seuranta %}
   <p><a href="{{ url('/hub/kehita', kirjoita=1) }}">Kirjoita toive</a></p>
 {% else %}
-  {% set kesken = malli and malli.dsh_tyo %}
   {% call lomake('/kehita') %}<label for="toive">Mitä haluat muuttaa?</label><textarea id="toive" name="toive" rows="4" maxlength="4000" required placeholder="Esim. Lisää päiväkirjaan aterioiden poisto.">{{ toive }}</textarea>
-  <div class="form-row"><label class="inline" for="lahde">Kohde <select id="lahde" name="lahde">{% for nimi, kuvaus in lahteet %}<option value="{{ nimi }}">{{ kuvaus }}</option>{% endfor %}</select></label><button class="btn--primary" type="submit"{% if kesken %} disabled{% endif %}>Jätä toive</button></div>
-  {% if kesken %}<p class="muted small">Työ {{ malli.dsh_tyo }} on kesken; yksi työ kerrallaan.</p>{% endif %}{% endcall %}
+  <div class="form-row"><label class="inline" for="lahde">Kohde <select id="lahde" name="lahde">{% for nimi, kuvaus in lahteet %}<option value="{{ nimi }}">{{ kuvaus }}</option>{% endfor %}</select></label><button class="btn--primary" type="submit">Jätä toive</button></div>{% endcall %}
 {% endif %}
 </section>
 {% else %}
