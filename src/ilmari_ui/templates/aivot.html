@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import lomake with context %}
+{% block sisalto %}
+{#- Aivojen koodi (aiops ADR-0033 pala 7). Kaikki asentajan tilan teksti on dataa: koodattuna, ei Markdownia. Kielletty
+    merkki piilottaa vain sen kentän. Lukko ja palautukset ovat lomakkeita gatewaylle (paluu=hub); ne näkyvät myös,
+    kun tilaa ei voi lukea, mutta eivät, kun itsepäivitys ei ole käytössä. #}
+{% set kielletty = 'ei voi näyttää (kielletty merkki)' %}
+<a class="back" href="{{ url('/hub/asetukset') }}#aivot">Asetukset</a>
+<section aria-labelledby="h-aivokoodi">
+  <h1 id="h-aivokoodi" class="label">Aivojen koodi{% if a and a.aika %} <span class="aside">päivitetty {{ lyhyt_aika(a.aika) }}</span>{% endif %}</h1>
+{% if a is none %}
+  <p class="empty">Aivojen tila ei ole saatavilla tässä ympäristössä.</p>
+{% elif a.tila == 'not_published' %}
+  <p class="empty">{{ a.viesti }}</p>
+{% else %}
+  {% if a.tila == 'error' %}<p class="empty">{{ a.viesti }}</p>{% endif %}
+  {% if a.tila == 'ready' %}
+  <p id="kaytossa">Käytössä: {% if a.aktiivinen is none %}<span class="muted">ei voi näyttää</span>{% elif a.aktiivinen.tehdas %}alkuperäinen{% else %}Ilmarin versio <code>{{ a.aktiivinen.lyhyt }}</code>{% if a.aktiivinen.aika %} · {{ lyhyt_aika(a.aktiivinen.aika) }}{% endif %}{% endif %}</p>
+  {% if a.kesken %}<p class="warn" id="kesken">Kesken: {{ a.kesken.teksti }}{% if a.kesken.lyhyt %} ({{ 'alkuperäinen' if a.kesken.versio == 'tehdas' else 'versio ' ~ a.kesken.lyhyt }}){% endif %}{% if a.kesken.aika %}, alkoi {{ lyhyt_aika(a.kesken.aika) }}{% endif %}. Sivu päivittyy itsestään.</p>{% endif %}
+  {% endif %}
+  {#- Lukko estää vain Ilmarin omat käyttöönotot (asennus ja palautus omaan koodiin); sinun palautuksesi toimivat aina. #}
+  {% if a.lukittu is none %}
+  <div class="toimirivi"><span id="lukko">Lukon tilaa ei voi lukea.</span>{% call lomake('/ilmari/aivot/lukko') %}<input type="hidden" name="lukittu" value="1"><button class="btn--quiet" type="submit">Lukitse</button>{% endcall %}{% call lomake('/ilmari/aivot/lukko') %}<input type="hidden" name="lukittu" value="0"><button class="btn--quiet" type="submit">Avaa lukko</button>{% endcall %}</div>
+  {% else %}
+  {% call lomake('/ilmari/aivot/lukko', 'toimirivi') %}<span id="lukko">{{ 'Lukittu: Ilmari ei voi ottaa omaa koodiaan käyttöön.' if a.lukittu else 'Ilmari saa ottaa oman koodinsa käyttöön.' }}</span><input type="hidden" name="lukittu" value="{{ '0' if a.lukittu else '1' }}"><button class="btn--quiet" type="submit">{{ 'Avaa lukko' if a.lukittu else 'Lukitse' }}</button>{% endcall %}
+  {% if a.lukko %}<p class="small muted" id="lukitsija">Lukitsi {{ a.lukko.tekija }}{% if a.lukko.aika %} {{ lyhyt_aika(a.lukko.aika) }}{% endif %}{% if a.lukko.kuka == 'vahti' %}: {{ a.lukko.syy if a.lukko.syy is not none else kielletty }}{% endif %}</p>{% endif %}
+  {% endif %}
+  {% if a.tila == 'ready' %}
+  {% set r = a.asennukset %}
+  <p class="small" id="asennuksia">{% if r is none %}Asennusrajaa ei voi näyttää.{% elif r.jaljella %}Asennuksia jäljellä {{ r.jaljella }}/{{ r.max }} vuorokaudessa.{% else %}Asennuksia ei ole jäljellä ({{ r.max }} vuorokaudessa){% if r.seuraava %}; seuraava vapautuu {{ lyhyt_aika(r.seuraava) }}{% endif %}.{% endif %}</p>
+  {% if a.vahti_virhe %}<p class="small muted" id="vahti">Vahdin viimeisintä tointa ei voi näyttää.</p>
+  {% elif a.vahti %}{% set v = a.vahti %}<p class="small" id="vahti">Vahti {{ lyhyt_aika(v.aika) }}: {{ v.toimi if v.toimi is not none else 'toimi ' ~ kielletty }}{% if v.lyhyt %} (versio <code>{{ v.lyhyt }}</code>){% endif %}. Syy: {{ v.syy if v.syy is not none else kielletty }}.{% if not v.uudelleen_ok %} Uudelleenkäynnistys: {{ v.uudelleenkaynnistys if v.uudelleenkaynnistys is not none else kielletty }}.{% endif %}</p>{% endif %}
+  {% endif %}
+  {#- Palauta edellinen vain, kun edellinen on tiedossa (tai sitä ei voi lukea); alkuperäinen aina, paitsi kun se on jo
+      käytössä eikä mikään ole kesken. Kesken olevan asennuksen aikana käytössä näkyy vielä vanha versio. #}
+  {% set edellinen = a.tila == 'error' or a.edellinen or a.edellinen_virhe %}
+  {% set alkuperainen = a.tila == 'error' or a.aktiivinen is none or not a.aktiivinen.tehdas or a.kesken %}
+  {% if edellinen or alkuperainen %}
+  {% if a.edellinen %}<p class="small muted" id="edellinen">Edellinen: versio <code>{{ a.edellinen[:12] }}</code></p>{% endif %}
+  <div class="actions" id="palautus">{% if edellinen %}{% call lomake('/ilmari/aivot/palauta') %}<input type="hidden" name="kohde" value="edellinen"><button class="btn--quiet" type="submit">Palauta edellinen</button>{% endcall %}{% endif %}{% if alkuperainen %}{% call lomake('/ilmari/aivot/palauta') %}<input type="hidden" name="kohde" value="tehdas"><input type="hidden" name="lukitse" value="1"><button class="btn--stop taittuva" type="submit">Palauta alkuperäinen ja lukitse</button>{% endcall %}{% endif %}</div>
+  {% endif %}
+{% endif %}
+</section>
+{% if a and a.tila == 'ready' %}
+<section aria-labelledby="h-versiot">
+  <h2 id="h-versiot" class="label">Versiot <span class="aside">uusin ensin</span></h2>
+{% if a.versiot is none %}
+  <p class="empty">Versioita ei voi nyt näyttää.</p>
+{% elif not a.versiot %}
+  <p class="empty">Ilmari ei ole vielä ottanut omaa koodiaan käyttöön.</p>
+{% else %}
+  <ol class="rows versiot">{% for v in a.versiot %}<li>
+  {%- if v is none %}<p class="muted">Tätä riviä ei voi näyttää.</p>
+  {%- else %}
+    <div><time datetime="{{ v.aika }}">{{ lyhyt_aika(v.aika) }}</time> · {{ v.teko }}{% if v.kuka != 'vahti' %} · {{ v.tekija }}{% endif %} <span class="tag {{ v.savy }}">{{ v.tila }}</span>{% if v.hylatty and v.kaytossa %} <span class="tag stop">hylätty</span>{% endif %}</div>
+    <p class="small">{% if v.tehdas %}alkuperäinen{% else %}versio <code>{{ v.lyhyt }}</code>{% endif %}</p>
+    {#- Onnistuneen asennuksen syy on aina terveystarkistuksen kuittaus: se jätetään pois. #}
+    {% if v.syy is none %}<p class="small muted">Syy {{ kielletty }}.</p>{% elif v.syy and v.tulos != 'asennettu' %}<p class="small{% if not v.syy_tarkea %} muted{% endif %}">{% if v.syy_tarkea %}Syy: {% endif %}{{ v.syy }}</p>{% endif %}
+    {% if v.muutokset %}<ul class="small">{% for m in v.muutokset %}<li><code>{{ m.polku }}</code>{% if m.laji != 'muutettu' %} {{ m.laji }}{% endif %} <span class="nowrap"><span class="ok">+{{ m.lisatty }}</span> <span class="stop">−{{ m.poistettu }}</span></span>{% if m.koko_teksti %} · <span class="nowrap">{{ m.koko_teksti }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if v.diff is none %}<p class="small muted">Muutoksia {{ kielletty }}.</p>
+    {% elif v.diff_rivit %}<details class="fold"><summary>Muutokset alkuperäiseen (+{{ v.lisatty }} −{{ v.poistettu }} riviä{% if v.diff_katkaistu %}, katkaistu{% endif %})</summary><pre class="code diff">{% for laji, rivi in v.diff_rivit %}<span class="{{ laji }}">{{ rivi }}</span>
+{% endfor %}{% if v.diff_leikattu %}<span class="hunk">[… loppu leikattu …]</span>{% endif %}</pre></details>
+    {% elif v.diff_katkaistu %}<p class="small muted">Muutokset eivät mahtuneet tähän.</p>
+    {% elif v.varastossa %}<p class="small muted">Sama kuin alkuperäinen.</p>
+    {% elif not v.tehdas %}<p class="small muted">Versiota ei ole enää tallessa.</p>{% endif %}
+    {% if v.tiedostot and not v.muutokset_taydet %}<details class="fold"><summary>Kaikki tiedostot ({{ v.tiedostot|length }})</summary><ul class="small">{% for t in v.tiedostot %}<li>{% if t.polku is none %}<span class="muted">nimi {{ kielletty }}</span>{% else %}<code>{{ t.polku }}</code>{% endif %} · {{ t.koko_teksti }}</li>{% endfor %}</ul></details>{% endif %}
+  {%- endif %}
+  </li>{% endfor %}</ol>
+{% endif %}
+</section>
+<section aria-labelledby="h-pyynnot">
+  <h2 id="h-pyynnot" class="label">Pyynnöt</h2>
+{% if a.pyynnot is none %}
+  <p class="empty">Pyyntöjä ei voi nyt näyttää.</p>
+{% elif not a.pyynnot %}
+  <p class="empty">Ei pyyntöjä.</p>
+{% else %}
+  <details class="fold"><summary>{{ a.pyynnot|length }} viimeisintä</summary>
+  <ol class="rows">{% for p in a.pyynnot %}<li>
+  {%- if p is none %}<span class="muted">Tätä pyyntöä ei voi näyttää.</span>
+  {%- else %}<time datetime="{{ p.aika }}">{{ lyhyt_aika(p.aika) }}</time> · {{ p.tekija }}: {{ p.toimi_teksti }} <span class="tag {{ p.savy }}">{{ p.tulos_teksti }}</span>
+    {%- if p.syy is none %}<br><small class="muted">Syy {{ kielletty }}.</small>{% elif p.syy %}<br><small class="muted">{{ p.syy }}</small>{% endif %}
+  {%- endif %}</li>{% endfor %}</ol>
+  </details>
+{% endif %}
+</section>
+{% endif %}
+{% endblock %}

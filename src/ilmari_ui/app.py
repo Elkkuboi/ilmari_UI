@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import aivot as aivot_lukija
 from . import dokumentit as dokumentit_lukija
 from . import jarjestelma as jarjestelma_lukija
 from . import kehitys
@@ -51,6 +52,7 @@ ODOTTAA_MAX = 5
 NYT_PAIVITYS = "30"
 TYOT_PAIVITYS = "15"
 KESKUSTELU_PAIVITYS = "5"
+AIVOT_PAIVITYS = "15"      # aivojen asennus tai palautus kesken (terveystarkistus 60-120 s)
 # Sivu, jolla on muokattava kenttä, ei päivity itsestään: selain tyhjentää kesken kirjoitetun tekstin (19.11.2026).
 # Itsestään päivittyy vain odotus- tai seurantatila ilman kenttää; kentän saa näkyviin parametrilla kirjoita=1.
 MUOKATTAVA = re.compile(rb'<textarea\b|<select\b|<input\b(?![^>]*\btype="hidden")', re.IGNORECASE)
@@ -647,6 +649,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return virhe(request, 404, "Promptia ei löydy", "Tällaista promptia ei ole.")
         return render(request, "kehote", k["otsikko"], "asetukset", k=k, lukittu=luettelo.lukittu,
                       korkeus=kehotteet_lukija.korkeus(k["teksti"] or ""))
+
+    # --- Aivojen koodi (Asetusten alla) -------------------------------------------------------------------------
+
+    def lue_aivot(request: Request):
+        """Asentajan julkaisema tila Ilmarin omista aivoista (aiops ADR-0033 pala 7). Tuotannossa vain rootin."""
+        if esimerkki(request):
+            return aivot_lukija.lue_aivot(aivot_lukija.ESIMERKKI)
+        if settings.identity is not None:
+            return aivot_lukija.lue_aivot(aivot_lukija.OLETUS, omistajat=aivot_lukija.OMISTAJAT)
+        return None
+
+    @app.get("/hub/aivot", response_class=HTMLResponse)
+    async def aivot_sivu(request: Request):
+        """Mitkä aivot ovat käytössä, lukko, asennusraja, vahdin viimeisin toimi, versiot muutoksineen ja pyynnöt.
+        Lukko ja palautukset ovat lomakkeita gatewaylle (paluu=hub). Päivittyy itsestään vain, kun toimi on kesken."""
+        a = lue_aivot(request)
+        response = render(request, "aivot", "Aivojen koodi", "asetukset", a=a)
+        if a is not None and a.tila == "ready" and a.kesken is not None:
+            paivity(response, AIVOT_PAIVITYS)
+        return response
 
     # --- Vanhat osoitteet ja virheet ----------------------------------------------------------------------------
 

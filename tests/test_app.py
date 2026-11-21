@@ -24,7 +24,7 @@ from ilmari_ui.config import parse_config
 # (osoite, otsikko, aktiivinen valikkolinkki)
 SIVUT = (("/hub", "Nyt", "Nyt"), ("/hub/keskustelu", "Keskustelu", "Keskustelu"), ("/hub/kehita", "Työt", "Työt"),
          ("/hub/asetukset", "Asetukset", "Asetukset"), ("/hub/dokumentit", "Dokumentit", "Asetukset"),
-         ("/hub/kehotteet", "Promptit ja säännöt", "Asetukset"),
+         ("/hub/kehotteet", "Promptit ja säännöt", "Asetukset"), ("/hub/aivot", "Aivojen koodi", "Asetukset"),
          ("/hub/keskustelu?lista=1", "Keskustelut", "Keskustelu"))
 VALIKKO = [("Nyt", "/hub"), ("Keskustelu", "/hub/keskustelu"), ("Työt", "/hub/kehita"), ("Asetukset", "/hub/asetukset")]
 # (kohde, ankkuri): kysely säilyy ja ankkuri tulee sen perään (vanha gateway palaa /hub/mallit-osoitteeseen)
