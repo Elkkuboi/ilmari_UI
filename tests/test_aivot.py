@@ -220,8 +220,7 @@ def test_diffin_tyhjat_kirjaimet_naytetaan_koodeina(tmp_path):
     assert tyhja not in v["diff"] and chr(0x2800) not in v["diff"]
     assert "+\\u3164 = __import__('os')\n+X = \\u3164\\u2800\n" in v["diff"]
     assert ("add", "+\\u3164 = __import__('os')") in v["diff_rivit"] and v["lisatty"] == 3
-    assert aivot.nakyviksi("ääkköset ja " + "\U0001F469" + chr(0x200D) + "\U0001F4BB") == (
-        "ääkköset ja " + "\U0001F469" + chr(0x200D) + "\U0001F4BB")
+    assert aivot.nakyviksi("ääkköset ja " + "\U0001F469" + "\U0001F4BB") == "ääkköset ja " + "\U0001F469" + "\U0001F4BB"
 
 
 def test_vanha_tila():
@@ -254,8 +253,8 @@ HUONOT_TIEDOSTOT = [
 @pytest.mark.parametrize("data", HUONOT_TIEDOSTOT)
 def test_kelvoton_tiedosto_hylataan(tmp_path, data):
     a = lue(tmp_path, data)
-    assert a.tila == "error" and a.viesti.startswith("Aivojen tilaa ei voi lukea: ")
-    assert a.versiot == () and a.aktiivinen is None and "/" not in a.viesti
+    assert a.tila == "error" and a.viesti == "Aivojen tilaa ei voi lukea." and a.lisatieto
+    assert a.versiot == () and a.aktiivinen is None and "/" not in a.lisatieto
 
 
 @pytest.mark.parametrize("raaka", [b"{rikki", b"[]", b'{"muoto": 1, "muoto": 1}', b'{"lukittu": NaN}', b"\xff",
@@ -274,7 +273,7 @@ def test_lukko_nakyy_vaikka_tiedosto_on_rikki(tmp_path):
 def test_vaara_omistaja_linkki_ja_liian_suuri_hylataan(tmp_path, monkeypatch):
     hak = kirjoita(tmp_path / "a", tila())
     a = lue_aivot(hak, omistajat=frozenset({os.getuid() + 1}))
-    assert a.tila == "error" and "omistaja" in a.viesti
+    assert a.tila == "error" and "omistaja" in a.lisatieto
     linkki = tmp_path / "linkki"
     linkki.mkdir()
     (linkki / "tila.json").symlink_to(hak / "tila.json")
@@ -284,7 +283,7 @@ def test_vaara_omistaja_linkki_ja_liian_suuri_hylataan(tmp_path, monkeypatch):
     assert aivot.RAJA == 512 * 1024
     monkeypatch.setattr(aivot, "RAJA", 100)
     a = lue_aivot(hak)
-    assert a.tila == "error" and "lukurajan" in a.viesti
+    assert a.tila == "error" and "lukurajan" in a.lisatieto
     monkeypatch.setattr(aivot, "RAJA", 512 * 1024)
     kova = tmp_path / "kova"
     kova.mkdir()
@@ -422,11 +421,115 @@ def test_kielletty_merkki_diffissa_piilottaa_vain_diffin(tmp_path, huono):
 
 
 def test_sallitut_merkit_kelpaavat(tmp_path):
-    """Sarkain ja rivinvaihto diffissä, emojin ZWJ, ääkköset ja asentajan näkyviksi muuttamat koodit kelpaavat."""
-    diff = DIFF.replace("+X = 2\n", "+X = 2\t# ok " + "\U0001F469" + chr(0x200D) + "\U0001F4BB" + " \\u202e\n")
-    syy = "ehdokas hylätty: nimi ei kelpaa: x\\u202e.py (sallittu [a-z_]) " + "\U0001F469" + chr(0x200D) + "\U0001F4BB"
+    """Sarkain ja rivinvaihto diffissä, emojin ZWJ yksirivisessä, ääkköset, yhdistävä aksentti ja asentajan näkyviksi
+    muuttamat koodit kelpaavat. Diffissä ZWJ näkyy koodina (näkymätön ero merkkijonossa)."""
+    emoji = "\U0001F469" + chr(0x200D) + "\U0001F4BB"
+    diff = DIFF.replace("+X = 2\n", "+X = 2\t# ok e" + chr(0x301) + " " + emoji + " \\u202e\n")
+    syy = "ehdokas hylätty: nimi ei kelpaa: x\\u202e.py (sallittu [a-z_]) " + emoji
     a = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": diff, "syy": syy}]))
-    assert a.versiot[0]["diff"] == diff and a.versiot[0]["syy"] == syy
+    assert a.versiot[0]["diff"] == diff.replace(chr(0x200D), "\\u200d") and a.versiot[0]["syy"] == syy
+    assert ("add", "+X = 2\t# ok e" + chr(0x301) + " \U0001F469\\u200d\U0001F4BB \\u202e") in a.versiot[0]["diff_rivit"]
+
+
+# --- Näkymättömät merkit: diffissä koodeina, yksirivisessä kenttä piiloon -----------------------------------------
+
+NAKYMATTOMAT_NAYTTEET = {"VS1": 0xFE00, "VS16": 0xFE0F, "VS17": 0xE0100, "VS256": 0xE01EF, "MFVS1": 0x180B,
+                         "MFVS4": 0x180F, "KHMER_AQ": 0x17B4, "KHMER_AA": 0x17B5, "CGJ": 0x034F, "HANGUL": 0x3164,
+                         "HANGUL_CHO": 0x115F, "HALFWIDTH": 0xFFA0, "BRAILLE": 0x2800, "VARATTU_TAG": 0xE0002,
+                         "VARATTU_FFF0": 0xFFF0}
+
+
+@pytest.mark.parametrize("nimi", sorted(NAKYMATTOMAT_NAYTTEET))
+def test_nakymaton_merkki_nakyy_diffissa_koodina(tmp_path, nimi):
+    """Asentaja päästää nämä läpi (ne eivät ole ohjaus- eivätkä muotoilumerkkejä), ja osa kelpaa Pythonin nimiin:
+    "-if not sallittu:" ja "+if not sallittu" + U+FE00 + ":" näyttäisivät samalta. Diffissä ne ovat koodeja."""
+    merkki = chr(NAKYMATTOMAT_NAYTTEET[nimi])
+    diff = DIFF.replace("+X = 2\n", "+X" + merkki + " = 2\n")
+    v = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": diff}])).versiot[0]
+    koodi = f"\\u{ord(merkki):04x}"
+    assert merkki not in v["diff"] and ("add", "+X" + koodi + " = 2") in v["diff_rivit"]
+    assert v["kaytossa"] and v["lisatty"] == 2 and [m["polku"] for m in v["muutokset"]] == ["ceo.py", "kyvyt.py",
+                                                                                              "vanha.md"]
+
+
+@pytest.mark.parametrize("nimi", sorted(NAKYMATTOMAT_NAYTTEET))
+def test_nakymaton_merkki_piilottaa_yksirivisen_kentan(tmp_path, nimi):
+    merkki = chr(NAKYMATTOMAT_NAYTTEET[nimi])
+    tiedostot = [{"polku": "ok.py", "koko": 1}, {"polku": "x" + merkki + ".py", "koko": 2}]
+    a = lue(tmp_path, tila(versiot=[VERSIO_A | {"syy": "a" + merkki + "b", "tiedostot": tiedostot}],
+                           pyynnot=[PYYNTO | {"syy": "a" + merkki}]))
+    v = a.versiot[0]
+    assert v["syy"] is None and [t["polku"] for t in v["tiedostot"]] == ["ok.py", None] and v["kaytossa"]
+    assert a.pyynnot[0]["syy"] is None and a.pyynnot[0]["tulos"] == "asennettu"
+
+
+def test_nakymattomat_kattavat_pythonin_nakymattomat_nimimerkit():
+    """Joukko kattaa Unicoden Default_Ignorable_Code_Point-alueet; tavalliset kirjaimet ja merkit eivät ole siinä."""
+    for alku, loppu in ((0xFE00, 0xFE0F), (0xE0100, 0xE01EF), (0x180B, 0x180F), (0x17B4, 0x17B5), (0x200B, 0x200F),
+                        (0x2060, 0x206F), (0xE0000, 0xE0FFF), (0x115F, 0x1160)):
+        assert all(chr(o) in aivot.NAKYMATTOMAT for o in range(alku, loppu + 1)), hex(alku)
+    for merkki in ("a", "ä", "Ö", chr(0x430), chr(0x301), " ", "\t", chr(0xA0), "\U0001F469", chr(0x2764)):
+        assert merkki not in aivot.NAKYMATTOMAT and aivot.nakyviksi(merkki) == merkki
+    assert ("sallittu" + chr(0xFE00)).isidentifier() and aivot.nakyviksi("sallittu" + chr(0xFE00)) == "sallittu\\ufe00"
+
+
+def test_yksinainen_cr_piilottaa_diffin(tmp_path):
+    """Selain tekisi CR:stä rivinvaihdon: poistettu rivi näyttäisi lisätyltä. Asentaja koodaa CR:n, joten se on
+    virhe; vain diff jää pois. CRLF:kin hylätään, sillä asentaja jakaa rivit vain \\n:n kohdalta."""
+    for huono in ("-X = 1" + chr(13) + "+TURVALLINEN = True\n", "+X = 2" + chr(13) + "\n"):
+        v = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": DIFF.replace("+X = 2\n", huono)}])).versiot[0]
+        assert v["diff"] is None and v["diff_rivit"] == () and v["kaytossa"] and v["syy"] == VERSIO_A["syy"]
+    v = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": DIFF.replace("+X = 2\n", "+X = '\\u000d'\n")}])).versiot[0]
+    assert ("add", "+X = '\\u000d'") in v["diff_rivit"]                     # asentajan koodaama CR kelpaa
+
+
+# --- Väärä tyyppi ei kaada lukijaa -------------------------------------------------------------------------------
+
+VAARAT_TYYPIT = [
+    ("aktiivinen", lambda x: {"versio": A_ID, "aika": None, "kuka": x}, lambda a: a.aktiivinen is None),
+    ("lukko", lambda x: {"aika": AIKA, "kuka": x, "syy": None}, lambda a: a.lukittu is True and a.lukko is None),
+    ("kesken", lambda x: {"toimi": x, "versio": None, "aika": None}, lambda a: a.kesken == aivot.KESKEN_TUNTEMATON),
+    ("versiot", lambda x: [VERSIO_A | {"tulos": x}, VERSIO_B], lambda a: a.versiot[0] is None and a.versiot[1]),
+    ("versiot", lambda x: [VERSIO_A | {"kuka": x}, VERSIO_B], lambda a: a.versiot[0] is None and a.versiot[1]),
+    ("pyynnot", lambda x: [PYYNTO | {"toimi": x}, HYLATTY_PYYNTO], lambda a: a.pyynnot[0] is None and a.pyynnot[1]),
+    ("pyynnot", lambda x: [PYYNTO | {"kuka": x}, HYLATTY_PYYNTO], lambda a: a.pyynnot[0] is None and a.pyynnot[1]),
+    ("pyynnot", lambda x: [PYYNTO | {"tulos": x}, HYLATTY_PYYNTO], lambda a: a.pyynnot[0] is None and a.pyynnot[1]),
+    ("vahti", lambda x: VAHTI | {"toimi": x}, lambda a: a.vahti is None and a.vahti_virhe),
+]
+
+
+@pytest.mark.parametrize("arvo", [[], ["elias"], {}, {"asenna": 1}, 1.5], ids=["lista", "lista1", "olio", "olio1", "luku"])
+@pytest.mark.parametrize("kentta,tee,ehto", VAARAT_TYYPIT, ids=[f"{k}-{i}" for i, (k, _, _) in enumerate(VAARAT_TYYPIT)])
+def test_vaara_tyyppi_luetteloarvossa_piilottaa_vain_osan(tmp_path, kentta, tee, ehto, arvo):
+    """Lista tai olio toimen, tuloksen tai tekijän paikalla kaatoi ennen sivun (TypeError: unhashable). Nyt vain osa
+    piiloon; asentajan varaston rikkinäinen rivi julkaistaan sellaisenaan, joten tämä voi tulla oikeasta tiedostosta."""
+    muutos = {kentta: tee(arvo)} | ({"lukittu": True} if kentta == "lukko" else {})
+    a = lue(tmp_path, tila(**muutos))
+    assert a.tila == "ready" and ehto(a)
+    assert (a.lukittu is True) if kentta == "lukko" else (a.lukittu is False)
+    if kentta != "aktiivinen":
+        assert a.aktiivinen["versio"] == A_ID
+
+
+def test_hunkin_jattiluku_ei_kaada(tmp_path):
+    """Yli 4300 numeron rivimäärä kaatoi int():n (ValueError). Nyt otsake on vain meta-rivi; 9 numeroa kelpaa."""
+    jatti = "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -1," + "9" * 5000 + " +1 @@\n x\n"
+    a = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": jatti}, VERSIO_B]))
+    v = a.versiot[0]
+    assert v is not None and v["kaytossa"] and [laji for laji, _ in v["diff_rivit"]] == ["meta", "meta", "meta", "meta"]
+    iso = "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -1,999999999 +1,999999999 @@\n x\n+y\n"
+    v = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": iso}])).versiot[0]
+    assert [laji for laji, _ in v["diff_rivit"]] == ["meta", "meta", "hunk", "ctx", "add"] and v["lisatty"] == 1
+
+
+def test_odottamaton_virhe_on_virhetila(tmp_path, monkeypatch):
+    """Viimeinen keino: lukijan odottamaton poikkeus on virhetila (lukko luettuna), ei kaatuminen."""
+    def kaatuu(data):
+        raise RuntimeError("bugi")
+    monkeypatch.setattr(aivot, "tarkista", kaatuu)
+    a = lue(tmp_path, tila(lukittu=True))
+    assert a.tila == "error" and a.viesti == "Aivojen tilaa ei voi lukea." and a.lukittu is True
+    assert a.lisatieto == "Odottamaton sisältö (RuntimeError)."
 
 
 def test_tarkistus_ei_paasta_lapi_vierasta():

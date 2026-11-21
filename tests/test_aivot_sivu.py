@@ -174,7 +174,10 @@ def test_tuotannossa_rikkinainen_tiedosto_nayttaa_lukon_ja_palautuksen(tmp_path,
     r = sivu(tmp_path, monkeypatch, tila(muoto="aiops-aivot-tila-v9", lukittu=True))
     s = dom(r)
     assert r.status_code == 200 and lomakkeet(r) == [AVAA, EDELLINEN, ALKUPERAINEN]
-    assert "Aivojen tilaa ei voi lukea: " in s.find("main").get_text() and s.find(id="kaytossa") is None
+    assert s.find("main").find("p", class_="empty").get_text() == "Aivojen tilaa ei voi lukea."
+    miksi = s.find("main").find("details")
+    assert miksi.summary.get_text() == "Miksi" and miksi.p.get_text() == "Tuntematon muoto."
+    assert s.find(id="kaytossa") is None
     assert s.select("h2.label") == [] and "refresh" not in r.headers
     r = sivu(tmp_path, monkeypatch, b"{rikki")
     assert dom(r).find(id="lukko").get_text() == "Lukon tilaa ei voi lukea."

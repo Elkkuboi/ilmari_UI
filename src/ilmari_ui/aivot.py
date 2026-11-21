@@ -17,13 +17,19 @@ luetaan ensin, joten se näkyy myös, kun tiedosto on muuten rikki.
 
 Kaikki teksti on dataa, ja suuri osa siitä tulee Ilmarin ehdokkaasta: tiedostonimet, syyt (asentaja liittää niihin
 nimiä ja jäsentimen viestejä) ja diff. Pohja koodaa sen, eikä mitään piirretä Markdownina. Kielletty merkki
-(ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet; yksirivisessä myös tyhjältä näyttävät
-kirjaimet) piilottaa vain sen kentän ("ei voi näyttää"). Asentaja muuttaa nämä merkit näkyviksi koodeiksi (\\uXXXX),
-joten kunnollisessa tiedostossa niitä ei ole. Diffissä tyhjältä näyttävät kirjaimet muutetaan samoin koodeiksi
-(nakyviksi), koska ne kelpaavat Pythonin nimiin ja asentaja päästää ne läpi.
+(ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet; diffissä myös yksinäinen CR;
+yksirivisessä myös muut näkymättömät merkit NAKYMATTOMAT, emojin ZWJ:tä lukuun ottamatta) piilottaa vain sen kentän
+("ei voi näyttää"). Asentaja muuttaa ohjaus- ja muotoilumerkit näkyviksi koodeiksi (\\uXXXX), joten kunnollisessa
+tiedostossa niitä ei ole. Diffissä näkymättömät merkit (vaihtelun valitsimet, hangulin täytemerkit, ZWJ ja muut
+NAKYMATTOMAT) muutetaan samoin koodeiksi (nakyviksi), koska asentaja päästää ne läpi ja osa kelpaa Pythonin nimiin:
+muuten muutettu rivi voisi näyttää samalta kuin alkuperäinen.
 
 Vahti julkaisee tilan 2 min välein. Yli 10 min vanha tila tarkoittaa, ettei huolto ole käynnissä (vanha), ja sivu
 kertoo sen: silloin käytössä oleva versio ei välttämättä ole se, joka sivulla näkyy.
+
+Mikään tiedoston sisältö ei saa kaataa sivua, jolla on hätäjarru: luetteloarvon tyyppi tarkistetaan ennen
+jäsenyystestiä, hunkin rivimäärä on enintään 9 numeroa, osat ja rivit sietävät myös odottamattoman virheen, ja
+lue_aivot palauttaa viimeisenä keinona virhetilan (lukko ja palautus näkyvät silloinkin).
 """
 
 from __future__ import annotations
@@ -92,7 +98,22 @@ VAHDIN_TOIMI = "tehdasversio, hylkäys ja lukitus"     # aivohuollon kiinteä ku
 VAHDIN_TOIMI_TEKSTI = "otti alkuperäisen käyttöön, hylkäsi version ja lukitsi"
 _VERSIO = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _PYYNTO_ID = re.compile(r"[0-9]{1,18}\Z", re.ASCII)
-_HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@", re.ASCII)
+_HUNK = re.compile(r"@@ -\d{1,9}(?:,(\d{1,9}))? \+\d{1,9}(?:,(\d{1,9}))? @@", re.ASCII)
+_ZWJ = chr(0x200D)
+# Näkymättömät merkit: Unicoden Default_Ignorable_Code_Point (Unicode 15: muotoilumerkit, vaihtelun valitsimet,
+# hangulin täytemerkit, mongolin ja khmerin näkymättömät merkit, tagit ja niille varatut alueet) sekä tyhjä
+# pistekirjoitusmerkki. Osa kelpaa Pythonin nimiin (esimerkiksi U+FE00, U+E0100, U+180B, U+17B4, U+3164), joten
+# "sallittu" ja "sallittu" + U+FE00 ovat eri muuttujia, vaikka näyttävät samalta. Asentaja muuttaa koodeiksi vain
+# ohjaus- ja muotoilumerkit (paitsi ZWJ:n), joten loput tulevat diffissä sellaisinaan.
+_NAKYMATTOMAT_VALIT = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+                       (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x2800, 0x2800),
+                       (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8),
+                       (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF))
+NAKYMATTOMAT = frozenset(chr(o) for a, b in _NAKYMATTOMAT_VALIT for o in range(a, b + 1)) | _TYHJAT_KIRJAIMET
+# Odottamaton sisältö osassa tai rivillä: vain se osa piiloon (ei sivun kaatumista).
+_RIKKI = (ReadFailure, TypeError, ValueError, KeyError)
+# Onnistuneen palautuksen syy on pelkkä terveystarkistuksen kuittaus, kuten onnistuneen asennuksen: sitä ei näytetä.
+_KUITTAUS = re.compile(r"(?:tehdasversio|versio [0-9a-f]{12}) käytössä: terve\b")
 
 
 @dataclass(frozen=True)
@@ -115,6 +136,7 @@ class Aivot:
     versiot: tuple[dict[str, Any] | None, ...] | None = ()
     pyynnot: tuple[dict[str, Any] | None, ...] | None = ()
     edellinen_hylatty: bool = False   # asentaja ei palauta hylättyyn versioon: nappia ei tarjota
+    lisatieto: str | None = None      # virheen tekninen syy (sivulla taitettuna)
 
 
 # --- Kentät -----------------------------------------------------------------------------------------------------------
@@ -134,11 +156,16 @@ def _versio(arvo: Any, *, tyhja: bool = False) -> str | None:
     _virhe("Version tunniste ei kelpaa.")
 
 
+def _luettelosta(arvo: Any, sallitut: Any) -> bool:
+    """Luetteloarvo (toimi, tulos, tekijä): vain merkkijono voi olla jäsen. Lista tai olio ei kaada jäsenyystestiä."""
+    return type(arvo) is str and arvo in sallitut
+
+
 def _rivi(arvo: Any, raja: int) -> str | None:
-    """Yksirivinen teksti (syy, nimi): väärä tyyppi tai pituus on rivin virhe; kielletty tai tyhjältä näyttävä merkki
-    piilottaa vain tämän kentän (None)."""
+    """Yksirivinen teksti (syy, nimi): väärä tyyppi tai pituus on rivin virhe; kielletty tai näkymätön merkki piilottaa
+    vain tämän kentän (None). Emojin ZWJ sallitaan kuten gatewayssa."""
     teksti = _nakyva_teksti(arvo, raja)
-    return None if teksti is None or any(c in _TYHJAT_KIRJAIMET for c in teksti) else teksti
+    return None if teksti is None or any(c in NAKYMATTOMAT and c != _ZWJ for c in teksti) else teksti
 
 
 def _maara(arvo: Any, ylaraja: int) -> int:
@@ -148,12 +175,12 @@ def _maara(arvo: Any, ylaraja: int) -> int:
 
 
 def nakyviksi(teksti: str) -> str:
-    """Tyhjältä näyttävät merkit (hangulin täytemerkit, tyhjä pistekirjoitusmerkki, CGJ) näkyviksi koodeiksi
-    \\uXXXX, kuten asentaja tekee ohjausmerkeille. Useimmat niistä kelpaavat Pythonin nimiin, joten diffissä ne
-    näytetään eikä niitä piiloteta: muuten rivi, jolla on näkymätön nimi, näyttäisi tyhjältä."""
-    if not any(c in _TYHJAT_KIRJAIMET for c in teksti):
+    """Näkymättömät merkit (NAKYMATTOMAT, myös ZWJ) näkyviksi koodeiksi \\uXXXX, kuten asentaja tekee ohjausmerkeille.
+    Osa niistä kelpaa Pythonin nimiin, joten diffissä ne näytetään eikä niitä piiloteta: muuten rivi, jolla on
+    näkymätön ero, näyttäisi samalta kuin alkuperäinen."""
+    if teksti.isascii() or not any(c in NAKYMATTOMAT for c in teksti):
         return teksti
-    return "".join(f"\\u{ord(c):04x}" if c in _TYHJAT_KIRJAIMET else c for c in teksti)
+    return "".join(f"\\u{ord(c):04x}" if c in NAKYMATTOMAT else c for c in teksti)
 
 
 def vanha(a: Aivot, nyt: datetime) -> bool:
@@ -179,7 +206,7 @@ def koko_teksti(tavua: int) -> str:
 def _aktiivinen(a: Any) -> dict[str, Any]:
     _olio(a, AKTIIVINEN_KENTAT, "aktiivinen")
     versio = _versio(a["versio"])
-    if a["kuka"] is not None and a["kuka"] not in PYYTAJAT:
+    if a["kuka"] is not None and not _luettelosta(a["kuka"], PYYTAJAT):
         _virhe("Käytössä olevan version pyytäjä on tuntematon.")
     return {"versio": versio, "tehdas": versio == TEHDAS, "lyhyt": lyhyt(versio),
             "aika": _aika(a["aika"], tyhja=True), "kuka": a["kuka"]}
@@ -193,7 +220,7 @@ def _lukko(lukittu: bool, lukko: Any) -> dict[str, Any] | None:
         return None
     _olio(lukko, LUKKO_KENTAT, "lukko")
     kuka = lukko["kuka"]
-    if kuka is not None and kuka not in TEKIJAT:
+    if kuka is not None and not _luettelosta(kuka, TEKIJAT):
         _virhe("Lukitsija on tuntematon.")
     syy = None if lukko["syy"] is None else _rivi(lukko["syy"], SYY_MAX)
     return {"aika": _aika(lukko["aika"], tyhja=True), "kuka": kuka,
@@ -224,12 +251,12 @@ def _kesken(k: Any) -> dict[str, Any] | None:
         return None
     try:
         _olio(k, KESKEN_KENTAT, "kesken")
-        if k["toimi"] is not None and k["toimi"] not in KESKEN_TOIMET:
+        if k["toimi"] is not None and not _luettelosta(k["toimi"], KESKEN_TOIMET):
             _virhe("Keskeneräinen toimi on tuntematon.")
         versio = _versio(k["versio"], tyhja=True)
         return {"toimi": k["toimi"], "teksti": KESKEN_TOIMET.get(k["toimi"], "tuntematon toimi"), "versio": versio,
                 "lyhyt": None if versio is None else lyhyt(versio), "aika": _aika(k["aika"], tyhja=True)}
-    except ReadFailure:
+    except _RIKKI:
         return dict(KESKEN_TUNTEMATON)
 
 
@@ -316,7 +343,7 @@ def _versiorivi(v: Any, kaytossa: str | None, edellinen: str | None, nahty: set[
     merkintää vanhemmalta riviltä."""
     _olio(v, VERSIO_KENTAT, "versio")
     versio = _versio(v["versio"])
-    if v["kuka"] not in (*TEKIJAT, "?") or v["tulos"] not in TEOT:
+    if not _luettelosta(v["kuka"], (*TEKIJAT, "?")) or not _luettelosta(v["tulos"], TEOT):
         _virhe("Version tekijä tai tulos on tuntematon.")
     if any(type(v[k]) is not bool for k in ("diff_katkaistu", "varastossa", "hylatty")):
         _virhe("Version tiedot eivät ole totuusarvoja.")
@@ -324,6 +351,8 @@ def _versiorivi(v: Any, kaytossa: str | None, edellinen: str | None, nahty: set[
     if type(v["diff"]) is not str or len(v["diff"]) > DIFF_MAX:
         _virhe("Diff ei kelpaa.")
     diff = _nakyva_teksti(v["diff"], DIFF_MAX, rivinvaihdot=True)
+    if diff is not None and "\r" in diff:          # yksinäinen CR: selain tekisi siitä rivinvaihdon (asentaja koodaa sen)
+        diff = None
     if diff is not None:
         diff = nakyviksi(diff)
     aika, syy = _aika(v["aika"]), _rivi(v["syy"], SYY_MAX)
@@ -349,14 +378,21 @@ def _versiorivi(v: Any, kaytossa: str | None, edellinen: str | None, nahty: set[
     koot = {t["polku"]: t for t in tiedostot if t["polku"] is not None}
     muutokset = [m | {"koko_teksti": koot[m["polku"]]["koko_teksti"] if m["polku"] in koot and m["laji"] != "poistettu"
                       else None} for m in (osat["tiedostot"] if osat else [])]
+    # Katkaistusta diffistä puuttuvat tiedostot: niitä ei ehditty verrata, joten ne ovat voineet muuttua. Asentajan
+    # järjestykseen ei luoteta, joten mukana ovat kaikki versiossa olevat tiedostot, joita diffissä ei näy.
+    nahdyt = {m["polku"] for m in muutokset}
+    vertaamatta = ([t["polku"] for t in tiedostot if t["polku"] is not None and t["polku"] not in nahdyt]
+                   if osat and v["diff_katkaistu"] else [])
     return {"versio": versio, "tehdas": versio == TEHDAS, "lyhyt": lyhyt(versio), "aika": aika,
             "kuka": v["kuka"], "tekija": TEKIJAT.get(v["kuka"], "tuntematon"), "teko": TEOT[tulos], "tulos": tulos,
             "tila": tila, "savy": savy, "kaytossa": on_kaytossa, "hylatty": hylatty,
             "syy": syy, "syy_tarkea": tulos in ("peruttu", "vahti", "virhe"),
+            "syy_kuittaus": tulos == "asennettu" or (tulos == "palautettu" and syy is not None
+                                                      and _KUITTAUS.match(syy) is not None),
             "tiedostot": tiedostot, "diff": diff, "diff_katkaistu": v["diff_katkaistu"],
             "varastossa": v["varastossa"], "diff_rivit": osat["rivit"] if osat else (),
             "diff_leikattu": osat["leikattu"] if osat else 0, "lisatty": osat["lisatty"] if osat else 0,
-            "poistettu": osat["poistettu"] if osat else 0, "muutokset": muutokset,
+            "poistettu": osat["poistettu"] if osat else 0, "muutokset": muutokset, "vertaamatta": vertaamatta,
             "muutokset_taydet": diff is not None and not v["diff_katkaistu"]}
 
 
@@ -370,7 +406,7 @@ def _versiot(arvo: Any, aktiivinen: dict[str, Any] | None,
     for v in arvo:
         try:
             tulos.append(_versiorivi(v, kaytossa, edellinen, nahty))
-        except ReadFailure:
+        except _RIKKI:
             tulos.append(None)   # vain tämä rivi piiloon
     return tuple(tulos)
 
@@ -379,9 +415,10 @@ def _pyynto(p: Any) -> dict[str, Any]:
     _olio(p, PYYNTO_KENTAT, "pyyntö")
     if p["id"] is not None and (type(p["id"]) is not str or _PYYNTO_ID.fullmatch(p["id"]) is None):
         _virhe("Pyynnön tunniste ei kelpaa.")
-    if (p["toimi"] is not None and p["toimi"] not in TOIMET) or (p["kuka"] is not None and p["kuka"] not in TEKIJAT):
+    if ((p["toimi"] is not None and not _luettelosta(p["toimi"], TOIMET))
+            or (p["kuka"] is not None and not _luettelosta(p["kuka"], TEKIJAT))):
         _virhe("Pyynnön toimi tai pyytäjä on tuntematon.")
-    if p["tulos"] not in PYYNTO_TULOKSET:
+    if not _luettelosta(p["tulos"], PYYNTO_TULOKSET):
         _virhe("Pyynnön tulos on tuntematon.")
     versio = _versio(p["versio"], tyhja=True)
     tulos, savy = PYYNTO_TULOKSET[p["tulos"]]
@@ -398,7 +435,7 @@ def _pyynnot(arvo: Any) -> tuple[dict[str, Any] | None, ...]:
     for p in arvo:
         try:
             tulos.append(_pyynto(p))
-        except ReadFailure:
+        except _RIKKI:
             tulos.append(None)
     return tuple(tulos)
 
@@ -415,7 +452,7 @@ def tarkista(data: Any) -> Aivot:
     def osa(lue, oletus=None):
         try:
             return lue(), False
-        except ReadFailure:
+        except _RIKKI:
             return oletus, True
 
     lukko, _ = osa(lambda: _lukko(lukittu, data["lukko"])) if lukittu is not None else (None, True)
@@ -435,6 +472,12 @@ def tarkista(data: Any) -> Aivot:
 
 
 EI_KAYTOSSA = "Itsepäivitys ei ole käytössä tällä koneella."
+EI_VOI_LUKEA = "Aivojen tilaa ei voi lukea."
+
+
+def _virhetila(lisatieto: str, lukittu: bool | None = None) -> Aivot:
+    """Virhetila: lyhyt viesti sivulle, tekninen syy taitettuna."""
+    return Aivot("error", EI_VOI_LUKEA, lukittu=lukittu, lisatieto=lisatieto)
 
 
 def lue_aivot(root: str | Path, *, omistajat: frozenset[int] | None = None, timeout_seconds: float = 2.0) -> Aivot:
@@ -442,7 +485,7 @@ def lue_aivot(root: str | Path, *, omistajat: frozenset[int] | None = None, time
     try:
         kavelija = Hakemisto(root, timeout_seconds=timeout_seconds)
     except ValueError:
-        return Aivot("error", "Polku ei ole sallittu.")
+        return _virhetila("Polku ei ole sallittu.")
     deadline = time.monotonic() + timeout_seconds
     lukittu = None   # luetaan ennen muuta: lukko näkyy, vaikka tiedosto olisi muuten rikki
     try:
@@ -460,6 +503,8 @@ def lue_aivot(root: str | Path, *, omistajat: frozenset[int] | None = None, time
     except ReadFailure as error:
         if error.code == "not_found":
             return Aivot("not_published", EI_KAYTOSSA)
-        return Aivot("error", "Aivojen tilaa ei voi lukea: " + VIESTIT.get(error.code, error.message), lukittu=lukittu)
+        return _virhetila(VIESTIT.get(error.code, error.message), lukittu)
     except OSError as error:
-        return Aivot("error", f"Aivojen tilaa ei voi lukea ({error.strerror}).", lukittu=lukittu)
+        return _virhetila(f"Tiedostoa ei voi lukea ({error.strerror}).", lukittu)
+    except Exception as error:   # viimeinen keino: sivu, jolla on hätäjarru, ei saa kaatua
+        return _virhetila(f"Odottamaton sisältö ({type(error).__name__}).", lukittu)

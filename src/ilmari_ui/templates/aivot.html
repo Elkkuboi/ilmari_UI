@@ -13,7 +13,7 @@
 {% elif a.tila == 'not_published' %}
   <p class="empty">{{ a.viesti }}</p>
 {% else %}
-  {% if a.tila == 'error' %}<p class="empty">{{ a.viesti }}</p>{% endif %}
+  {% if a.tila == 'error' %}<p class="empty">{{ a.viesti }}</p>{% if a.lisatieto %}<details class="fold"><summary>Miksi</summary><p class="small muted">{{ a.lisatieto }}</p></details>{% endif %}{% endif %}
   {% if a.tila == 'ready' %}
   {% if vanha %}<p class="warn small" id="vanha">Tieto on yli 10 min vanha: aivojen huolto ei ehkä ole käynnissä.</p>{% endif %}
   <p id="kaytossa">Käytössä: {% if a.aktiivinen is none %}<span class="muted">ei voi näyttää</span>{% elif a.aktiivinen.tehdas %}alkuperäinen{% else %}Ilmarin versio <code>{{ a.aktiivinen.lyhyt }}</code>{% if a.aktiivinen.aika %} · {{ lyhyt_aika(a.aktiivinen.aika) }}{% endif %}{% endif %}</p>
