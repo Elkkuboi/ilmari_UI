@@ -61,7 +61,7 @@
     {% if v.muutokset %}<ul class="small">{% for m in v.muutokset %}<li><code>{{ m.polku }}</code>{% if m.laji != 'muutettu' %} {{ m.laji }}{% endif %} <span class="nowrap"><span class="ok">+{{ m.lisatty }}</span> <span class="stop">−{{ m.poistettu }}</span></span>{% if m.koko_teksti %} · <span class="nowrap">{{ m.koko_teksti }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
     {% if v.diff is none %}<p class="small muted">Muutoksia {{ kielletty }}.</p>
     {% elif v.diff_rivit %}<details class="fold"><summary>Muutokset alkuperäiseen (+{{ v.lisatty }} −{{ v.poistettu }} riviä{% if v.diff_katkaistu %}, katkaistu{% endif %})</summary><pre class="code diff">{% for laji, rivi in v.diff_rivit %}<span class="{{ laji }}">{{ rivi }}</span>
-{% endfor %}{% if v.diff_leikattu %}<span class="hunk">[… loppu leikattu …]</span>{% endif %}</pre></details>
+{% endfor %}{% if v.diff_leikattu %}<span class="hunk">[… loput {{ v.diff_leikattu }} riviä eivät mahdu tähän …]</span>{% endif %}</pre></details>
     {% elif v.diff_katkaistu %}<p class="small muted">Muutokset eivät mahtuneet tähän.</p>
     {% elif v.varastossa %}<p class="small muted">Sama kuin alkuperäinen.</p>
     {% elif not v.tehdas %}<p class="small muted">Versiota ei ole enää tallessa.</p>{% endif %}

@@ -197,7 +197,9 @@ def test_diffin_sisaltorivi_ei_ole_otsake(tmp_path):
 def test_pitka_diff_leikataan_sivulla(tmp_path, monkeypatch):
     monkeypatch.setattr(aivot, "DIFF_RIVEJA_NAYTA", 5)
     v = lue(tmp_path, tila()).versiot[0]
-    assert len(v["diff_rivit"]) == 5 and v["diff_leikattu"] is True and v["lisatty"] == 2   # luvut koko diffistä
+    assert len(v["diff_rivit"]) == 5 and v["diff_leikattu"] == 10 and v["lisatty"] == 2   # luvut koko diffistä
+    monkeypatch.setattr(aivot, "DIFF_RIVEJA_NAYTA", 15)
+    assert lue(tmp_path, tila()).versiot[0]["diff_leikattu"] == 0
 
 
 def test_hylatty_edellinen_merkitaan(tmp_path):

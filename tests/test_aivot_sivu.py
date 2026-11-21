@@ -274,3 +274,12 @@ def test_tuotannossa_vanha_tila_kerrotaan(tmp_path, monkeypatch):
             assert s.find(id="vanha") is None
     r = sivu(tmp_path, monkeypatch, tila(muoto="x", aika=(nyt - timedelta(days=2)).isoformat()))
     assert dom(r).find(id="vanha") is None                              # rikkinäisestä ei väitetä mitään
+
+
+def test_tuotannossa_pitka_diff_kertoo_leikatut_rivit(tmp_path, monkeypatch):
+    monkeypatch.setattr(aivot, "DIFF_RIVEJA_NAYTA", 5)
+    pre = dom(sivu(tmp_path, monkeypatch, tila())).select("ol.versiot > li")[0].find("pre")
+    assert len(pre.find_all("span")) == 6 and pre.find_all("span")[-1].get_text() == (
+        "[… loput 10 riviä eivät mahdu tähän …]")
+    monkeypatch.setattr(aivot, "DIFF_RIVEJA_NAYTA", 15)
+    assert "eivät mahdu" not in sivu(tmp_path, monkeypatch, tila()).text

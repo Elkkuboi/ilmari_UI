@@ -1,5 +1,36 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 21.11.2026 (yö): Aivojen koodi -sivu, haara `aivot-sivu`
+
+- aiops ADR-0033 pala 7: Ilmari saa kirjoittaa omien aivojensa koodin ja pyytää sen käyttöön; rootin asentaja
+  (aiops `aivohuolto.py`) tarkistaa, asentaa, käynnistää aivot uudelleen ja palaa takaisin, jos uusi ei ole terve.
+  Uusi sivu **Aivojen koodi** `/hub/aivot`, linkki Asetusten Aivot-osiosta.
+- Sivu: mitkä aivot ovat käytössä (alkuperäinen tai "Ilmarin versio <12 heksaa> · aika"), lukkorivi yhdellä napilla
+  (`POST /ilmari/aivot/lukko`, `lukittu`=1|0), asennuksia jäljellä 24 tunnissa, vahdin viimeisin toimi, edellinen
+  versio, napit **Palauta edellinen** (`POST /ilmari/aivot/palauta`, `kohde=edellinen`) ja **Palauta alkuperäinen ja
+  lukitse** (`kohde=tehdas`, `lukitse=1`), kaikki `paluu=hub`. Versiot uusin ensin: aika, mitä tehtiin, kuka,
+  tulos (käytössä, edellinen, hylätty, hylätty myöhemmin, palautettu, ei käytössä), syy, muuttuneet tiedostot
+  kokoineen ja taitettuna diff alkuperäiseen. Pyynnöt taitettuna. Päivittyy itsestään (15 s) vain toimen ollessa kesken.
+- Ei nappia, joka ei tee mitään: Palauta edellinen puuttuu, kun edellistä ei ole tai se on hylätty; Palauta
+  alkuperäinen puuttuu, kun alkuperäinen on jo käytössä eikä mitään ole kesken. Yli 10 min vanha tila kerrotaan
+  ("aivojen huolto ei ehkä ole käynnissä"). Puuttuva tiedosto: "Itsepäivitys ei ole käytössä tällä koneella.", ei
+  lomakkeita.
+- Lukija `aivot.py`: `/srv/aiops/ilmari/aivot/tila.json` (muoto `aiops-aivot-tila-v1`), tarkat kentät, enintään
+  512 KiB, ei linkkejä, tuotannossa vain rootin omistama hakemisto ja tiedosto. Rikkinäinen osa (lukko, käytössä
+  oleva versio, raja, vahti, yksi versio- tai pyyntörivi) piilottaa vain itsensä; lukko ja palautusnapit näkyvät
+  myös, kun tiedosto on rikki. Teksti on Ilmarin dataa: koodattuna, kielletty merkki (myös bidi) piilottaa vain
+  kentän; diffissä tyhjältä näyttävät kirjaimet näkyvät koodeina (`\u3164`).
+- Esimerkkiaineisto ja testien `aivot_aiops_tila.json` ovat aiopsin asentajan omalla koodilla tuotettuja (c35afda,
+  valesystemd ja valekello), joten muodon muutos aiopsissa näkyy testeissä.
+- Palvelutiedosto: `BindReadOnlyPaths=-/srv/aiops/ilmari/aivot` (miinus: puuttuva hakemisto ei estä käynnistystä).
+  `scripts/asenna.sh` asentaa tiedoston sellaisenaan, joten se ei muutu.
+- Asennusjärjestys: Hub ensin. Ennen aiopsin asennusta tiedostoa ei ole, eikä sivulla ole lomakkeita.
+- Testit: 1050 passed, 55 skipped (ilman selainryhmää ja shellcheckiä; `/hub/aivot` lisätty selaintestin sivuihin).
+  Puhelinkuvat 390x844 ja 320 px chrome-headless-shellillä (Paperi ja Terminaali, tuotanto, ei käytössä, rikki,
+  vanha); ei vaakavieritystä 320, 390, 768 eikä 1280 px leveydellä taitot auki.
+- Tarkistamatta: Safari (iPhone), Firefox, oikea gateway ja oikea asentaja rootina.
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`.
+
 ## Päivitys 21.11.2026 (myöhäisilta): käsikirjan versiot, lukko ja Ilmarin varaamat vuorot, haara `kasikirjan-versiot`
 
 - aiops ADR-0033 pala 6, osa 2: Ilmari muokkaa itse käsikirjaansa (systemprompti) ja vuoron ohjettaan ja varaa

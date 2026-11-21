@@ -61,7 +61,7 @@ def assert_no_overflow(page):
 
 PAGES = ["/hub", "/hub/keskustelu", "/hub/keskustelu?lista=1", "/hub/kehita", "/hub/kehita/41", "/hub/kehita/98",
          "/hub/asetukset", "/hub/dokumentit", "/hub/dokumentit/arkkitehtuuri", "/hub/kehotteet",
-         "/hub/kehotteet/jarjestelma"]
+         "/hub/kehotteet/jarjestelma", "/hub/aivot"]
 
 
 @pytest.mark.parametrize("width", [320, 390, 768, 1280])

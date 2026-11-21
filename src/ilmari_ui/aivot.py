@@ -294,7 +294,7 @@ def _diff(teksti: str) -> dict[str, Any]:
             if nykyinen is not None:
                 nykyinen["poistettu"] += 1
         rivit.append((laji, rivi))
-    return {"rivit": tuple(rivit[:DIFF_RIVEJA_NAYTA]), "leikattu": len(rivit) > DIFF_RIVEJA_NAYTA,
+    return {"rivit": tuple(rivit[:DIFF_RIVEJA_NAYTA]), "leikattu": max(0, len(rivit) - DIFF_RIVEJA_NAYTA),
             "lisatty": lisatty, "poistettu": poistettu, "tiedostot": list(tiedostot.values())}
 
 
@@ -355,7 +355,7 @@ def _versiorivi(v: Any, kaytossa: str | None, edellinen: str | None, nahty: set[
             "syy": syy, "syy_tarkea": tulos in ("peruttu", "vahti", "virhe"),
             "tiedostot": tiedostot, "diff": diff, "diff_katkaistu": v["diff_katkaistu"],
             "varastossa": v["varastossa"], "diff_rivit": osat["rivit"] if osat else (),
-            "diff_leikattu": bool(osat and osat["leikattu"]), "lisatty": osat["lisatty"] if osat else 0,
+            "diff_leikattu": osat["leikattu"] if osat else 0, "lisatty": osat["lisatty"] if osat else 0,
             "poistettu": osat["poistettu"] if osat else 0, "muutokset": muutokset,
             "muutokset_taydet": diff is not None and not v["diff_katkaistu"]}
 
