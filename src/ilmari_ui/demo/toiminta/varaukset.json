@@ -1,0 +1,18 @@
+{
+ "versio": 1,
+ "aika": "2026-11-19T16:02:00+02:00",
+ "varaukset": [
+  {
+   "id": 7,
+   "alkaa": "2026-11-19T18:30:00+02:00",
+   "minuutit": 90,
+   "miksi": "Työt 42 ja 43 jäivät kesken; jatkan niitä ennen yöajoa."
+  },
+  {
+   "id": 8,
+   "alkaa": "2026-11-20T09:00:00+02:00",
+   "minuutit": 60,
+   "miksi": "Aamun raportti ja testien korjaus."
+  }
+ ]
+}

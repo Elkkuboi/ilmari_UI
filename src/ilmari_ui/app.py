@@ -426,7 +426,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/hub", response_class=HTMLResponse)
     async def nyt_sivu(request: Request):
-        """Ilmarin tila ja ohjaus (Töihin nyt, Seis, Jatka), mitä odottaa Eliasta, viimeisin raportti ja teot.
+        """Ilmarin tila ja ohjaus (Töihin nyt, Seis, Jatka, Ilmarin varaamien vuorojen peruminen), mitä odottaa
+        Eliasta, viimeisin raportti ja teot.
         Lomakkeet menevät gatewaylle (paluu=hub); gateway palaa tänne ?toihin=rajatesti, kun Töihin nyt ajaa ensin
         rajatestin. Päivittyy itsestään vain, kun vuoro tai työ on käynnissä."""
         demo = esimerkki(request)
@@ -441,6 +442,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request, "nyt", "Nyt", "nyt", toiminta=toiminta, tilarivi=tilarivi, malli=malli,
             asetukset=toiminta.asetukset if valmis else None,
             raportti=toiminta.raportti if valmis else None,
+            varaukset=(toiminta.varaukset or ()) if valmis and tilarivi is not None else (),
             rajatesti_kaynnissa=toiminta_lukija.rajatesti_kaynnissa(toiminta, dsh_tyo),
             toihin_rajatesti=request.query_params.get("toihin") == "rajatesti",
             odottaa=odottaa_sinua(toiminta, tyot, lahde, osoitteet(demo)),

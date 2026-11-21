@@ -10,6 +10,8 @@ Gateway (aiops-gw) kirjoittaa hakemistoon /srv/aiops/ilmari/toiminta (aiops-gw:i
 - teot.jsonl      tekoloki: rivi per teko, vain lisäys; yli 2 MiB:n jälkeen vanha nimetään teot.1.jsonl:ksi
 - raportti.json   viimeisimmän päättyneen vuoron raportti (vuoron säikeen viimeisin Ilmarin viesti); puuttuu, kunnes
                   ensimmäinen vuoro on päättynyt raporttiin (aikakatko ja Seis eivät kirjoita sitä)
+- varaukset.json  Ilmarin itse varaamat työvuorot, jotka eivät ole vielä alkaneet (aiops ADR-0033 pala 6); puuttuu
+                  vanhalta gatewaylta, mikä tarkoittaa, ettei varauksia ole
 
 JSON-tiedostot gateway vaihtaa atomisesti (tmp + rename), joten ne luetaan yhteisellä lukijalla (lukija.py: linkkejä seuraamatta,
 omistaja, kokoraja, muuttumattomuus luvun aikana) ja tarkoilla kenttäjoukoilla. Puuttuva tiedosto tarkoittaa
@@ -19,8 +21,8 @@ katkaisu, linkitys tai tiedoston vaihto kesken luvun on virhe. Rikkinäinen teko
 
 Jokaisen tiedoston virhe on oma: rikkinäinen tekoloki ei piilota Seis-tilaa. Kaikki teksti on mallin tai gatewayn
 kirjoittamaa dataa: se siivotaan ohjausmerkeistä ja pohja koodaa sen (ei |safe-polkua, ei Markdownia). Hub ei kirjoita
-mitään; Seis, Jatka, Töihin nyt, asetukset, tavoitteet, ohjeen poisto ja rajatesti ovat gatewayn lomakereittejä
-(paluu=hub).
+mitään; Seis, Jatka, Töihin nyt, asetukset, tavoitteet, ohjeen poisto, rajatesti ja varauksen peruminen ovat
+gatewayn lomakereittejä (paluu=hub).
 """
 
 from __future__ import annotations
@@ -51,7 +53,9 @@ TAVOITTEET = "tavoitteet.json"
 TEOT = "teot.jsonl"
 TEOT_VANHA = "teot.1.jsonl"
 RAPORTTI = "raportti.json"
-RAJAT = {ASETUKSET: 4 * 1024, TILA: 64 * 1024, OHJEET: 256 * 1024, TAVOITTEET: 64 * 1024, RAPORTTI: 64 * 1024}
+VARAUKSET = "varaukset.json"
+RAJAT = {ASETUKSET: 4 * 1024, TILA: 64 * 1024, OHJEET: 256 * 1024, TAVOITTEET: 64 * 1024, RAPORTTI: 64 * 1024,
+         VARAUKSET: 16 * 1024}
 TEOT_RAJA = 4 * 1024 * 1024        # kierrätys 2 MiB:n kohdalla; tätä suurempi = kierrätys ei toimi
 HANTA = 512 * 1024                 # tekolokista luettava loppuosa (100 riviä à 2000 tavua mahtuu moneen kertaan)
 TEKO_RIVI_MAX = 2000
@@ -68,6 +72,8 @@ OHJE_KENTAT = frozenset({"id", "aika", "teksti"})
 TAVOITTEET_KENTAT = frozenset({"versio", "aika", "rivit"})
 TEKO_KENTAT = frozenset({"aika", "lahde", "laji", "mita", "miksi", "peru", "tyo", "saie"})
 RAPORTTI_KENTAT = frozenset({"versio", "aika", "saie", "laji", "teksti"})
+VARAUKSET_KENTAT = frozenset({"versio", "aika", "varaukset"})
+VARAUS_KENTAT = frozenset({"id", "alkaa", "minuutit", "miksi"})
 
 OLETUS_ASETUKSET = {"paalla": True, "kello": "02:00"}
 VUOROT = {"yoajo": "Yöajo", "tyovuoro": "Työvuoro"}   # vuoron ja raportin laji (gateway: yöajo tai Töihin nyt)
@@ -84,6 +90,10 @@ RIVEJA_MAX, RIVI_MAX = 20, 200
 KOHTIA_MAX, HAVAINTO_MAX, KOHTA_NIMI_MAX = 40, 200, 120
 TEKO_TEKSTI_MAX = 1000
 RAPORTTI_MAX = 8000                # = Ilmarin viestin enimmäispituus gatewayssa
+# Varaukset: gateway pitää enintään 3 odottamassa ja vuoron pituuden 30–240 min; lista saa olla vähän pidempi, jotta
+# rajan nosto gatewayssa ei kaada Hubia.
+VARAUKSIA_MAX = 10
+MINUUTIT_MIN, MINUUTIT_MAX = 30, 240
 MIKSI_MAX = 300                    # Ilmarin perustelu: yksi rivi (varaus, käsikirjan versio)
 # Ilmarin kirjoittamassa tekstissä kielletyt merkit kuten gatewayssa (aiops merkit.forbidden_char): ohjausmerkit,
 # näkymättömät muotoilumerkit (myös bidi-merkit), surrogaatit sekä rivin- ja kappaleenerottimet. Emojien ZWJ sallitaan.
@@ -116,6 +126,7 @@ class Toiminta:
     virheet: tuple[str, ...] = field(default_factory=tuple)
     raportti: dict[str, Any] | None = None   # None: ei julkaistu (paneelia ei näytetä) tai ei luettavissa
     raportti_virhe: bool = False
+    varaukset: tuple[dict[str, Any], ...] | None = ()   # None: tiedostoa ei voi lukea (syy listassa virheet)
 
 
 class _Ohitettava(Exception):
@@ -297,6 +308,27 @@ def tarkista_raportti(data: Any) -> dict[str, Any]:
             "nimi": VUOROT[data["laji"]], "teksti": _teksti(data["teksti"], RAPORTTI_MAX, tyhja=False, rivinvaihdot=True)}
 
 
+def tarkista_varaukset(data: Any) -> tuple[dict[str, Any], ...]:
+    """varaukset.json: Ilmarin varaamat työvuorot, jotka eivät ole vielä alkaneet, aikaisin ensin. Perustelu on mallin
+    kirjoittamaa (yksi rivi, ei näkymättömiä merkkejä)."""
+    _kentat(data, VARAUKSET_KENTAT, VARAUKSET)
+    _aika(data["aika"])
+    if type(data["varaukset"]) is not list or len(data["varaukset"]) > VARAUKSIA_MAX:
+        _virhe("Varauslista ei kelpaa.")
+    varaukset, tunnisteet = [], set()
+    for v in data["varaukset"]:
+        _kentat(v, VARAUS_KENTAT, "varaus")
+        tunniste = _kokonaisluku(v["id"])
+        if tunniste in tunnisteet:
+            _virhe("Sama varauksen tunniste kahdesti.")
+        tunnisteet.add(tunniste)
+        if type(v["minuutit"]) is not int or not MINUUTIT_MIN <= v["minuutit"] <= MINUUTIT_MAX:
+            _virhe("Varauksen kesto ei kelpaa.")
+        varaukset.append({"id": tunniste, "alkaa": _aika(v["alkaa"]), "minuutit": v["minuutit"],
+                          "miksi": _tarkka_teksti(v["miksi"], MIKSI_MAX)})
+    return tuple(sorted(varaukset, key=lambda v: datetime.fromisoformat(v["alkaa"])))
+
+
 def tarkista_teko(raaka: bytes) -> dict[str, Any]:
     """Yksi tekolokin rivi. lahde on gatewayn asettama: "gateway" = havaittu tosiasia, "ilmari" = mallin kirjaus."""
     if len(raaka) > TEKO_RIVI_MAX:
@@ -458,6 +490,7 @@ def lue_toiminta(root: str | Path, *, omistajat: frozenset[int] | None = None,
             osa(TAVOITTEET, lambda: json_osa(TAVOITTEET, tarkista_tavoitteet), {"aika": None, "rivit": []})
             osa(TEOT, lambda: _lue_teot(hd, omistajat, deadline), ((), 0))
             osa(RAPORTTI, lambda: json_osa(RAPORTTI, tarkista_raportti), False)  # False: ei julkaistu
+            osa(VARAUKSET, lambda: json_osa(VARAUKSET, tarkista_varaukset), ())   # puuttuu: ei varauksia
     except ReadFailure as error:
         if error.code == "not_found":
             return Toiminta("not_published", "Ilmarin tilaa ei ole vielä tallennettu.")
@@ -466,7 +499,8 @@ def lue_toiminta(root: str | Path, *, omistajat: frozenset[int] | None = None,
         return Toiminta("error", f"Toimintaa ei voi lukea ({error.strerror}).")
     teot, ohitettu = osat[TEOT] if osat[TEOT] is not None else (None, 0)
     return Toiminta("ready", None, osat[ASETUKSET], osat[TILA], osat[OHJEET], osat[TAVOITTEET], teot, ohitettu,
-                    tuple(virheet), raportti=osat[RAPORTTI] or None, raportti_virhe=osat[RAPORTTI] is None)
+                    tuple(virheet), raportti=osat[RAPORTTI] or None, raportti_virhe=osat[RAPORTTI] is None,
+                    varaukset=osat[VARAUKSET])
 
 
 # --- Näyttö -----------------------------------------------------------------------------------------------------------
