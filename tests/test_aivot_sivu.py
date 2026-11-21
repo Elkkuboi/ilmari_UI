@@ -11,6 +11,7 @@ teksti on koodattua dataa, ja kielletty merkki piilottaa vain sen kentän.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -66,6 +67,7 @@ def test_sivu_esimerkkitilassa():
     assert s.find("a", class_="back")["href"] == "/hub/asetukset?demo=1#aivot"
     assert [a.get_text() for a in s.select('nav a[aria-current="page"]')] == ["Asetukset"]
     assert s.find("form") is None                                   # napit eivät tee mitään esimerkkitilassa
+    assert s.find(id="vanha") is None and "warn" not in s.find("h1").span["class"]
     assert [b.get_text() for b in s.find_all("button")] == ["Lukitse", "Palauta edellinen",
                                                             "Palauta alkuperäinen ja lukitse"]
     assert s.find(id="kaytossa").get_text(" ", strip=True) == ("Käytössä: Ilmarin versio 87478f15ae3a · "
@@ -153,7 +155,8 @@ def test_tuotannossa_kesken_paivittyy_ja_tarjoaa_palautuksen(tmp_path, monkeypat
     assert dom(r).find(id="kesken").get_text() == (f"Kesken: asennus (versio b2b2b2b2b2b2), alkoi {lyhyt_aika(AIKA)}. "
                                                    "Sivu päivittyy itsestään.")
     r = sivu(tmp_path, monkeypatch, tila(kesken={"toimi": "?"}))
-    assert r.headers["refresh"] == "15" and dom(r).find(id="kesken").get_text() == "Kesken: toimi. Sivu päivittyy itsestään."
+    assert r.headers["refresh"] == "15"
+    assert dom(r).find(id="kesken").get_text() == "Kesken: tuntematon toimi. Sivu päivittyy itsestään."
 
 
 def test_tuotannossa_ei_kaytossa_ei_lomakkeita(tmp_path, monkeypatch):
@@ -243,3 +246,31 @@ def test_tuotannossa_vanhoja_ja_poistettuja_versioita(tmp_path, monkeypatch):
     assert "Muutokset eivät mahtuneet tähän." in tekstit[1] and "Kaikki tiedostot (2)" in tekstit[1]
     assert "Versiota ei ole enää tallessa." in tekstit[2]
     assert A_ID[:12] in tekstit[0] and Path(__file__).name not in r.text
+
+
+def test_tuotannossa_hylattya_edellista_ei_tarjota(tmp_path, monkeypatch):
+    """Asentaja hylkää palautuksen hylättyyn versioon: nappia ei näytetä, ja rivi kertoo syyn. Alkuperäinen jää."""
+    r = sivu(tmp_path, monkeypatch, tila(edellinen=B_ID))
+    assert lomakkeet(r) == [LUKITSE, ALKUPERAINEN]
+    assert dom(r).find(id="edellinen").get_text(" ", strip=True) == (
+        "Edellinen: versio b2b2b2b2b2b2 · hylätty, ei palautettavissa")
+    r = sivu(tmp_path, monkeypatch, tila(edellinen=B_ID, aktiivinen={"versio": "tehdas", "aika": None, "kuka": None}))
+    assert lomakkeet(r) == [LUKITSE] and dom(r).find(id="palautus") is None and dom(r).find(id="edellinen")
+    r = sivu(tmp_path, monkeypatch, tila(edellinen=C_ID))               # C ei ole listalla: palautus tarjotaan
+    assert lomakkeet(r) == [LUKITSE, EDELLINEN, ALKUPERAINEN] and "hylätty" not in dom(r).find(id="edellinen").get_text()
+
+
+def test_tuotannossa_vanha_tila_kerrotaan(tmp_path, monkeypatch):
+    """Vahti julkaisee 2 min välein: yli 10 min vanha tila kerrotaan, tuore ei. Napit pysyvät molemmissa."""
+    nyt = datetime.now(timezone.utc)
+    for ika, vanha in ((timedelta(minutes=11), True), (timedelta(minutes=2), False), (timedelta(days=2), True)):
+        r = sivu(tmp_path, monkeypatch, tila(aika=(nyt - ika).isoformat(timespec="seconds")))
+        s = dom(r)
+        assert lomakkeet(r) == [LUKITSE, EDELLINEN, ALKUPERAINEN]
+        assert ("warn" in s.find("h1").span["class"]) is vanha
+        if vanha:
+            assert s.find(id="vanha").get_text() == "Tieto on yli 10 min vanha: aivojen huolto ei ehkä ole käynnissä."
+        else:
+            assert s.find(id="vanha") is None
+    r = sivu(tmp_path, monkeypatch, tila(muoto="x", aika=(nyt - timedelta(days=2)).isoformat()))
+    assert dom(r).find(id="vanha") is None                              # rikkinäisestä ei väitetä mitään

@@ -40,6 +40,7 @@ PACKAGE_DIR = Path(__file__).parent
 HELSINKI = ZoneInfo("Europe/Helsinki")
 TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 14, 10, tzinfo=timezone.utc)  # esimerkin työvuoro käynnissä (16.10 Helsingissä)
 JARJESTELMA_DEMO_NYT = datetime(2026, 10, 30, 12, 0, 20, tzinfo=timezone.utc)
+AIVOT_DEMO_NYT = datetime(2026, 11, 19, 9, 31, tzinfo=timezone.utc)   # minuutti esimerkin julkaisun jälkeen (11.31)
 SERVE_PREFIX = "/hub"
 # Muut sovellukset työasemalla omissa Serve-porteissaan samalla nimellä kuin Hub (aiops ADR-0026: Hahmo). Hub ei kutsu
 # niitä (PrivateNetwork), vaan linkittää niihin.
@@ -665,7 +666,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Mitkä aivot ovat käytössä, lukko, asennusraja, vahdin viimeisin toimi, versiot muutoksineen ja pyynnöt.
         Lukko ja palautukset ovat lomakkeita gatewaylle (paluu=hub). Päivittyy itsestään vain, kun toimi on kesken."""
         a = lue_aivot(request)
-        response = render(request, "aivot", "Aivojen koodi", "asetukset", a=a)
+        nyt = AIVOT_DEMO_NYT if esimerkki(request) else datetime.now(timezone.utc)
+        response = render(request, "aivot", "Aivojen koodi", "asetukset", a=a,
+                          vanha=a is not None and aivot_lukija.vanha(a, nyt))
         if a is not None and a.tila == "ready" and a.kesken is not None:
             paivity(response, AIVOT_PAIVITYS)
         return response

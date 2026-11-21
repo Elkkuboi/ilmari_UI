@@ -19,7 +19,11 @@ Kaikki teksti on dataa, ja suuri osa siitä tulee Ilmarin ehdokkaasta: tiedoston
 nimiä ja jäsentimen viestejä) ja diff. Pohja koodaa sen, eikä mitään piirretä Markdownina. Kielletty merkki
 (ohjaus- ja muotoilumerkit, myös bidi, surrogaatit, rivin- ja kappaleenerottimet; yksirivisessä myös tyhjältä näyttävät
 kirjaimet) piilottaa vain sen kentän ("ei voi näyttää"). Asentaja muuttaa nämä merkit näkyviksi koodeiksi (\\uXXXX),
-joten kunnollisessa tiedostossa niitä ei ole.
+joten kunnollisessa tiedostossa niitä ei ole. Diffissä tyhjältä näyttävät kirjaimet muutetaan samoin koodeiksi
+(nakyviksi), koska ne kelpaavat Pythonin nimiin ja asentaja päästää ne läpi.
+
+Vahti julkaisee tilan 2 min välein. Yli 10 min vanha tila tarkoittaa, ettei huolto ole käynnissä (vanha), ja sivu
+kertoo sen: silloin käytössä oleva versio ei välttämättä ole se, joka sivulla näkyy.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +71,9 @@ SYY_MAX = 4000
 TOIMI_MAX = 300
 DIFF_MAX = 64 * 1024
 DIFF_RIVEJA_NAYTA = 2000              # pidempi diff leikataan sivulla (puhelin)
+# Vahti julkaisee tilan 2 min välein ja asentaja jokaisen pyynnön jälkeen (pisin toimi: uudelleenkäynnistys 150 s ja
+# terveystarkistus 120 s). Tätä vanhempi tila tarkoittaa, ettei huolto ole käynnissä: sivu kertoo sen.
+VANHA = timedelta(minutes=10)
 
 TEKIJAT = {"ilmari": "Ilmari", "elias": "Elias", "vahti": "vahti"}
 PYYTAJAT = ("ilmari", "elias")
@@ -106,6 +114,7 @@ class Aivot:
     vahti_virhe: bool = False
     versiot: tuple[dict[str, Any] | None, ...] | None = ()
     pyynnot: tuple[dict[str, Any] | None, ...] | None = ()
+    edellinen_hylatty: bool = False   # asentaja ei palauta hylättyyn versioon: nappia ei tarjota
 
 
 # --- Kentät -----------------------------------------------------------------------------------------------------------
@@ -136,6 +145,22 @@ def _maara(arvo: Any, ylaraja: int) -> int:
     if type(arvo) is not int or not 0 <= arvo <= ylaraja:
         _virhe("Määrä ei kelpaa.")
     return arvo
+
+
+def nakyviksi(teksti: str) -> str:
+    """Tyhjältä näyttävät merkit (hangulin täytemerkit, tyhjä pistekirjoitusmerkki, CGJ) näkyviksi koodeiksi
+    \\uXXXX, kuten asentaja tekee ohjausmerkeille. Useimmat niistä kelpaavat Pythonin nimiin, joten diffissä ne
+    näytetään eikä niitä piiloteta: muuten rivi, jolla on näkymätön nimi, näyttäisi tyhjältä."""
+    if not any(c in _TYHJAT_KIRJAIMET for c in teksti):
+        return teksti
+    return "".join(f"\\u{ord(c):04x}" if c in _TYHJAT_KIRJAIMET else c for c in teksti)
+
+
+def vanha(a: Aivot, nyt: datetime) -> bool:
+    """Julkaistu tila on yli VANHA:n ikäinen: aivojen huolto ei päivitä sitä (ajastin pois tai julkaisu ei onnistu)."""
+    if a.tila != "ready" or a.aika is None:
+        return False
+    return nyt - datetime.fromisoformat(a.aika) > VANHA
 
 
 def lyhyt(versio: str) -> str:
@@ -189,7 +214,7 @@ def _asennukset(data: dict[str, Any]) -> dict[str, Any]:
             "seuraava": _aika(data["seuraava_vapautuu"], tyhja=True)}
 
 
-KESKEN_TUNTEMATON = {"toimi": None, "teksti": "toimi", "versio": None, "lyhyt": None, "aika": None}
+KESKEN_TUNTEMATON = {"toimi": None, "teksti": "tuntematon toimi", "versio": None, "lyhyt": None, "aika": None}
 
 
 def _kesken(k: Any) -> dict[str, Any] | None:
@@ -202,7 +227,7 @@ def _kesken(k: Any) -> dict[str, Any] | None:
         if k["toimi"] is not None and k["toimi"] not in KESKEN_TOIMET:
             _virhe("Keskeneräinen toimi on tuntematon.")
         versio = _versio(k["versio"], tyhja=True)
-        return {"toimi": k["toimi"], "teksti": KESKEN_TOIMET.get(k["toimi"], "toimi"), "versio": versio,
+        return {"toimi": k["toimi"], "teksti": KESKEN_TOIMET.get(k["toimi"], "tuntematon toimi"), "versio": versio,
                 "lyhyt": None if versio is None else lyhyt(versio), "aika": _aika(k["aika"], tyhja=True)}
     except ReadFailure:
         return dict(KESKEN_TUNTEMATON)
@@ -297,6 +322,8 @@ def _versiorivi(v: Any, kaytossa: str | None, nahty: set[str]) -> dict[str, Any]
     if type(v["diff"]) is not str or len(v["diff"]) > DIFF_MAX:
         _virhe("Diff ei kelpaa.")
     diff = _nakyva_teksti(v["diff"], DIFF_MAX, rivinvaihdot=True)
+    if diff is not None:
+        diff = nakyviksi(diff)
     on_kaytossa = versio == kaytossa and versio not in nahty
     nahty.add(versio)
     tulos, hylatty = v["tulos"], v["hylatty"]
@@ -345,7 +372,7 @@ def _pyynto(p: Any) -> dict[str, Any]:
     _olio(p, PYYNTO_KENTAT, "pyyntö")
     if p["id"] is not None and (type(p["id"]) is not str or _PYYNTO_ID.fullmatch(p["id"]) is None):
         _virhe("Pyynnön tunniste ei kelpaa.")
-    if (p["toimi"] is not None and p["toimi"] not in TOIMET) or (p["kuka"] is not None and p["kuka"] not in PYYTAJAT):
+    if (p["toimi"] is not None and p["toimi"] not in TOIMET) or (p["kuka"] is not None and p["kuka"] not in TEKIJAT):
         _virhe("Pyynnön toimi tai pyytäjä on tuntematon.")
     if p["tulos"] not in PYYNTO_TULOKSET:
         _virhe("Pyynnön tulos on tuntematon.")
@@ -393,8 +420,11 @@ def tarkista(data: Any) -> Aivot:
     vahti, vahti_virhe = osa(lambda: _vahti(data["vahti"]))
     versiot, _ = osa(lambda: _versiot(data["versiot"], aktiivinen))
     pyynnot, _ = osa(lambda: _pyynnot(data["pyynnot"]))
+    edellinen_hylatty = edellinen is not None and any(v is not None and v["versio"] == edellinen and v["hylatty"]
+                                                      for v in versiot or ())
     return Aivot("ready", None, aika, lukittu, lukko, aktiivinen, edellinen, edellinen_virhe, asennukset,
-                 _kesken(data["kesken"]), vahti, vahti_virhe, versiot, pyynnot)
+                 _kesken(data["kesken"]), vahti, vahti_virhe, versiot, pyynnot,
+                 edellinen_hylatty=edellinen_hylatty)
 
 
 EI_KAYTOSSA = "Itsepäivitys ei ole käytössä tällä koneella."

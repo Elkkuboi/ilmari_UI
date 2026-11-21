@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,39 @@ def test_pitka_diff_leikataan_sivulla(tmp_path, monkeypatch):
     assert len(v["diff_rivit"]) == 5 and v["diff_leikattu"] is True and v["lisatty"] == 2   # luvut koko diffistä
 
 
+def test_hylatty_edellinen_merkitaan(tmp_path):
+    """Asentaja ei palauta hylättyyn versioon, joten sivu ei tarjoa sitä: edellinen_hylatty, kun versiolistassa sama
+    versio on hylätty. Tuntematon (lista ei ulotu) tai hylkäämätön edellinen ei ole hylätty."""
+    assert lue(tmp_path, tila(edellinen=B_ID)).edellinen_hylatty is True
+    for edellinen, versiot in ((C_ID, [VERSIO_A, VERSIO_B]), (A_ID, [VERSIO_A]), (None, [VERSIO_B]),
+                               (B_ID, {}), (B_ID, [VERSIO_B | {"tulos": "?"}])):
+        a = lue(tmp_path, tila(edellinen=edellinen, versiot=versiot))
+        assert a.tila == "ready" and a.edellinen == edellinen and a.edellinen_hylatty is False
+
+
+def test_diffin_tyhjat_kirjaimet_naytetaan_koodeina(tmp_path):
+    """Näkymätön nimi (hangulin täytemerkki kelpaa Pythonissa nimeksi) näkyy diffissä koodina eikä tyhjänä."""
+    tyhja = chr(0x3164)
+    diff = DIFF.replace("+X = 2\n", f"+{tyhja} = __import__('os')\n+X = {tyhja}{chr(0x2800)}\n")
+    v = lue(tmp_path, tila(versiot=[VERSIO_A | {"diff": diff}])).versiot[0]
+    assert tyhja not in v["diff"] and chr(0x2800) not in v["diff"]
+    assert "+\\u3164 = __import__('os')\n+X = \\u3164\\u2800\n" in v["diff"]
+    assert ("add", "+\\u3164 = __import__('os')") in v["diff_rivit"] and v["lisatty"] == 3
+    assert aivot.nakyviksi("ääkköset ja " + "\U0001F469" + chr(0x200D) + "\U0001F4BB") == (
+        "ääkköset ja " + "\U0001F469" + chr(0x200D) + "\U0001F4BB")
+
+
+def test_vanha_tila():
+    """Yli 10 min vanha julkaisu: huolto ei ole käynnissä. Raja molempiin suuntiin; luku ilman aikaa ei ole vanha."""
+    a = tarkista(tila())
+    nyt = datetime.fromisoformat(AIKA)
+    assert not aivot.vanha(a, nyt) and not aivot.vanha(a, nyt + timedelta(minutes=10))
+    assert aivot.vanha(a, nyt + timedelta(minutes=10, seconds=1)) and aivot.vanha(a, nyt + timedelta(days=3))
+    assert not aivot.vanha(a, nyt - timedelta(days=1))            # kello jäljessä: ei hälytystä
+    for muu in (Aivot("not_published", aivot.EI_KAYTOSSA), Aivot("error", "x", lukittu=True)):
+        assert not aivot.vanha(muu, nyt + timedelta(days=3))
+
+
 def test_koko_teksti():
     assert [aivot.koko_teksti(n) for n in (0, 1023, 1024, 94100)] == ["0 tavua", "1023 tavua", "1,0 kt", "91,9 kt"]
 
@@ -304,7 +338,7 @@ def test_kelvoton_versiorivi_piilottaa_vain_itsensa(tmp_path, huono):
 
 HUONOT_PYYNNOT = [
     PYYNTO | {"vieras": 1}, PYYNTO | {"id": 5}, PYYNTO | {"id": "5a"}, PYYNTO | {"id": "1" * 19},
-    PYYNTO | {"toimi": "rm"}, PYYNTO | {"kuka": "vahti"}, PYYNTO | {"tulos": "ok"}, PYYNTO | {"aika": None},
+    PYYNTO | {"toimi": "rm"}, PYYNTO | {"kuka": "root"}, PYYNTO | {"tulos": "ok"}, PYYNTO | {"aika": None},
     PYYNTO | {"pyydetty": "eilen"}, PYYNTO | {"versio": "abc"}, PYYNTO | {"syy": None}, [],
 ]
 
@@ -313,6 +347,12 @@ HUONOT_PYYNNOT = [
 def test_kelvoton_pyynto_piilottaa_vain_itsensa(tmp_path, huono):
     a = lue(tmp_path, tila(pyynnot=[huono, HYLATTY_PYYNTO]))
     assert a.tila == "ready" and a.pyynnot[0] is None and a.pyynnot[1]["tulos"] == "hylatty"
+
+
+def test_vahdin_kirjaama_pyynto_kelpaa():
+    """Keskeytyneen toimen loppuunvienti voi kirjata pyytäjäksi vahdin."""
+    p = tarkista(tila(pyynnot=[PYYNTO | {"kuka": "vahti", "tulos": "palautettu"}])).pyynnot[0]
+    assert (p["tekija"], p["tulos_teksti"]) == ("vahti", "palautettu")
 
 
 def test_tuntematon_pyynto_kelpaa():
