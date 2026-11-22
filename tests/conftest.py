@@ -11,10 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from ilmari_ui import dokumentit, jarjestelma, kehitys, keskustelu, mallit, toiminta
+from ilmari_ui import aivot, dokumentit, jarjestelma, kehitys, keskustelu, mallit, toiminta
 
 LAHTEET = ((toiminta, "OLETUS"), (keskustelu, "OLETUS"), (kehitys, "OLETUS"), (kehitys, "OLETUS_KAYTTOONOTOT"),
-           (mallit, "OLETUS"), (mallit, "OLETUS_ROOLIT"), (jarjestelma, "OLETUS"), (dokumentit, "OLETUS"))
+           (mallit, "OLETUS"), (mallit, "OLETUS_ROOLIT"), (jarjestelma, "OLETUS"), (dokumentit, "OLETUS"),
+           (aivot, "OLETUS"))
 OLETUSPOLUT = {f"{moduuli.__name__.rsplit('.', 1)[1]}.{nimi}": getattr(moduuli, nimi) for moduuli, nimi in LAHTEET}
 
 

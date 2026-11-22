@@ -1,5 +1,47 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 21.11.2026 (yö): Aivojen koodi -sivu, haara `aivot-sivu`
+
+- aiops ADR-0033 pala 7: Ilmari saa kirjoittaa omien aivojensa koodin ja pyytää sen käyttöön; rootin asentaja
+  (aiops `aivohuolto.py`) tarkistaa, asentaa, käynnistää aivot uudelleen ja palaa takaisin, jos uusi ei ole terve.
+  Uusi sivu **Aivojen koodi** `/hub/aivot`, linkki Asetusten Aivot-osiosta.
+- Sivu: mitkä aivot ovat käytössä (alkuperäinen tai "Ilmarin versio <12 heksaa> · aika"), lukkorivi yhdellä napilla
+  (`POST /ilmari/aivot/lukko`, `lukittu`=1|0), asennuksia jäljellä 24 tunnissa, vahdin viimeisin toimi, edellinen
+  versio, napit **Palauta edellinen** (`POST /ilmari/aivot/palauta`, `kohde=edellinen`) ja **Palauta alkuperäinen ja
+  lukitse** (`kohde=tehdas`, `lukitse=1`), kaikki `paluu=hub`. Versiot uusin ensin: aika, mitä tehtiin, kuka,
+  tulos (käytössä, edellinen, hylätty, hylätty myöhemmin, palautettu, ei käytössä), syy, muuttuneet tiedostot
+  kokoineen ja taitettuna diff alkuperäiseen. Pyynnöt taitettuna. Päivittyy itsestään (15 s) vain toimen ollessa kesken.
+- Ei nappia, joka ei tee mitään: Palauta edellinen puuttuu, kun edellistä ei ole tai se on hylätty; Palauta
+  alkuperäinen puuttuu, kun alkuperäinen on jo käytössä eikä mitään ole kesken. Yli 10 min vanha tila kerrotaan
+  ("aivojen huolto ei ehkä ole käynnissä"). Puuttuva tiedosto: "Itsepäivitys ei ole käytössä tällä koneella.", ei
+  lomakkeita.
+- Lukija `aivot.py`: `/srv/aiops/ilmari/aivot/tila.json` (muoto `aiops-aivot-tila-v1`), tarkat kentät, enintään
+  512 KiB, ei linkkejä, tuotannossa vain rootin omistama hakemisto ja tiedosto. Rikkinäinen osa (lukko, käytössä
+  oleva versio, raja, vahti, yksi versio- tai pyyntörivi) piilottaa vain itsensä; lukko ja palautusnapit näkyvät
+  myös, kun tiedosto on rikki. Teksti on Ilmarin dataa: koodattuna, kielletty merkki (myös bidi) piilottaa vain
+  kentän; diffissä tyhjältä näyttävät kirjaimet näkyvät koodeina (`\u3164`).
+- Esimerkkiaineisto ja testien `aivot_aiops_tila.json` ovat aiopsin asentajan omalla koodilla tuotettuja (c35afda,
+  valesystemd ja valekello), joten muodon muutos aiopsissa näkyy testeissä.
+- Palvelutiedosto: `BindReadOnlyPaths=-/srv/aiops/ilmari/aivot` (miinus: puuttuva hakemisto ei estä käynnistystä).
+  `scripts/asenna.sh` asentaa tiedoston sellaisenaan, joten se ei muutu.
+- Asennusjärjestys: **aiops ensin, sitten Hub** (`scripts/asenna.sh` käynnistää Hubin uudelleen). Miinus-sidonta
+  tehdään vain Hubin käynnistyessä: jos Hub käynnistyy ennen kuin aiopsin deploy.sh luo `/srv/aiops/ilmari/aivot`,
+  sivu sanoo "ei käytössä" ilman lomakkeita, kunnes Hub käynnistetään uudelleen.
+- Katselmoinnin korjaukset (22.11.): väärän tyyppinen arvo tai jättimäinen hunkin otsake ei enää kaada sivua (ennen
+  500 ilman turvaotsakkeita ja hätäjarrua), ja lukijalla on viimeinen virhetila. Hätäjarru on heti käytössä olevan
+  version alla ennen lukkoa; se näkyy myös vanhassa tai lukukelvottomassa tilassa, mutta ei, kun palautus
+  alkuperäiseen tai vahdin toimi on jo kesken. Avaa lukko ja Palauta edellinen ovat taiton takana (Vahvista-nappi),
+  jotta toinen napautus ei osu vastakkaiseen nappiin. Diffissä kaikki näkymättömät merkit (vaihtelun valitsimet, ZWJ,
+  tagit, hangulin täytemerkit) näkyvät koodeina; yksinäinen CR piilottaa diffin. Katkaistu diff luettelee
+  vertaamatta jääneet tiedostot. Diffin laatikko enintään 70 % näytöstä, rivit sisennetty. Virheen tekninen syy
+  taitettuna ("Miksi"). Asetusten linkki on koko rivin kokoinen.
+- Testit: 1145 passed, 55 skipped (ilman selainryhmää ja shellcheckiä; `/hub/aivot` lisätty selaintestin sivuihin).
+  Puhelinkuvat 390x844 ja 320 px chrome-headless-shellillä (Paperi ja Terminaali, tuotanto, pahin, katkaistu,
+  lukittu, hätäjarrun jälkeen, palautus kesken, asennus kesken, vanha, ei käytössä, rikki); ei vaakavieritystä 320,
+  390, 768 eikä 1280 px leveydellä taitot auki.
+- Tarkistamatta: Safari (iPhone), Firefox, oikea gateway ja oikea asentaja rootina.
+- Peruminen: haaran commitit pois (`git revert`) ja `sudo scripts/asenna.sh "$(command -v uv)"`.
+
 ## Päivitys 21.11.2026 (myöhäisilta): käsikirjan versiot, lukko ja Ilmarin varaamat vuorot, haara `kasikirjan-versiot`
 
 - aiops ADR-0033 pala 6, osa 2: Ilmari muokkaa itse käsikirjaansa (systemprompti) ja vuoron ohjettaan ja varaa

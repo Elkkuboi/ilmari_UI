@@ -20,6 +20,10 @@
 #       tilan, asetukset, tavoitteet, pysyvät ohjeet ja tekolokin, aiops-gw:ilmari-julkaisu 2750)
 #       Peruskirja, jonka aiopsin deploy.sh julkaisee (root:ilmari-julkaisu). Miinus: puuttuva hakemisto ei estä
 #       käynnistystä, vaan sääntöpaneeli kertoo, ettei peruskirjaa ole julkaistu.
+#   BindReadOnlyPaths=-/srv/aiops/ilmari/aivot (aiops ADR-0033 pala 7, 21.11.2026: Aivojen koodi -sivu; aivojen
+#       asentaja kirjoittaa tila.json:n, root:ilmari-julkaisu 2750 setgid, tiedosto 0640. Vain tämä hakemisto: ei
+#       pyyntöjä, varastoa eikä Ilmarin ehdokasta). Miinus-sidonta tehdään vain käynnistyksessä: jos hakemisto
+#       syntyy myöhemmin (aiopsin deploy.sh), Hub näkee sen vasta uudelleenkäynnistyksen jälkeen.
 #   InaccessiblePaths=/etc/aiops
 #       aiops-konfiguraatio ja hyväksyjien avaimet eivät näy edes nimiltään.
 #   Ei ReadWritePaths-kohtia: Hub ei kirjoita mihinkään.
@@ -61,6 +65,7 @@ BindReadOnlyPaths=-/srv/aiops/ilmari/keskustelu
 BindReadOnlyPaths=-/srv/aiops/ilmari/roolit
 BindReadOnlyPaths=-/srv/aiops/ilmari/jarjestelma
 BindReadOnlyPaths=-/srv/aiops/ilmari/toiminta
+BindReadOnlyPaths=-/srv/aiops/ilmari/aivot
 InaccessiblePaths=/etc/aiops
 
 # Ei verkkoa: polkuun sidottu Unix-soketti toimii ilman verkkoa

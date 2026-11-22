@@ -1,0 +1,234 @@
+{
+ "muoto": "aiops-aivot-tila-v1",
+ "aika": "2026-11-19T11:30:00+02:00",
+ "aktiivinen": {
+  "versio": "aa8145716d14fc95a47dc28577f8402e4fb4128ef8503b730637328f88577327",
+  "aika": "2026-11-19T11:24:00+02:00",
+  "kuka": "ilmari"
+ },
+ "edellinen": "f1d58c2658bcd9f319527a2d1cce4afbd373b47eb1205b4ddf1a39e859325ee8",
+ "lukittu": false,
+ "lukko": null,
+ "asennuksia_24h": 3,
+ "asennuksia_max": 6,
+ "asennuksia_jaljella": 3,
+ "asennukset_24h": [
+  "2026-11-19T10:00:00+02:00",
+  "2026-11-19T10:51:00+02:00",
+  "2026-11-19T11:24:00+02:00"
+ ],
+ "seuraava_vapautuu": null,
+ "kesken": null,
+ "versiot": [
+  {
+   "versio": "aa8145716d14fc95a47dc28577f8402e4fb4128ef8503b730637328f88577327",
+   "aika": "2026-11-19T11:24:00+02:00",
+   "kuka": "ilmari",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "tiedostot": [
+    {
+     "polku": "ceo.py",
+     "koko": 175
+    },
+    {
+     "polku": "ceo_masterprompt.md",
+     "koko": 281
+    },
+    {
+     "polku": "kyvyt.py",
+     "koko": 24
+    },
+    {
+     "polku": "rekisteri/kyvyt/haku.toml",
+     "koko": 14
+    }
+   ],
+   "diff": "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -1,11 +1,11 @@\n \"\"\"Ilmarin aivot (esimerkki).\"\"\"\n import sys\n \n-VUORON_PITUUS_MIN = 120\n+VUORON_PITUUS_MIN = 90\n \n \n def main():\n-    print('alkuperäinen')\n+    print('Ilmari, versio D')\n     return 0\n \n \n--- tehdas/ceo_masterprompt.md\n+++ uusi/ceo_masterprompt.md\n@@ -1,3 +1,10 @@\n # Ilmari\n \n Olet Ilmari (esimerkki).\n+\n+## Raportti\n+\n+1. Kerro raportissa, mitä teit ja miten muutos perutaan.\n+2. Kerro raportissa, mitä teit ja miten muutos perutaan.\n+3. Kerro raportissa, mitä teit ja miten muutos perutaan.\n+4. Kerro raportissa, mitä teit ja miten muutos perutaan.\n--- tehdas/kyvyt.py\n+++ uusi/kyvyt.py\n@@ -1 +1 @@\n-KYVYT = ('aja',)\n+KYVYT = ('aja', 'haku')\n--- /dev/null\n+++ uusi/rekisteri/kyvyt/haku.toml\n@@ -0,0 +1 @@\n+nimi = \"haku\"\n",
+   "diff_katkaistu": false,
+   "varastossa": true,
+   "hylatty": false
+  },
+  {
+   "versio": "0e1231b76c42f290ef97334634991abb97ed3def9570bcc4ed1e43b1b88f1e3b",
+   "aika": "2026-11-19T10:51:00+02:00",
+   "kuka": "ilmari",
+   "tulos": "peruttu",
+   "syy": "uusi versio ei ollut terve: palvelu ei ollut käynnissä 120 s:ssa (tila activating); versio f1d58c2658bc käytössä: terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "tiedostot": [
+    {
+     "polku": "ceo.py",
+     "koko": 208
+    },
+    {
+     "polku": "ceo_masterprompt.md",
+     "koko": 54
+    },
+    {
+     "polku": "kyvyt.py",
+     "koko": 34
+    },
+    {
+     "polku": "rekisteri/kyvyt/haku.toml",
+     "koko": 14
+    },
+    {
+     "polku": "rekisteri/kyvyt/muisti.toml",
+     "koko": 16
+    }
+   ],
+   "diff": "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -5,9 +5,10 @@\n \n \n def main():\n-    print('alkuperäinen')\n+    print('Ilmari, versio A')\n     return 0\n \n \n if __name__ == '__main__':\n     sys.exit(main())\n+RIKKI = True  # muistin siivous\n--- tehdas/ceo_masterprompt.md\n+++ uusi/ceo_masterprompt.md\n@@ -1,3 +1,4 @@\n # Ilmari\n \n Olet Ilmari (esimerkki).\n+Raportoi lyhyesti.\n--- tehdas/kyvyt.py\n+++ uusi/kyvyt.py\n@@ -1 +1 @@\n-KYVYT = ('aja',)\n+KYVYT = ('aja', 'haku', 'muisti')\n--- /dev/null\n+++ uusi/rekisteri/kyvyt/haku.toml\n@@ -0,0 +1 @@\n+nimi = \"haku\"\n--- /dev/null\n+++ uusi/rekisteri/kyvyt/muisti.toml\n@@ -0,0 +1 @@\n+nimi = \"muisti\"\n",
+   "diff_katkaistu": false,
+   "varastossa": true,
+   "hylatty": true
+  },
+  {
+   "versio": "f1d58c2658bcd9f319527a2d1cce4afbd373b47eb1205b4ddf1a39e859325ee8",
+   "aika": "2026-11-19T10:00:00+02:00",
+   "kuka": "ilmari",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "tiedostot": [
+    {
+     "polku": "ceo.py",
+     "koko": 176
+    },
+    {
+     "polku": "ceo_masterprompt.md",
+     "koko": 54
+    },
+    {
+     "polku": "kyvyt.py",
+     "koko": 24
+    },
+    {
+     "polku": "rekisteri/kyvyt/haku.toml",
+     "koko": 14
+    }
+   ],
+   "diff": "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -5,7 +5,7 @@\n \n \n def main():\n-    print('alkuperäinen')\n+    print('Ilmari, versio A')\n     return 0\n \n \n--- tehdas/ceo_masterprompt.md\n+++ uusi/ceo_masterprompt.md\n@@ -1,3 +1,4 @@\n # Ilmari\n \n Olet Ilmari (esimerkki).\n+Raportoi lyhyesti.\n--- tehdas/kyvyt.py\n+++ uusi/kyvyt.py\n@@ -1 +1 @@\n-KYVYT = ('aja',)\n+KYVYT = ('aja', 'haku')\n--- /dev/null\n+++ uusi/rekisteri/kyvyt/haku.toml\n@@ -0,0 +1 @@\n+nimi = \"haku\"\n",
+   "diff_katkaistu": false,
+   "varastossa": true,
+   "hylatty": false
+  },
+  {
+   "versio": "8721ffde068e1cb9359c0696da1a6fadae297c9a07801162f6044444281ffa0a",
+   "aika": "2026-11-18T10:31:00+02:00",
+   "kuka": "vahti",
+   "tulos": "vahti",
+   "syy": "palvelu on kaatunut (failed)",
+   "tiedostot": [
+    {
+     "polku": "ceo.py",
+     "koko": 172
+    },
+    {
+     "polku": "ceo_masterprompt.md",
+     "koko": 35
+    },
+    {
+     "polku": "kyvyt.py",
+     "koko": 17
+    }
+   ],
+   "diff": "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -1,7 +1,7 @@\n \"\"\"Ilmarin aivot (esimerkki).\"\"\"\n import sys\n \n-VUORON_PITUUS_MIN = 120\n+VUORON_PITUUS_MIN = 30\n \n \n def main():\n",
+   "diff_katkaistu": false,
+   "varastossa": true,
+   "hylatty": true
+  },
+  {
+   "versio": "8721ffde068e1cb9359c0696da1a6fadae297c9a07801162f6044444281ffa0a",
+   "aika": "2026-11-18T10:00:00+02:00",
+   "kuka": "ilmari",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "tiedostot": [
+    {
+     "polku": "ceo.py",
+     "koko": 172
+    },
+    {
+     "polku": "ceo_masterprompt.md",
+     "koko": 35
+    },
+    {
+     "polku": "kyvyt.py",
+     "koko": 17
+    }
+   ],
+   "diff": "--- tehdas/ceo.py\n+++ uusi/ceo.py\n@@ -1,7 +1,7 @@\n \"\"\"Ilmarin aivot (esimerkki).\"\"\"\n import sys\n \n-VUORON_PITUUS_MIN = 120\n+VUORON_PITUUS_MIN = 30\n \n \n def main():\n",
+   "diff_katkaistu": false,
+   "varastossa": true,
+   "hylatty": true
+  }
+ ],
+ "pyynnot": [
+  {
+   "id": "6",
+   "toimi": "asenna",
+   "kuka": "ilmari",
+   "pyydetty": "2026-11-19T11:24:00+02:00",
+   "aika": "2026-11-19T11:25:00+02:00",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "versio": "aa8145716d14fc95a47dc28577f8402e4fb4128ef8503b730637328f88577327"
+  },
+  {
+   "id": "5",
+   "toimi": "asenna",
+   "kuka": "ilmari",
+   "pyydetty": "2026-11-19T11:09:00+02:00",
+   "aika": "2026-11-19T11:09:00+02:00",
+   "tulos": "hylatty",
+   "syy": "ehdokas hylätty: syntaksivirhe: ceo.py rivi 1: invalid syntax",
+   "versio": "f1d58c2658bcd9f319527a2d1cce4afbd373b47eb1205b4ddf1a39e859325ee8"
+  },
+  {
+   "id": "4",
+   "toimi": "asenna",
+   "kuka": "ilmari",
+   "pyydetty": "2026-11-19T10:51:00+02:00",
+   "aika": "2026-11-19T10:54:00+02:00",
+   "tulos": "peruttu",
+   "syy": "uusi versio ei ollut terve: palvelu ei ollut käynnissä 120 s:ssa (tila activating); versio f1d58c2658bc käytössä: terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "versio": "f1d58c2658bcd9f319527a2d1cce4afbd373b47eb1205b4ddf1a39e859325ee8"
+  },
+  {
+   "id": "3",
+   "toimi": "asenna",
+   "kuka": "ilmari",
+   "pyydetty": "2026-11-19T10:00:00+02:00",
+   "aika": "2026-11-19T10:01:00+02:00",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "versio": "f1d58c2658bcd9f319527a2d1cce4afbd373b47eb1205b4ddf1a39e859325ee8"
+  },
+  {
+   "id": "2",
+   "toimi": "avaa",
+   "kuka": "elias",
+   "pyydetty": "2026-11-18T21:05:00+02:00",
+   "aika": "2026-11-18T21:05:00+02:00",
+   "tulos": "avattu",
+   "syy": "itsepäivitys avattu",
+   "versio": "tehdas"
+  },
+  {
+   "id": "1",
+   "toimi": "asenna",
+   "kuka": "ilmari",
+   "pyydetty": "2026-11-18T10:00:00+02:00",
+   "aika": "2026-11-18T10:01:00+02:00",
+   "tulos": "asennettu",
+   "syy": "terve (syke käynnistyksen jälkeen, sama prosessi 60 s)",
+   "versio": "8721ffde068e1cb9359c0696da1a6fadae297c9a07801162f6044444281ffa0a"
+  }
+ ],
+ "vahti": {
+  "aika": "2026-11-18T10:31:00+02:00",
+  "syy": "palvelu on kaatunut (failed)",
+  "versio": "8721ffde068e1cb9359c0696da1a6fadae297c9a07801162f6044444281ffa0a",
+  "toimi": "tehdasversio, hylkäys ja lukitus",
+  "uudelleenkaynnistys": "ok"
+ }
+}
