@@ -394,8 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- Nyt: Hubin juuri ---------------------------------------------------------------------------------------
 
     def odottaa_sinua(toiminta, tyot, lahde, url) -> list[dict[str, Any]]:
-        """Asiat, joissa Eliaksella on päätettävää: työn hyväksyntä, käyttöönotto tai käsin sulkeminen, epäonnistunut
-        rajatesti ja lukuvirheet (tila tai työt). Enintään ODOTTAA_MAX riviä, tärkein ensin."""
+        """Eliaksen omien toiveiden päätökset sekä rajatestin ja julkaisujen virheet, enintään ODOTTAA_MAX riviä."""
         rivit: list[dict[str, Any]] = []
         if toiminta is not None and toiminta.tila != "ready":
             rivit.append({"href": url("/hub"), "nro": "!", "teksti": "Ilmarin tilaa ei voi lukea", "tag": "päivitä",
@@ -413,11 +412,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rivit.append({"href": url("/hub/kehita"), "nro": "!", "teksti": "Töitä ei voi lukea", "tag": "päivitä",
                           "savy": "warn", "ala": ""})
         for t in tyot or ():
+            if t.ilmarin:
+                continue  # Ilmarin ehdotukset ja niiden tilat ovat Työt-sivulla.
             tag, savy = t.tagi
             if tag not in kehitys.ODOTTAVAT:
                 continue
             testit = (t.meta.get("tulos") or {}).get("testit")
-            osat = ["Ilmarin työ" if t.ilmarin else "Sinun toiveesi", t.meta.get("lahde") or "aiops"]
+            osat = ["Sinun toiveesi", t.meta.get("lahde") or "aiops"]
             if testit:
                 osat.append("testit läpi" if testit.get("paluukoodi") == 0 else "testit epäonnistuivat")
             if lyhyt_aika(t.meta.get("paivitetty") or t.meta.get("luotu")):

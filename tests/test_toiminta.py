@@ -303,9 +303,8 @@ def test_nyt_esimerkkitilassa_ilman_lomakkeita():
     assert "Ilmari tekee työvuoron työt säikeeseen 13. Malli on käynnissä, ei työtä kesken." in teksti
     assert r.headers.get("Refresh") == "30"                      # vuoro käynnissä: sivu päivittyy itsestään
     assert [b.get_text() for b in sivu.select(".state .actions button")] == ["Seis"]   # vuoron aikana ei Töihin nyt
-    # odottaa sinua: esimerkin työ 98 odottaa hyväksyntää
-    odottaa = sivu.find("section", attrs={"aria-labelledby": "h-odottaa"})
-    assert [a["href"] for a in odottaa.select("a.row")] == ["/hub/kehita/98?demo=1"] and "hyväksy" in odottaa.get_text()
+    # Työ 98 on Ilmarin oma ehdotus ja näkyy Työt-sivulla.
+    assert sivu.find("section", attrs={"aria-labelledby": "h-odottaa"}) is None
     # raportti tekstinä, nimi ja aika otsikon reunassa
     raportti = sivu.find("section", attrs={"aria-labelledby": "h-raportti"})
     assert raportti.find("span", class_="aside").get_text() == "Yöajo 19.11. klo 04.40"
@@ -322,8 +321,8 @@ def test_nyt_esimerkkitilassa_ilman_lomakkeita():
     # muualle: esimerkkitilassa linkit eivät vie mihinkään
     muualle = sivu.find("section", attrs={"aria-labelledby": "h-muualle"})
     assert [(a.get_text(), a["href"]) for a in muualle.find_all("a")] == [("Ravintopolku ↗", "#"), ("Hahmo ↗", "#")]
-    assert r.text.index('id="h-tila"') < r.text.index('id="h-odottaa"') < r.text.index('id="h-raportti"') \
-        < r.text.index('id="h-teot"') < r.text.index('id="h-muualle"')
+    assert r.text.index('id="h-tila"') < r.text.index('id="h-raportti"') < r.text.index('id="h-teot"') \
+        < r.text.index('id="h-muualle"')
 
 
 def test_nyt_ilman_lahdetta():
@@ -408,8 +407,7 @@ def test_tuotannossa_seis_jatka_ja_tuntematon_tila(tmp_path, monkeypatch):
 
 
 def test_tuotannossa_odottaa_sinua_vain_tarvittaessa_ja_enintaan_viisi(tmp_path, monkeypatch):
-    """Sallittu: hyväksyttävä työ näkyy (linkki työn sivulle). Kielletty: kun mitään ei odota, osiota ei ole; yli viisi
-    riviä katkaistaan."""
+    """Uudemmat Ilmarin työt eivät syrjäytä Eliaksen toiveita. Enintään viisi riviä, tyhjää osiota ei näytetä."""
     kunnossa = {**TILA, "rajatesti": {**TILA["rajatesti"], "lapi": True, "kohdat": []}}
     (tmp_path / "x").mkdir()
     r = tuotanto(tmp_path / "x", monkeypatch, julkaise(tmp_path / "ok", tila=kunnossa))
@@ -423,6 +421,15 @@ def test_tuotannossa_odottaa_sinua_vain_tarvittaessa_ja_enintaan_viisi(tmp_path,
             "tulos": {"paluukoodi": 0, "haara": f"ilmari/{tyo}", "commiteja": 1, "testit": {"paluukoodi": 0}}}))
     (juuri / "8").mkdir()
     (juuri / "8" / "meta.json").write_text(json.dumps({"tyo": 8, "toive": "Kesken", "tila": "running", "tiedostot": []}))
+    for tyo, yhdistys in ((9, None), (10, "yhdistetty"), (11, "ristiriita")):
+        hakemisto = juuri / str(tyo)
+        hakemisto.mkdir()
+        (hakemisto / "meta.json").write_text(json.dumps({
+            "tyo": tyo, "toive": f"Ilmarin työ {tyo}", "jattaja": "aiops-ceo", "lahde": "aiops", "tila": "succeeded",
+            "tulos": {"haara": f"ilmari/{tyo}", "commiteja": 1}}))
+        if yhdistys:
+            (hakemisto / "paatos.json").write_text(json.dumps({"paatos": "hyvaksytty"}))
+            (hakemisto / "yhdistys.json").write_text(json.dumps({"tila": yhdistys}))
     monkeypatch.setattr("ilmari_ui.kehitys.OLETUS", juuri)
     (tmp_path / "y").mkdir()
     r = tuotanto(tmp_path / "y", monkeypatch, julkaise(tmp_path / "ok2", tila=kunnossa))

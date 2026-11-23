@@ -1,5 +1,13 @@
 # ilmari_UI: tämän repositorion tilanne 21.11.2026
 
+## Päivitys 23.11.2026
+
+- Nyt-sivun **Odottaa sinua** näyttää omista toiveistasi avoimet päätökset sekä rajatestin ja julkaisujen virheet.
+  Ilmarin töiden ehdotukset, käyttöönottotoimet ja ristiriidat löytyvät Työt-sivulta **Ilmarin omat työt** -taitosta.
+- Tarkistettu: 1145 testiä läpi. Chromessa taitto avautuu ja työlinkki toimii 320 px leveydellä. Selaintestien
+  kaksi aiempaa virhettä (työn sivun vaakavieritys 320 px ja Nyt-sivun painikkeiden koko 720 px) toistuivat myös
+  päähaarassa.
+
 ## Päivitys 21.11.2026 (yö): Aivojen koodi -sivu, haara `aivot-sivu`
 
 - aiops ADR-0033 pala 7: Ilmari saa kirjoittaa omien aivojensa koodin ja pyytää sen käyttöön; rootin asentaja
