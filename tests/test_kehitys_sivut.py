@@ -46,8 +46,7 @@ def test_lista_esimerkkitilassa():
     assert tilat == {"/hub/kehita/42": "käynnissä", "/hub/kehita/41": "käytössä", "/hub/kehita/40": "hylätty",
                      "/hub/kehita/98": "hyväksy", "/hub/kehita/43": "valmis"}
     assert "Nyt: Suunnittelen SearXNG" in r.text and r.headers.get("Refresh") == "15"   # työ 42 käynnissä
-    fold = sivu.find("details", class_="fold")
-    assert fold.summary.get_text() == "Käyttöönotot (2)"
+    fold = sivu.find("summary", string="Käyttöönotot (2)").parent
     assert "<form" not in r.text and 'action="' not in r.text   # esimerkkitila: ei lomakkeita
     # Hub juureksi: yöajon ehdotukset, Claude Code -linkki ja johdanto pois
     assert "Yöajon ehdotukset" not in r.text and "claude.ai" not in r.text and "Kehitä Ilmaria" not in r.text
@@ -105,12 +104,14 @@ def test_tuntematon_tyo_404_ja_lahteettomyys():
 
 
 def test_ilmarin_oma_tyo_listassa_ja_sivulla():
-    """Ilmarin omat työt omassa listassaan; työtilan työ näkyy ilman päätöstä ja raakanäkymän linkkiä."""
+    """Ilmarin omat työt taitossa. Työtilan työn sivulla ei ole päätöstä eikä raakanäkymän linkkiä."""
     c = asiakas()
     sivu = BeautifulSoup(c.get("/hub/kehita?demo=1").text, "html.parser")
     eliaksen, ilmarin = osio(sivu, "h-omat"), osio(sivu, "h-ilmarin")
     numerot = lambda o: [a["href"].split("?")[0].rsplit("/", 1)[1] for a in o.select("a.row")]  # noqa: E731
-    assert numerot(eliaksen) == ["42", "41", "40"] and numerot(ilmarin) == ["98", "43"]
+    taitto = ilmarin.find("details", class_="fold")
+    assert not taitto.has_attr("open") and taitto.summary.get_text() == "Näytä työt (2)"
+    assert numerot(eliaksen) == ["42", "41", "40"] and numerot(taitto) == ["98", "43"]
     r = c.get("/hub/kehita/43?demo=1")
     assert r.status_code == 200 and "Ilmarin oma työ" in r.text
     assert not osio(BeautifulSoup(r.text, "html.parser"), "h-paatos")   # työtila: ei päätettävää, ei osiota

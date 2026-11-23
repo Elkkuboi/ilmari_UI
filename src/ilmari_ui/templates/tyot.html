@@ -28,7 +28,8 @@
 </section>
 <section aria-labelledby="h-ilmarin">
   <h2 id="h-ilmarin" class="label">Ilmarin omat työt</h2>
-  {% if ilmarin %}{{ tyorivit(ilmarin) }}{% else %}<p class="empty">Ilmari ei ole vielä aloittanut omia töitä.</p>{% endif %}
+  {% if ilmarin %}<details class="fold"><summary>Näytä työt ({{ ilmarin|length }})</summary>{{ tyorivit(ilmarin) }}</details>
+  {% else %}<p class="empty">Ilmari ei ole vielä aloittanut omia töitä.</p>{% endif %}
 </section>
 {% endif %}
 {% if historia and historia.tila == 'ready' and historia.kirjaukset %}
