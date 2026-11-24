@@ -1,4 +1,8 @@
-# ilmari_UI: tämän repositorion tilanne 21.11.2026
+# ilmari_UI: tämän repositorion tilanne 24.11.2026
+
+## Päivitys 24.11.2026
+
+- Nyt-sivun Ravintopolku-linkki avaa Louhin samassa tailnetissä portissa 8443. Hahmo avautuu työaseman portissa 8444.
 
 ## Päivitys 23.11.2026
 

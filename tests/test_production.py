@@ -178,7 +178,9 @@ def test_kaikki_sisaiset_linkit_osoittavat_hubiin(client, otsakkeet, polku):
     assert sisaiset and all(o == "/hub" or o.startswith(("/hub/", "/hub?", "/hub#")) for o in sisaiset), sisaiset
     assert not any("/muu" in o for o in sisaiset)
     ulkoiset = [o for o in osoitteet if o and o.startswith("http")]
-    assert all(o.startswith((f"https://{RP}/", f"https://{RP}:8443/", f"https://{RP}:8444/")) for o in ulkoiset), ulkoiset
+    louhi = RP.replace("tyoasema.", "louhi.", 1)
+    sovellukset = {f"https://{louhi}:8443/", f"https://{RP}:8444/"}
+    assert all(o.startswith(f"https://{RP}/") or o in sovellukset for o in ulkoiset), ulkoiset
 
 
 def test_tuotantotila_nayttaa_tyoaseman_eika_kehitysymparistoa(client):

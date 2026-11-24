@@ -384,9 +384,10 @@ def test_tuotannossa_nyt_lomakkeet_gatewaylle(tmp_path, monkeypatch):
     assert [a["href"] for a in odottaa.select("a.row")] == ["/hub/asetukset#rajatesti"]
     assert "Rajatesti ei mennyt läpi" in odottaa.get_text() and "1 kohta ei läpi" in odottaa.get_text()
     assert not sivu.find_all("script") and "&lt;b&gt;x&lt;/b&gt;" in r.text
-    # Muualle: Ravintopolku ja Hahmo omissa porteissaan samalla nimellä
     muualle = sivu.find("section", attrs={"aria-labelledby": "h-muualle"})
-    assert [a["href"] for a in muualle.find_all("a")] == [f"https://{RP}:8443/", f"https://{RP}:8444/"]
+    assert [(a.get_text(), a["href"]) for a in muualle.find_all("a")] == [
+        ("Ravintopolku ↗", "https://louhi.test:8443/"), ("Hahmo ↗", f"https://{RP}:8444/"),
+    ]
 
 
 def test_tuotannossa_seis_jatka_ja_tuntematon_tila(tmp_path, monkeypatch):
