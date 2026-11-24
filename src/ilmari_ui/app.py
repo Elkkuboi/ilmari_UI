@@ -42,8 +42,7 @@ TOIMINTA_DEMO_NYT = datetime(2026, 11, 19, 14, 10, tzinfo=timezone.utc)  # esime
 JARJESTELMA_DEMO_NYT = datetime(2026, 10, 30, 12, 0, 20, tzinfo=timezone.utc)
 AIVOT_DEMO_NYT = datetime(2026, 11, 19, 9, 31, tzinfo=timezone.utc)   # minuutti esimerkin julkaisun jälkeen (11.31)
 SERVE_PREFIX = "/hub"
-# Muut sovellukset työasemalla omissa Serve-porteissaan samalla nimellä kuin Hub (aiops ADR-0026: Hahmo). Hub ei kutsu
-# niitä (PrivateNetwork), vaan linkittää niihin.
+# Tailscale Serve ports for browser links. Hahmo shares the Hub's host (aiops ADR-0026).
 RAVINTOPOLKU_PORTTI = 8443
 HAHMO_PORTTI = 8444
 VALIKKO = (("nyt", "/hub", "Nyt"), ("keskustelu", "/hub/keskustelu", "Keskustelu"), ("tyot", "/hub/kehita", "Työt"),
@@ -455,15 +454,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             toihin_rajatesti=request.query_params.get("toihin") == "rajatesti",
             odottaa=odottaa_sinua(toiminta, tyot, lahde, osoitteet(demo)),
             teot=teot[:TEKOJA_NAKYVISSA], vanhat_teot=teot[TEKOJA_NAKYVISSA:],
-            muualle=(("Ravintopolku", muualle(RAVINTOPOLKU_PORTTI, demo)), ("Hahmo", muualle(HAHMO_PORTTI, demo)))
-            if demo or settings.identity is not None else ())
+            muualle=muualle(demo))
         if (tilarivi or {}).get("kaynnissa") or dsh_tyo or kesken(tyot):
             paivity(response, NYT_PAIVITYS)
         return response
 
-    def muualle(portti: int, demo: bool) -> str:
-        """Toinen sovellus työasemalla omassa Serve-portissaan; esimerkkitilassa ei linkkiä."""
-        return f"https://{settings.identity.rp_id}:{portti}/" if settings.identity is not None and not demo else "#"
+    def muualle(demo: bool) -> tuple[tuple[str, str], ...]:
+        if demo:
+            return (("Ravintopolku", "#"), ("Hahmo", "#"))
+        if settings.identity is None:
+            return ()
+        host = settings.identity.rp_id
+        tailnet = host.split(".", 1)[1]
+        return (("Ravintopolku", f"https://louhi.{tailnet}:{RAVINTOPOLKU_PORTTI}/"),
+                ("Hahmo", f"https://{host}:{HAHMO_PORTTI}/"))
 
     # --- Keskustelu ---------------------------------------------------------------------------------------------
 
